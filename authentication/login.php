@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once __DIR__ . '/../config/database.php';
+// Ensure this points to your config file
+require_once __DIR__ . '/../config/supabase.php';
 
 $error = '';
 
@@ -11,20 +12,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email) || empty($password)) {
         $error = "Please fill in all fields.";
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
+        // 1. CHANGED: Now targeting the 'employee' table
+        $stmt = $pdo->prepare("SELECT * FROM employee WHERE email = :email");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
 
         if (!$user) {
             $error = "Email does not exist. Please check or sign up.";
         } else {
-
-            if (password_verify($password, $user['password'])) {
+            // 2. Direct string comparison since you aren't using password_hash() yet
+            if ($password === $user['password']) {
+                
                 $_SESSION['user_id'] = $user['id'];
-                $_SESSION['role'] = $user['role'];
-                $_SESSION['username'] = $user['username'];
+                
+                // 3. CHANGED: Using 'name' instead of 'username' based on your table
+                $_SESSION['username'] = $user['name']; 
+                
+                // 4. CHANGED: Since 'role' doesn't exist in your table, we hardcode a default 
+                // so your roleManagement.php doesn't crash.
+                $_SESSION['role'] = 'employee'; 
 
-                header("Location: roleManagement.php");
+                header("Location: /employee/dashboard.php");
                 exit();
             } else {
                 $error = "Incorrect password.";
@@ -48,38 +56,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             font-family: Arial, sans-serif;
         }
-
         .login-card {
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 12px;
         }
-
         .form-inputs {
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
-
         .button-group {
             display: flex;
             flex-direction: row;
             gap: 10px;
             width: 100%;
             justify-content: center;
+            margin-top: 10px;
         }
-
-        .inline-form {
-            display: inline;
-            margin: 0;
-        }
-
         .error-message {
             color: red;
             font-size: 14px;
             margin-bottom: 5px;
             text-align: center;
+        }
+        .remember {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -95,20 +101,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <form action="login.php" method="POST" id="loginForm">
             <div class="form-inputs">
-                <p1>Email Address</p1>
+                <label>Email Address</label>
                 <input type="email" name="email" placeholder="you@example.com" value="<?= htmlspecialchars($_POST['email'] ?? ''); ?>" required>
-                <p1>Password</p1>
+                
+                <label>Password</label>
                 <input type="password" name="password" placeholder="Enter your password" required>
             </div>
         </form>
+
         <div class="remember">
-            <label> <input type="checkbox" name="remember" <?= isset($_COOKIE['user_email']) ? 'cheched' : ''; ?>> Remember Me</label>
+            <label> <input type="checkbox" name="remember" <?= isset($_COOKIE['user_email']) ? 'checked' : ''; ?>> Remember Me</label>
             <a href="/">Forgot Password</a>
         </div>
 
         <div class="button-group">
             <button type="submit" form="loginForm">Log in</button>
-            </form>
         </div>
     </div>
 
