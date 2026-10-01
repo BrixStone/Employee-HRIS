@@ -1,9 +1,9 @@
 <?php
 
 require __DIR__ . '/../config/supabase.php';
-require __DIR__ . '/../classes/Department.php';
+require __DIR__ . '/../classes/Position.php';
 
-$departmentModel = new Department($pdo);
+$positionModel = new Position($pdo);
 
 $error = '';
 
@@ -11,19 +11,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $data = [
         'code' => trim($_POST['code'] ?? ''),
-        'name' => trim($_POST['name'] ?? ''),
+        'title' => trim($_POST['title'] ?? ''),
         'description' => trim($_POST['description'] ?? ''),
         'status' => $_POST['status'] ?? 'Active'
     ];
 
-    if ($data['code'] === '' || $data['name'] === '') {
-        $error = 'Department code and name are required.';
+    if ($data['code'] === '' || $data['title'] === '') {
+
+        $error = 'Position code and title are required.';
+
     } else {
+
         try {
 
-            $departmentModel->create($data);
+            $positionModel->create($data);
 
-            header('Location: department.php');
+            header('Location: position.php');
             exit;
 
         } catch (PDOException $e) {
@@ -34,13 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$departments = $departmentModel->getAll();
+$positions = $positionModel->getAll();
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
 
 ?>
 
-<h1>Department Management</h1>
+<h1>Organization - Positions</h1>
 
 <?php if ($error !== ''): ?>
 
@@ -51,12 +54,15 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <?php endif; ?>
 
 
-<h2>Add Department</h2>
+<h2>Add Position</h2>
 
 <form method="POST">
 
     <div>
-        <label for="code">Department Code *</label>
+
+        <label for="code">
+            Position Code *
+        </label>
 
         <input
             type="text"
@@ -64,38 +70,53 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             name="code"
             required
         >
+
     </div>
 
     <br>
 
     <div>
-        <label for="name">Department Name *</label>
+
+        <label for="title">
+            Position Title *
+        </label>
 
         <input
             type="text"
-            id="name"
-            name="name"
+            id="title"
+            name="title"
             required
         >
+
     </div>
 
     <br>
 
     <div>
-        <label for="description">Description</label>
+
+        <label for="description">
+            Description
+        </label>
 
         <textarea
             id="description"
             name="description"
         ></textarea>
+
     </div>
 
     <br>
 
     <div>
-        <label for="status">Status</label>
 
-        <select id="status" name="status">
+        <label for="status">
+            Status
+        </label>
+
+        <select
+            id="status"
+            name="status"
+        >
 
             <option value="Active">
                 Active
@@ -106,12 +127,13 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             </option>
 
         </select>
+
     </div>
 
     <br>
 
     <button type="submit">
-        Add Department
+        Add Position
     </button>
 
 </form>
@@ -120,7 +142,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <hr>
 
 
-<h2>Departments</h2>
+<h2>Positions</h2>
 
 <table border="1" cellpadding="8" cellspacing="0">
 
@@ -129,7 +151,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <tr>
             <th>ID</th>
             <th>Code</th>
-            <th>Name</th>
+            <th>Title</th>
             <th>Description</th>
             <th>Status</th>
         </tr>
@@ -138,40 +160,40 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 
     <tbody>
 
-        <?php if (empty($departments)): ?>
+        <?php if (empty($positions)): ?>
 
             <tr>
                 <td colspan="5">
-                    No departments found.
+                    No positions found.
                 </td>
             </tr>
 
         <?php else: ?>
 
-            <?php foreach ($departments as $department): ?>
+            <?php foreach ($positions as $position): ?>
 
                 <tr>
 
                     <td>
-                        <?= htmlspecialchars($department['id']) ?>
+                        <?= htmlspecialchars($position['id']) ?>
                     </td>
 
                     <td>
-                        <?= htmlspecialchars($department['code']) ?>
+                        <?= htmlspecialchars($position['code']) ?>
                     </td>
 
                     <td>
-                        <?= htmlspecialchars($department['name']) ?>
+                        <?= htmlspecialchars($position['title']) ?>
                     </td>
 
                     <td>
                         <?= htmlspecialchars(
-                            $department['description'] ?? ''
+                            $position['description'] ?? ''
                         ) ?>
                     </td>
 
                     <td>
-                        <?= htmlspecialchars($department['status']) ?>
+                        <?= htmlspecialchars($position['status']) ?>
                     </td>
 
                 </tr>
