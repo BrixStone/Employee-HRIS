@@ -20,7 +20,7 @@ class LeaveBalance
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Upsert allocated days and recompute remaining if needed
+    
     public function upsertAllocated(int $employeeId, int $leaveTypeId, int $year, float $allocated): bool {
         $sql = "
         INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days, remaining_days)
@@ -40,7 +40,7 @@ class LeaveBalance
         ]);
     }
 
-    // Increment used/remaining on approval (inside a transaction)
+    
     public function consume(int $employeeId, int $leaveTypeId, int $year, float $days): bool {
         $sql = "
         UPDATE leave_balances
@@ -54,7 +54,7 @@ class LeaveBalance
     }
 
     public function ensureRow(int $employeeId, int $leaveTypeId, int $year, float $defaultAllocated = 0): bool {
-        // Create with default if missing
+        
         $sql = "
         INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days, remaining_days)
         VALUES (:emp, :type, :yr, :alloc, 0, :alloc)
