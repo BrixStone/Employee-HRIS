@@ -21,7 +21,6 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $data = [
-        'employee_id' => trim($_POST['employee_id'] ?? ''),
         'first_name' => trim($_POST['first_name'] ?? ''),
         'middle_name' => trim($_POST['middle_name'] ?? ''),
         'last_name' => trim($_POST['last_name'] ?? ''),
@@ -39,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     if (
-        $data['employee_id'] === '' ||
         $data['first_name'] === '' ||
         $data['last_name'] === '' ||
         $data['date_hired'] === ''
@@ -75,16 +73,6 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <form method="POST">
 
     <h2>Personal Information</h2>
-
-    <div>
-        <label for="employee_id">Employee ID *</label>
-        <input
-            type="text"
-            id="employee_id"
-            name="employee_id"
-            required
-        >
-    </div>
 
     <div>
         <label for="first_name">First Name *</label>

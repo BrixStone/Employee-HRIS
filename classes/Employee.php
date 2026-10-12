@@ -74,6 +74,7 @@ class Employee
 
     public function create(array $data): bool
     {
+        $employeeId = $this->generateEmployeeId();
         $sql = "
             INSERT INTO employees (
                 employee_id,
@@ -114,7 +115,7 @@ class Employee
         $stmt = $this->pdo->prepare($sql);
 
         return $stmt->execute([
-            'employee_id' => $data['employee_id'],
+            'employee_id' => $employeeId,
             'first_name' => $data['first_name'],
             'middle_name' => $data['middle_name'] ?: null,
             'last_name' => $data['last_name'],
@@ -187,4 +188,29 @@ class Employee
         return $stmt->execute(['id' => $id]);
     }
 
+    public function generateEmployeeId(): string {
+        $sql = "
+            SELECT employee_id
+            FROM employees
+            WHERE employee_id ~ '^EMP-[0-9]+$'
+            ORDER BY CAST(SUBSTRING(employee_id FROM 5)
+        AS INTEGER) DESC
+            LIMIT 1       
+        ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute();
+
+        $lastId = $stmt->fetchColumn();
+
+        $nextNumber = $lastId
+            ? (int) substr($lastId, 4) + 1
+            : 1;
+
+        return 'EMP-' . str_pad(
+            (string) $nextNumber,
+            3,
+            '0',
+            STR_PAD_LEFT
+        );
+    }
 }

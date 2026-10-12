@@ -2,6 +2,8 @@
 
 require __DIR__ . '/../config/supabase.php';
 require __DIR__ . '/../classes/Employee.php';
+require __DIR__ . '/../algorithms/linear_search.php';
+require __DIR__ . '/../algorithms/bubble_sort.php';
 
 $employeeModel = new Employee($pdo);
 $employees = $employeeModel->getAll();
@@ -22,12 +24,41 @@ $sortKeyMap = [
     'employee_id'       => 'employee_id',
 ];
 
-$sortBy = $sortkeyMap[$rawSort] ?? '';
+$sortBy = $sortKeyMap[$rawSort] ?? '';
 
 $allowed = array_values($sortKeyMap);
 
 if (!in_array($sortBy, $allowed, true)) {
     $sortBy = '';
+}
+
+function emp_full_name(array $e): string {
+    $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
+    $s = !empty($e['suffix']) ? ' ' . $e['suffix'] : '';
+    return trim(
+        ($e['first_name'] ?? '') . ' ' . $m.($e['last_name'] ?? '').$s);
+}
+
+function sort_key_value(array $e, string $key) {
+    if ($key === 'name') {
+        return strtolower(emp_full_name($e));
+    }
+    $v = $e[$key] ?? '';
+    return is_string($v) ? strtolower($v) : $v;
+}
+
+
+
+function contains_i(?string $haystack, string $needle): bool {
+    if ($haystack === null) return false;
+
+    return stripos($haystack, $needle) !== false;
+}
+
+$employees = linear_search_employees($employees, $q);
+
+if ($sortBy !== '') {
+    bubble_sort_employees($employees, $sortBy, $dir);
 }
 require __DIR__ . '/../templates/hrTemplates/header.php';
 ?>
