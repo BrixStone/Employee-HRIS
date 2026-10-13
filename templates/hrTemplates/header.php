@@ -27,6 +27,14 @@
             </li>
 
             <li>
+                <a href="../hr/leave_type.php">Leave Type</a>
+            </li>
+
+            <li>
+                <a href="../hr/leave_balance.php">Leave Balance</a>
+            </li>
+
+            <li>
                 <a href="../hr/report.php">Report</a>
             </li>
         </ul>
