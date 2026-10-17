@@ -162,7 +162,7 @@ $nameParts = explode(' ', trim($employeeData['name']));$user = [
                 <a href="attendance.php" class="flex items-center px-4 py-2.5 bg-[#1f1d2b] text-white rounded-lg group transition-colors border-l-2 border-accent">
                     <span class="font-medium text-sm text-accent">Attendance</span>
                 </a>
-                <a href="leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
+                <a href="file_leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
                     <span class="font-medium text-sm">Leave</span>
                 </a>
                 <a href="payslips.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
