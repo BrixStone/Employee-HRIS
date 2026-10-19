@@ -223,7 +223,7 @@ $nameParts = explode(' ', trim($employeeData['name']));$user = [
                     <form method="POST">
                         <input type="hidden" name="action" value="time_in">
                         <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm py-2.5 px-5 rounded-xl transition-colors shadow-lg">
-                            🕒 Time In
+                             Time In
                         </button>
                     </form>
                     <!-- Break Time -->
