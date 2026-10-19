@@ -1,123 +1,110 @@
 <?php
+// authentication/login.php
 session_start();
-// Ensure this points to your config file
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/supabase.php'; // provides $pdo
+
+// If already logged in, send to role home
+if (!empty($_SESSION['role'])) {
+    switch ($_SESSION['role']) {
+        case 'admin':   header('Location: /admin/users.php'); exit;
+        case 'hr':      header('Location: /hr/dashboard.php'); exit;
+        case 'payroll': header('Location: /hr/dashboard.php'); exit; // placeholder
+        case 'employee':header('Location: /employee/dashboard.php'); exit;
+    }
+}
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $identifier = trim($_POST['identifier'] ?? '');
+    $password   = $_POST['password'] ?? '';
 
-    if (empty($email) || empty($password)) {
-        $error = "Please fill in all fields.";
+    if ($identifier === '' || $password === '') {
+        $error = 'Please enter both username/email and password.';
     } else {
-        // 1. CHANGED: Now targeting the 'employee' table
-        $stmt = $pdo->prepare("SELECT * FROM employee WHERE email = :email");
-        $stmt->execute(['email' => $email]);
-        $user = $stmt->fetch();
+        $sql = "
+            SELECT
+                u.id            AS user_id,
+                u.username,
+                u.password      AS password_hash,
+                u.role,
+                u.status,
+                u.employee_id,
+                e.id            AS emp_id,
+                e.email         AS emp_email,
+                e.first_name,
+                e.last_name
+            FROM users u
+            LEFT JOIN employees e ON e.id = u.employee_id
+            WHERE lower(u.username) = :id_lower OR lower(e.email) = :id_lower
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id_lower' => mb_strtolower($identifier, 'UTF-8')]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
-            $error = "Email does not exist. Please check or sign up.";
+            $error = 'Invalid credentials.';
+        } elseif ($user['status'] !== 'Active') {
+            $error = 'Account is inactive. Contact an admin.';
+        } elseif (!password_verify($password, $user['password_hash'])) {
+            $error = 'Invalid credentials.';
         } else {
-            // 2. Direct string comparison since you aren't using password_hash() yet
-            if ($password === $user['password']) {
-                
-                $_SESSION['user_id'] = $user['id'];
-                
-                // 3. CHANGED: Using 'name' instead of 'username' based on your table
-                $_SESSION['username'] = $user['name']; 
-                
-                // 4. CHANGED: Since 'role' doesn't exist in your table, we hardcode a default 
-                // so your roleManagement.php doesn't crash.
-                $_SESSION['role'] = 'employee'; 
+            // Success
+            session_regenerate_id(true);
+            $_SESSION['user_id']     = (int)$user['user_id'];
+            $_SESSION['username']    = $user['username'];
+            $_SESSION['role']        = $user['role'];
+            $_SESSION['employee_id'] = $user['employee_id'] ? (int)$user['employee_id'] : null;
 
-                header("Location: /employee/dashboard.php");
-                exit();
-            } else {
-                $error = "Incorrect password.";
+            switch ($user['role']) {
+                case 'admin':   header('Location: /admin/users.php'); break;
+                case 'hr':      header('Location: /hr/dashboard.php'); break;
+                case 'payroll': header('Location: /hr/dashboard.php'); break; // placeholder
+                case 'employee':header('Location: /employee/dashboard.php'); break;
+                default:        header('Location: /');
             }
+            exit;
         }
     }
 }
 ?>
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Log in</title>
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: Arial, sans-serif;
-        }
-        .login-card {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-        }
-        .form-inputs {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .button-group {
-            display: flex;
-            flex-direction: row;
-            gap: 10px;
-            width: 100%;
-            justify-content: center;
-            margin-top: 10px;
-        }
-        .error-message {
-            color: red;
-            font-size: 14px;
-            margin-bottom: 5px;
-            text-align: center;
-        }
-        .remember {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            font-size: 14px;
-        }
-    </style>
+  <meta charset="utf-8">
+  <title>Sign in</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    
+    .card {
+        display: flex;    
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+
+        
+    }
+  </style>
 </head>
 <body>
-
-    <div class="login-card">
-        <h1>Sign in</h1>
-        <p>Enter your credentials to continue</p>
-
-        <?php if (!empty($error)): ?>
-            <div class="error-message"><?= htmlspecialchars($error); ?></div>
-        <?php endif; ?>
-        
-        <form action="login.php" method="POST" id="loginForm">
-            <div class="form-inputs">
-                <label>Email Address</label>
-                <input type="email" name="email" placeholder="you@example.com" value="<?= htmlspecialchars($_POST['email'] ?? ''); ?>" required>
-                
-                <label>Password</label>
-                <input type="password" name="password" placeholder="Enter your password" required>
-            </div>
-        </form>
-
-        <div class="remember">
-            <label> <input type="checkbox" name="remember" <?= isset($_COOKIE['user_email']) ? 'checked' : ''; ?>> Remember Me</label>
-            <a href="/">Forgot Password</a>
-        </div>
-
-        <div class="button-group">
-            <button type="submit" form="loginForm">Log in</button>
-        </div>
-    </div>
-
+  <div class="card">
+    <h2 style="margin-top:0">Sign in</h2>
+    <?php if ($error): ?>
+      <div class="error"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+    <form method="post" autocomplete="off">
+      <div class="row">
+        <label for="identifier">Username or Employee Email</label>
+        <input type="text" id="identifier" name="identifier" required
+               value="<?= htmlspecialchars($_POST['identifier'] ?? '') ?>">
+      </div>
+      <div class="row">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
 </body>
 </html>
