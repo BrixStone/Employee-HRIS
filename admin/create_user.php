@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <head>
   <meta charset="utf-8">
-  <title>Create User (Employee-only)</title>
+  <title>Create User</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
 
