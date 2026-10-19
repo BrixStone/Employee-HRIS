@@ -7,7 +7,6 @@ require_once __DIR__ . '/../config/supabase.php';
 
 date_default_timezone_set('Asia/Manila');
 
-// 1. Check login session
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../authentication/login.php");
     exit();
@@ -17,7 +16,6 @@ $employeeId = (int)$_SESSION['user_id'];
 $message = '';
 $error = '';
 
-// 2. Fetch logged in employee details
 $stmt = $pdo->prepare("
     SELECT id, name, email, phone_number, status
     FROM public.employee
@@ -34,7 +32,6 @@ if (!$employeeData) {
 
 $email = $employeeData['email'] ?? '';
 
-// Default leave types defined in code
 $defaultLeaveTypes = [
     [
         'name' => 'Annual Leave',
@@ -73,7 +70,6 @@ $defaultLeaveTypes = [
     ]
 ];
 
-// 3. Ensure default leave types exist in database and fetch all active types
 try {
     foreach ($defaultLeaveTypes as $defType) {
         $checkType = $pdo->prepare("
@@ -108,18 +104,15 @@ try {
     $error = "Unable to load leave types: " . $e->getMessage();
 }
 
-// Preserve submitted form values
 $selectedLeaveType = $_POST['leave_type_id'] ?? '';
 $otherLeaveType = trim($_POST['other_leave_type'] ?? '');
 $startDate = trim($_POST['start_date'] ?? '');
 $endDate = trim($_POST['end_date'] ?? '');
 $reason = trim($_POST['reason'] ?? '');
 
-// Show custom field when Other is selected
 $showOtherLeaveType = ($selectedLeaveType === 'other');
 
-// 3.5 Check 24-hour cooldown rule (1 request every 24 hours per employee)
-$cooldownDuration = 24 * 3600; // 86400 seconds (24 hours)
+$cooldownDuration = 24 * 3600;
 $canSubmit = true;
 $cooldownSecondsRemaining = 0;
 $nextAvailableTimeFormatted = '';
@@ -153,16 +146,14 @@ try {
     error_log("Error checking 24h limit: " . $e->getMessage());
 }
 
-// 4. Handle leave request submission
 if (
     ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     && ($_POST['action'] ?? '') === 'request_leave'
 ) {
     $formAction = $_POST['form_action'] ?? 'submit';
 
-    // Selecting a type and pressing Continue only refreshes the field view
+
     if ($formAction === 'continue') {
-        // No database changes needed
     } elseif (!$canSubmit) {
         $error = "Daily limit reached: You can only file 1 leave request every 24 hours. Next request available on {$nextAvailableTimeFormatted} (in {$hoursLeft}h {$minutesLeft}m).";
     } else {
@@ -201,9 +192,7 @@ if (
                 try {
                     $pdo->beginTransaction();
 
-                    // Resolve the selected leave type ID
                     if ($selectedLeaveType === 'other') {
-                        // Check if this custom leave type already exists in leave_types table
                         $findType = $pdo->prepare("
                             SELECT id
                             FROM public.leave_types
@@ -214,7 +203,6 @@ if (
                         $findType->execute(['leave_name' => $otherLeaveType]);
                         $leaveTypeId = $findType->fetchColumn();
 
-                        // If not found, insert new leave type
                         if ($leaveTypeId === false) {
                             $addType = $pdo->prepare("
                                 INSERT INTO public.leave_types (
@@ -252,10 +240,8 @@ if (
                         }
                     }
 
-                    // Inclusive calendar days calculation
                     $numberOfDays = $startObj->diff($endObj)->days + 1;
 
-                    // Insert into public.leave_requests (matches schema in database)
                     $insertStmt = $pdo->prepare("
                         INSERT INTO public.leave_requests (
                             employee_id,
@@ -290,14 +276,12 @@ if (
 
                     $message = "Leave request successfully filed and submitted to database!";
 
-                    // Activate 24-hour cooldown immediately after successful submission
                     $canSubmit = false;
                     $cooldownSecondsRemaining = $cooldownDuration;
                     $hoursLeft = 24;
                     $minutesLeft = 0;
                     $nextAvailableTimeFormatted = date('M d, Y h:i A', time() + $cooldownDuration);
 
-                    // Clear submitted form values on success
                     $selectedLeaveType = '';
                     $otherLeaveType = '';
                     $startDate = '';
@@ -305,7 +289,6 @@ if (
                     $reason = '';
                     $showOtherLeaveType = false;
 
-                    // Refresh leave types list
                     $leaveTypesStmt = $pdo->query("
                         SELECT id, leave_name, default_days, description
                         FROM public.leave_types
@@ -330,7 +313,6 @@ if (
     }
 }
 
-// 5. Fetch leave history for logged in employee from public.leave_requests
 try {
     $historyStmt = $pdo->prepare("
         SELECT
@@ -351,7 +333,6 @@ try {
             ON lt.id = lr.leave_type_id
         WHERE lr.employee_id = :employee_id
         ORDER BY lr.created_at DESC
-        LIMIT 10
     ");
     $historyStmt->execute(['employee_id' => $employeeId]);
     $leaveLogs = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -363,7 +344,6 @@ try {
     }
 }
 
-// 6. Fetch leave balances for logged in employee
 try {
     $stmtLeaveBal = $pdo->prepare("
         SELECT annual_leave, sick_leave, personal_leave
@@ -374,7 +354,6 @@ try {
     $stmtLeaveBal->execute(['email' => $email]);
     $leaveBalData = $stmtLeaveBal->fetch(PDO::FETCH_ASSOC);
 
-    // If no row exists yet for this employee, initialize with default allocation
     if (!$leaveBalData && !empty($email)) {
         try {
             $initBal = $pdo->prepare("
@@ -525,47 +504,10 @@ if (!function_exists('e')) {
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
-
-                <!-- Exit to Dashboard Button -->
-                <a
-                    href="dashboard.php"
-                    title="Exit to Dashboard"
-                    class="flex items-center space-x-1.5 text-xs font-semibold bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 hover:border-rose-500 text-rose-300 hover:text-white px-3.5 py-1.5 rounded-xl transition-all shadow-md group"
-                >
-                    <svg class="w-4 h-4 text-rose-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                    </svg>
-                    <span>Exit</span>
-                </a>
             </div>
         </header>
 
         <div class="p-8 max-w-[1400px] w-full mx-auto space-y-6">
-
-            <!-- Sub Navigation Tabs -->
-            <div class="flex items-center justify-between border-b border-cardborder pb-4">
-                <div class="flex space-x-2">
-                    <a href="file_leave.php" class="px-5 py-2.5 text-xs font-semibold rounded-xl bg-accent text-white shadow-[0_0_15px_rgba(71,99,255,0.4)] transition-all flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        File a Leave Request
-                    </a>
-                    <a href="leave_history.php" class="px-5 py-2.5 text-xs font-semibold rounded-xl text-textmuted hover:text-white hover:bg-[#1f1d2b] transition-all flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Leave History & Logs
-                    </a>
-                </div>
-
-                <div class="flex items-center space-x-2">
-                    <a href="leave_history.php" class="hidden sm:inline-flex items-center text-xs font-semibold bg-[#1f1d2b] hover:bg-[#282537] border border-cardborder px-4 py-2.5 rounded-xl text-white transition-colors">
-                        <svg class="w-4 h-4 mr-1.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                        View All History
-                    </a>
-                    <a href="dashboard.php" class="inline-flex items-center text-xs font-semibold bg-[#1f1d2b] hover:bg-rose-950/50 hover:border-rose-600/50 border border-cardborder px-4 py-2.5 rounded-xl text-gray-300 hover:text-rose-300 transition-colors">
-                        <svg class="w-4 h-4 mr-1.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        Exit to Dashboard
-                    </a>
-                </div>
-            </div>
 
             <!-- Flash Notifications -->
             <?php if ($message !== ''): ?>
@@ -783,19 +725,19 @@ if (!function_exists('e')) {
                 </form>
             </div>
 
-            <!-- Recent Leave Applications Preview -->
+            <!-- Leave History Table -->
             <div class="bg-cardbg border border-cardborder rounded-2xl p-6 sm:p-8 shadow-xl">
                 <div class="flex items-center justify-between mb-4 pb-4 border-b border-cardborder">
                     <div>
                         <h3 class="text-base font-bold text-white flex items-center">
                             <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 mr-2.5"></span>
-                            Recent Leave Applications
+                            My Leave Applications & Review Status
                         </h3>
-                        <p class="text-xs text-textmuted mt-0.5">Showing your latest requests (view full audit trail in Leave History)</p>
+                        <p class="text-xs text-textmuted mt-0.5">Real-time status updates from the database</p>
                     </div>
-                    <a href="leave_history.php" class="text-xs text-accent hover:underline font-semibold flex items-center">
-                        View Full History &rarr;
-                    </a>
+                    <span class="text-xs text-textmuted bg-[#150e26] px-3 py-1 rounded-lg border border-cardborder">
+                        Total Requests: <?= count($leaveLogs) ?>
+                    </span>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -851,18 +793,11 @@ if (!function_exists('e')) {
                                         </td>
 
                                         <td class="py-3.5 px-4 text-xs text-textmuted">
-                                            <?php if ($log['status'] === 'Approved'): ?>
+                                            <?php if (!empty($log['approved_by'])): ?>
                                                 <span class="text-emerald-300 font-medium">Reviewed by HR Admin #<?= e($log['approved_by']) ?></span>
                                                 <span class="block text-[11px] text-textmuted mt-0.5">
                                                     <?= !empty($log['approved_at']) ? e(date('M d, Y h:i A', strtotime($log['approved_at']))) : '' ?>
                                                 </span>
-                                            <?php elseif ($log['status'] === 'Rejected'): ?>
-                                                <span class="text-rose-300 font-medium">Declined by HR Admin #<?= e($log['approved_by']) ?></span>
-                                                <span class="block text-[11px] text-textmuted mt-0.5">
-                                                    <?= !empty($log['approved_at']) ? e(date('M d, Y h:i A', strtotime($log['approved_at']))) : '' ?>
-                                                </span>
-                                            <?php elseif ($log['status'] === 'Cancelled'): ?>
-                                                <span class="text-gray-400 italic">Withdrawn by Employee</span>
                                             <?php else: ?>
                                                 <span class="italic text-amber-400/80 flex items-center">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 animate-pulse"></span>
@@ -881,10 +816,6 @@ if (!function_exists('e')) {
                                                 <span class="inline-flex items-center bg-rose-950 border border-rose-500/50 text-rose-300 text-xs px-2.5 py-1 rounded-md font-medium">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-rose-400 mr-1.5"></span>
                                                     Rejected
-                                                </span>
-                                            <?php elseif ($log['status'] === 'Cancelled'): ?>
-                                                <span class="inline-flex items-center bg-gray-900 border border-gray-700 text-gray-400 text-xs px-2.5 py-1 rounded-md font-medium">
-                                                    Cancelled
                                                 </span>
                                             <?php else: ?>
                                                 <span class="inline-flex items-center bg-amber-950 border border-amber-500/50 text-amber-300 text-xs px-2.5 py-1 rounded-md font-medium">
@@ -949,7 +880,7 @@ if (!function_exists('e')) {
             document.getElementById('days_preview').classList.add('hidden');
         }
 
-        // Real-Time Running Clock
+        // Real-Time Running Clock (updates live every second without refreshing)
         function updateLiveClock() {
             const el = document.getElementById('liveClockText');
             if (!el) return;
@@ -1019,4 +950,3 @@ if (!function_exists('e')) {
     </script>
 </body>
 </html>
-
