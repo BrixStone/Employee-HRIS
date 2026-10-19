@@ -143,7 +143,7 @@ $payPeriodString = date('M 1 - M t, Y');
                     <div class="w-5 h-5 mr-3 flex items-center justify-center"><div class="w-3 h-3 border-2 border-textmuted rounded-sm"></div></div>
                     <span class="font-medium text-sm">Attendance</span>
                 </a>
-                <a href="leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
+                <a href="file_leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     <span class="font-medium text-sm">Leave</span>
                 </a>
