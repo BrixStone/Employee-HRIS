@@ -23,20 +23,18 @@
             </li>
 
             <li>
-                <a href="../hr/leave_request.php">Leave Request</a>
-            </li>
-
-            <li>
-                <a href="../hr/leave_type.php">Leave Type</a>
-            </li>
-
-            <li>
-                <a href="../hr/leave_balance.php">Leave Balance</a>
+                <a href="../hr/leave_management.php">Leave Management</a>
             </li>
 
             <li>
                 <a href="../hr/report.php">Report</a>
             </li>
+             
+            <li>
+                <a href="/authentication/logout.php">Sign out</a>
+            </li>
+
+            
         </ul>
     </nav>
 </header>
