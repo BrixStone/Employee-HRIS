@@ -1,33 +1,63 @@
 <?php
 session_start();
+
 require_once __DIR__ . '/../config/supabase.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../authentication/login.php");
-    exit();
+if (empty($_SESSION['user_id'])) {
+    header('Location: ../authentication/login.php');
+    exit;
 }
 
-// Fetch the real employee data from Supabase including the 'status' column
-$stmt =$pdo->prepare("SELECT * FROM employee WHERE id = :id");
-$stmt->execute(['id' =>$_SESSION['user_id']]);
-$employee =$stmt->fetch();
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied: Employee account required.');
+}
+
+$employeeId = $_SESSION['employee_id'] ?? null;
+
+if (empty($employeeId)) {
+    exit('No employee ID found in session.');
+}
+
+$stmt = $pdo->prepare("
+    SELECT *
+    FROM employees
+    WHERE id = :id
+    LIMIT 1
+");
+
+$stmt->execute([':id' => $employeeId]);
+$employee = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employee) {
-    session_destroy();
-    header("Location: ../authentication/login.php");
-    exit();
+    exit('Employee record not found for employee ID: '
+        . htmlspecialchars((string)$employeeId, ENT_QUOTES, 'UTF-8'));
 }
+
+$firstName = $employee['first_name'] ?? '';
+$lastName = $employee['last_name'] ?? '';
+$fullName = trim($firstName . ' ' . $lastName);
 
 $user = [
     'id' => $employee['id'],
-    'name' => htmlspecialchars($employee['name']),
-    'email' => htmlspecialchars($employee['email']),
-    'phone_number' => htmlspecialchars($employee['phone_number'] ?? 'Not Provided'),
-    'status' => htmlspecialchars($employee['status'] ?? 'Active'), // Fetched directly from the database column
-    'avatar' => 'https://ui-avatars.com/api/?name=' . urlencode($employee['name']) . '&background=4763ff&color=fff'
+    'name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
+    'email' => htmlspecialchars($employee['email'] ?? '', ENT_QUOTES, 'UTF-8'),
+    'phone_number' => htmlspecialchars(
+        $employee['phone_number'] ?? 'Not Provided',
+        ENT_QUOTES,
+        'UTF-8'
+    ),
+    'status' => htmlspecialchars(
+        $employee['status'] ?? 'Active',
+        ENT_QUOTES,
+        'UTF-8'
+    ),
+    'avatar' => 'https://ui-avatars.com/api/?name='
+        . urlencode($fullName)
+        . '&background=4763ff&color=fff'
 ];
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -79,7 +109,7 @@ $user = [
                     <div class="w-5 h-5 mr-3 flex items-center justify-center"><div class="w-3 h-3 border-2 border-textmuted rounded-sm"></div></div>
                     <span class="font-medium text-sm">Attendance</span>
                 </a>
-                <a href="leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
+                <a href="file_leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     <span class="font-medium text-sm">Leave</span>
                 </a>
