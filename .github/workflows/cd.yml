@@ -1,0 +1,43 @@
+
+name: PHP CD
+
+on:
+  workflow_run:
+    workflows: ["PHP CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Package PHP application
+        run: |
+          zip -r php-app.zip . \
+            -x ".git/*" \
+               ".github/*" \
+               "php-app.zip" \
+               "vendor/*" \
+               ".env" \
+               ".env.*"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-application
+          path: php-app.zip
+          if-no-files-found: error
+          retention-days: 14

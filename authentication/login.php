@@ -51,17 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([':id_lower' => mb_strtolower($identifier, 'UTF-8')]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        echo '<pre>';
-
-        if (!$user) {
-            die('DEBUG: User not found in database.');
-        }
-
-        echo 'User found: ' . htmlspecialchars($user['username']) . "\n";
-        echo 'Role: ' . htmlspecialchars($user['role'] ?? 'NULL') . "\n";
-        echo 'Status: ' . htmlspecialchars($user['status'] ?? 'NULL') . "\n";
-
-        echo '</pre>';
 
         if (!$user) {
             $error = 'Invalid credentials.';

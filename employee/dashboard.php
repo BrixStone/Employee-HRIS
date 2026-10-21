@@ -2,18 +2,23 @@
 session_start();
 
 require_once __DIR__ . '/../config/supabase.php';
+// Prevent browser from displaying a cached dashboard after logout
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
-// Check login session
-if (empty($_SESSION['user_id'])) {
-    header('Location: ../authentication/login.php');
+// Check whether the user is logged in
+if (empty($_SESSION['user_id']) || empty($_SESSION['role'])) {
+    header('Location: /authentication/login.php');
     exit;
 }
 
-// Only allow employee accounts
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+// Allow employee accounts only
+if (strtolower(trim($_SESSION['role'])) !== 'employee') {
     http_response_code(403);
     exit('Access denied: Employee account required.');
 }
+
+require_once __DIR__ . '/../config/supabase.php';
 
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;
