@@ -16,24 +16,34 @@ if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
     exit('Access denied: Employee account required.');
 }
 
-$employeeId = (int) $_SESSION['employee_id'];
+$userId = (int) $_SESSION['user_id'];
 
 $stmt = $pdo->prepare("
-    SELECT id, first_name, last_name, email
-    FROM public.employees
-    WHERE id = :id
+    SELECT
+        e.id,
+        e.first_name,
+        e.last_name,
+        e.email
+    FROM public.users AS u
+    INNER JOIN public.employees AS e
+        ON e.id = u.employee_id
+    WHERE u.id = :user_id
+      AND LOWER(TRIM(u.role)) = 'employee'
+      AND u.status = 'Active'
     LIMIT 1
 ");
-$stmt->execute(['id' => $employeeId]);
 
+$stmt->execute(['user_id' => $userId]);
 $employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employeeData) {
+    session_unset();
     session_destroy();
     header('Location: ../authentication/login.php');
     exit;
 }
 
+$employeeId = (int) $employeeData['id'];
 $email = $employeeData['email'] ?? '';
 
 $defaultLeaveTypes = [
