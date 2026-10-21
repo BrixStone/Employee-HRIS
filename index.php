@@ -1,3 +1,3 @@
 <?php 
-    header("Location: /../hr/dashboard.php");
+    header("Location: /../authentication/login.php");
 ?>
