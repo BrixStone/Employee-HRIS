@@ -1,33 +1,57 @@
 <?php
 session_start();
-require_once __DIR__ . '/../config/supabase.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../authentication/login.php");
-    exit();
+require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../hris_monitoring.php';
+
+// Check login session
+if (empty($_SESSION['user_id'])) {
+    header('Location: ../authentication/login.php');
+    exit;
 }
 
-// Fetch the real user data
-$stmt =$pdo->prepare("SELECT * FROM employee WHERE id = :id");
-$stmt->execute(['id' =>$_SESSION['user_id']]);
-$employeeData =$stmt->fetch();
+// Only allow employee accounts
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied: Employee account required.');
+}
+
+// Get the employee ID saved during login
+$employeeId = $_SESSION['employee_id'] ?? null;
+
+if (!$employeeId) {
+    exit('No employee record is linked to this user account.');
+}
+
+// Use the same employees table as the login query
+$stmt = $pdo->prepare("
+    SELECT id, email, first_name, last_name
+    FROM employees
+    WHERE id = :id
+    LIMIT 1
+");
+$stmt->execute([':id' => $employeeId]);
+
+$employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employeeData) {
-    session_destroy();
-    header("Location: ../authentication/login.php");
-    exit();
+    exit('Employee record not found. Check users.employee_id and employees.id.');
 }
 
-$userEmail = $employeeData['email'];$nameParts = explode(' ', trim($employeeData['name']));$firstName = $nameParts[0];$lastName = isset($nameParts[1]) ?$nameParts[1] : '';
+$userEmail = $employeeData['email'];
+$firstName = $employeeData['first_name'] ?? '';
+$lastName = $employeeData['last_name'] ?? '';
+$fullName = trim($firstName . ' ' . $lastName);
 
 $user = [
-    'first_name' => htmlspecialchars($firstName),
-    'last_name' => htmlspecialchars($lastName),
-    'full_name' => htmlspecialchars($employeeData['name']),
-    'email' => htmlspecialchars($userEmail),
-    'role' => 'Employee', 
-    'avatar' => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name']) . '&background=4763ff&color=fff' 
+    'first_name' => htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'),
+    'last_name' => htmlspecialchars($lastName, ENT_QUOTES, 'UTF-8'),
+    'full_name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
+    'email' => htmlspecialchars($userEmail ?? '', ENT_QUOTES, 'UTF-8'),
+    'role' => 'Employee',
+    'avatar' => 'https://ui-avatars.com/api/?name='
+        . urlencode($fullName)
+        . '&background=4763ff&color=fff'
 ];
 
 // Fetch Real-Time Attendance & Calculate Total Weekly Hours
