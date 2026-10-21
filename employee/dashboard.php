@@ -1,20 +1,23 @@
 <?php
 session_start();
 
-require_once __DIR__ . '/../config/supabase.php';
-require_once __DIR__ . '/../hris_monitoring.php';
+// Prevent browser from displaying a cached dashboard after logout
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
-// Check login session
-if (empty($_SESSION['user_id'])) {
-    header('Location: ../authentication/login.php');
+// Check whether the user is logged in
+if (empty($_SESSION['user_id']) || empty($_SESSION['role'])) {
+    header('Location: /authentication/login.php');
     exit;
 }
 
-// Only allow employee accounts
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+// Allow employee accounts only
+if (strtolower(trim($_SESSION['role'])) !== 'employee') {
     http_response_code(403);
     exit('Access denied: Employee account required.');
 }
+
+require_once __DIR__ . '/../config/supabase.php';
 
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;
@@ -181,7 +184,7 @@ $payPeriodString = date('M 1 - M t, Y');
                 </a>
                 
                 <div class="pt-4 mt-4 border-t border-cardborder">
-                    <a href="../authentication/login.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
+                    <a href="../authentication/logout.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                         <span class="font-medium text-sm">Log Out</span>
                     </a>
