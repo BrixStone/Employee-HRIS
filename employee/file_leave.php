@@ -4,30 +4,34 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../config/supabase.php';
-
 date_default_timezone_set('Asia/Manila');
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../authentication/login.php");
-    exit();
+if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
+    header('Location: ../authentication/login.php');
+    exit;
 }
 
-$employeeId = (int)$_SESSION['user_id'];
-$message = '';
-$error = '';
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied: Employee account required.');
+}
+
+$employeeId = (int) $_SESSION['employee_id'];
 
 $stmt = $pdo->prepare("
-    SELECT id, name, email, phone_number, status
-    FROM public.employee
+    SELECT id, first_name, last_name, email
+    FROM public.employees
     WHERE id = :id
+    LIMIT 1
 ");
 $stmt->execute(['id' => $employeeId]);
+
 $employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employeeData) {
     session_destroy();
-    header("Location: ../authentication/login.php");
-    exit();
+    header('Location: ../authentication/login.php');
+    exit;
 }
 
 $email = $employeeData['email'] ?? '';
@@ -296,7 +300,6 @@ if (
                         ORDER BY id ASC
                     ");
                     $leaveTypes = $leaveTypesStmt->fetchAll(PDO::FETCH_ASSOC);
-
                 } catch (Throwable $e) {
                     if ($pdo->inTransaction()) {
                         $pdo->rollBack();
@@ -386,13 +389,15 @@ $user = [
 ];
 
 if (!function_exists('e')) {
-    function e($value): string {
+    function e($value): string
+    {
         return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -447,33 +452,47 @@ if (!function_exists('e')) {
 
             <nav class="px-4 space-y-1">
                 <a href="dashboard.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
                     <span class="font-medium text-sm">Dashboard</span>
                 </a>
                 <a href="profile.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
                     <span class="font-medium text-sm">My Profile</span>
                 </a>
                 <a href="attendance.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     <span class="font-medium text-sm">Attendance</span>
                 </a>
                 <a href="file_leave.php" class="flex items-center px-4 py-2.5 bg-[#1f1d2b] text-white rounded-lg transition-colors border-l-2 border-accent">
-                    <svg class="w-5 h-5 mr-3 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <svg class="w-5 h-5 mr-3 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
                     <span class="font-medium text-sm text-accent">Leave Management</span>
                 </a>
                 <a href="payslips.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+                    </svg>
                     <span class="font-medium text-sm">Payslips</span>
                 </a>
                 <a href="settings.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
                     <span class="font-medium text-sm">Settings</span>
                 </a>
 
                 <div class="pt-4 mt-4 border-t border-cardborder">
                     <a href="../authentication/logout.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
                         <span class="font-medium text-sm">Log Out</span>
                     </a>
                 </div>
@@ -512,7 +531,9 @@ if (!function_exists('e')) {
             <!-- Flash Notifications -->
             <?php if ($message !== ''): ?>
                 <div class="bg-teal-950/80 border border-teal-500 text-teal-300 px-5 py-4 rounded-xl flex items-center shadow-lg">
-                    <svg class="w-5 h-5 mr-3 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg class="w-5 h-5 mr-3 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     <div>
                         <p class="text-sm font-medium"><?= e($message) ?></p>
                     </div>
@@ -521,7 +542,9 @@ if (!function_exists('e')) {
 
             <?php if ($error !== ''): ?>
                 <div class="bg-rose-950/80 border border-rose-500 text-rose-300 px-5 py-4 rounded-xl flex items-center shadow-lg">
-                    <svg class="w-5 h-5 mr-3 shrink-0 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg class="w-5 h-5 mr-3 shrink-0 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     <div>
                         <p class="text-sm font-medium"><?= e($error) ?></p>
                     </div>
@@ -577,7 +600,9 @@ if (!function_exists('e')) {
                     <?php if (!$canSubmit): ?>
                         <div id="cooldownAlertBox" class="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 flex items-start space-x-3.5 shadow-md">
                             <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
                             </div>
                             <div class="flex-1">
                                 <h4 class="text-sm font-semibold text-amber-300">24-Hour Request Limit Active</h4>
@@ -606,15 +631,13 @@ if (!function_exists('e')) {
                             name="leave_type_id"
                             required
                             onchange="handleLeaveTypeChange(this.value)"
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors"
-                        >
+                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                             <option value="">-- Select Leave Type --</option>
 
                             <?php foreach ($leaveTypes as $type): ?>
                                 <option
                                     value="<?= (int)$type['id'] ?>"
-                                    <?= (string)$selectedLeaveType === (string)$type['id'] ? 'selected' : '' ?>
-                                >
+                                    <?= (string)$selectedLeaveType === (string)$type['id'] ? 'selected' : '' ?>>
                                     <?= e($type['leave_name']) ?><?= !empty($type['default_days']) ? ' (' . e($type['default_days']) . ' days default)' : '' ?>
                                 </option>
                             <?php endforeach; ?>
@@ -638,8 +661,7 @@ if (!function_exists('e')) {
                             maxlength="150"
                             value="<?= e($otherLeaveType) ?>"
                             placeholder="e.g. Sabbatical Leave, Bereavement Extension, etc."
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors"
-                        >
+                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">public.leave_types</code> upon submission.</p>
                     </div>
 
@@ -658,8 +680,7 @@ if (!function_exists('e')) {
                                 required
                                 value="<?= e($startDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors"
-                            >
+                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         </div>
 
                         <div>
@@ -675,8 +696,7 @@ if (!function_exists('e')) {
                                 required
                                 value="<?= e($endDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors"
-                            >
+                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         </div>
                     </div>
 
@@ -697,8 +717,7 @@ if (!function_exists('e')) {
                             rows="3"
                             required
                             placeholder="Please provide details about your leave application..."
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors"
-                        ><?= e($reason) ?></textarea>
+                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors"><?= e($reason) ?></textarea>
                     </div>
 
                     <div class="pt-2 flex items-center space-x-4">
@@ -708,17 +727,17 @@ if (!function_exists('e')) {
                             name="form_action"
                             value="submit"
                             <?= !$canSubmit ? 'disabled' : '' ?>
-                            class="<?= !$canSubmit ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(71,99,255,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center"
-                        >
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                            class="<?= !$canSubmit ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(71,99,255,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                            </svg>
                             <span id="submitBtnText"><?= !$canSubmit ? 'Locked (1 Request / 24h)' : 'Submit Leave Application' ?></span>
                         </button>
 
                         <button
                             type="reset"
                             onclick="resetFormUI()"
-                            class="text-xs text-textmuted hover:text-white px-4 py-3 transition-colors"
-                        >
+                            class="text-xs text-textmuted hover:text-white px-4 py-3 transition-colors">
                             Clear Form
                         </button>
                     </div>
@@ -759,7 +778,9 @@ if (!function_exists('e')) {
                                 <tr>
                                     <td colspan="7" class="py-8 text-center text-textmuted">
                                         <div class="flex flex-col items-center justify-center">
-                                            <svg class="w-10 h-10 text-textmuted/40 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                            <svg class="w-10 h-10 text-textmuted/40 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                            </svg>
                                             <p>No leave requests found.</p>
                                             <p class="text-xs text-textmuted/60 mt-1">Submit your first application using the form above.</p>
                                         </div>
@@ -949,4 +970,5 @@ if (!function_exists('e')) {
         });
     </script>
 </body>
+
 </html>
