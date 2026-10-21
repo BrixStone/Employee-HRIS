@@ -1,32 +1,56 @@
+
 <?php
 session_start();
 require_once __DIR__ . '/../config/supabase.php';
 
-// Set timezone to Philippines (Asia/Manila) for accurate real-time logging
 date_default_timezone_set('Asia/Manila');
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../authentication/login.php");
-    exit();
+if (empty($_SESSION['user_id'])) {
+    header('Location: ../authentication/login.php');
+    exit;
 }
 
-$stmt = $pdo->prepare("SELECT * FROM employee WHERE id = :id");
-$stmt->execute(['id' => $_SESSION['user_id']]);
-$employeeData = $stmt->fetch();
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied.');
+}
+
+// Use the employee ID saved during login, not the user ID.
+$employeeId = $_SESSION['employee_id'] ?? null;
+
+if (!$employeeId) {
+    exit('No employee ID is linked to this account.');
+}
+
+$stmt = $pdo->prepare("
+    SELECT id, email, first_name, last_name
+    FROM employees
+    WHERE id = :id
+    LIMIT 1
+");
+$stmt->execute([':id' => $employeeId]);
+
+$employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employeeData) {
-    session_destroy();
-    header("Location: ../authentication/login.php");
-    exit();
+    exit('Employee record not found. Check users.employee_id.');
 }
 
 $email = $employeeData['email'];
+
+if (empty($email)) {
+    exit('No email is associated with this employee.');
+}
+
 $message = '';
 $error = '';
 
 $currentTime = date('Y-m-d H:i:s');
-$currentHour = (int)date('H');
-$currentMinute = (int)date('i');
+$currentHour = (int) date('H');
+$currentMinute = (int) date('i');
+
+// Continue with your existing POST attendance logic below.
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
