@@ -19,11 +19,19 @@ if ($id <= 0 || !in_array($action, ['approve','reject'], true)) {
 
 $lr = new LeaveRequest($pdo);
 
+// Reviewer account recorded in the leave transaction history
+$actor = [
+    'id'    => $currentUserId !== null ? (int)$currentUserId : null,
+    'name'  => $_SESSION['username'] ?? null,
+    'email' => $_SESSION['email'] ?? null,
+    'role'  => $_SESSION['role'] ?? 'hr',
+];
+
 try {
     if ($action === 'approve') {
-        $lr->approve($id, $currentUserId);
+        $lr->approve($id, $currentUserId !== null ? (int)$currentUserId : null, $actor);
     } else {
-        $lr->reject($id, $currentUserId);
+        $lr->reject($id, $currentUserId !== null ? (int)$currentUserId : null, $actor);
     }
     header('Location: /hr/leave_request.php?status=Pending'); exit;
 } catch (Throwable $e) {

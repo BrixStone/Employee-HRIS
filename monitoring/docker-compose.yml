@@ -1,4 +1,9 @@
 # ============================================================
+# NOTE: terraform/ now runs this same stack plus the real-time
+# WebSocket server (cd terraform; terraform apply). Use either
+# Terraform or this compose file, not both: they share ports
+# and container names.
+#
 # HRIS Monitoring Stack
 # - Prometheus:    collects metrics from the PHP exporter sidecar
 # - Grafana:       visualizes metrics with a pre-built dashboard
@@ -6,7 +11,8 @@
 #                  (bypasses Windows Firewall entirely — no admin needed)
 #
 # Usage:
-#   docker compose up -d
+#   cd monitoring
+#   docker compose up -d --build
 #
 # Access:
 #   Grafana    → http://localhost:3000  (user: admin / password: hris@admin)
@@ -22,22 +28,38 @@ services:
   # Mounts the project root read-only.
   # ----------------------------------------------------------
   hris-exporter:
-    image: php:8.3-cli
+    # Built from monitoring/exporter/Dockerfile (pdo_mysql pre-installed)
+    build:
+      context: ./exporter
+    image: hris-exporter:latest
     container_name: hris_exporter
     restart: unless-stopped
     ports:
-      - "9091:9091"
+      # Bound to localhost only: the metrics are for this machine, not the LAN
+      - "127.0.0.1:9091:9091"
     volumes:
       - ../:/app:ro
     working_dir: /app
-    # Install pdo_pgsql extension then start PHP built-in server
-    command: >
-      sh -c "
-        apt-get update -qq &&
-        apt-get install -y -qq libpq-dev &&
-        docker-php-ext-install pdo pdo_pgsql &&
-        php -S 0.0.0.0:9091 -t /app
-      "
+    # MySQL (XAMPP) runs on the Windows host, not in this container, so
+    # config/database.php is pointed at the host through these variables.
+    environment:
+      DB_HOST: ${HRIS_DB_HOST:-host.docker.internal}
+      DB_PORT: ${HRIS_DB_PORT:-3306}
+      DB_NAME: ${HRIS_DB_NAME:-hris}
+      # Same account as the app (XAMPP default). For a read-only account, run
+      #   GRANT SELECT ON hris.* TO 'hris_metrics'@'127.0.0.1' IDENTIFIED BY '...';
+      # and set HRIS_DB_USER / HRIS_DB_PASS before `docker compose up`.
+      DB_USER: ${HRIS_DB_USER:-root}
+      DB_PASS: ${HRIS_DB_PASS:-}
+    # Makes host.docker.internal resolvable on this custom network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:9091/monitoring/metrics.php') ? 0 : 1);"]
+      interval: 30s
+      timeout: 25s
+      retries: 3
+      start_period: 10s
     networks:
       - monitoring
 

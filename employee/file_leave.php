@@ -4,6 +4,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../classes/LeaveAuditLog.php';
+
 date_default_timezone_set('Asia/Manila');
 
 if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
@@ -275,6 +277,7 @@ if (
                             :reason,
                             'Pending'
                         )
+                        RETURNING id
                     ");
 
                     $insertStmt->execute([
@@ -285,8 +288,26 @@ if (
                         'number_of_days' => $numberOfDays,
                         'reason'         => $reason
                     ]);
+                    $newRequestId = (int)$insertStmt->fetchColumn();
 
                     $pdo->commit();
+
+                    // Audit trail: record who filed it (after commit so a log
+                    // failure can never roll back the request itself).
+                    (new LeaveAuditLog($pdo))->log(
+                        $newRequestId,
+                        $employeeId,
+                        LeaveAuditLog::ACTION_FILED,
+                        null,
+                        'Pending',
+                        [
+                            'id'    => $employeeId,
+                            'name'  => $employeeData['name'] ?? null,
+                            'email' => $employeeData['email'] ?? null,
+                            'role'  => $_SESSION['role'] ?? 'employee',
+                        ],
+                        $reason
+                    );
 
                     $message = "Leave request successfully filed and submitted to database!";
 
@@ -533,6 +554,16 @@ if (!function_exists('e')) {
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
+                <!-- Open Leave History panel -->
+                <button
+                    type="button"
+                    id="openHistoryBtn"
+                    title="View your leave history"
+                    class="flex items-center space-x-2 text-xs font-semibold bg-accent hover:bg-accenthover text-white px-4 py-2 rounded-xl transition-all shadow-md"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Leave History</span>
+                </button>
             </div>
         </header>
 
@@ -978,6 +1009,105 @@ if (!function_exists('e')) {
             }
             calculateDays();
         });
+    </script>
+
+    <!-- ============ Leave History Slide-Over Panel ============ -->
+    <div
+        id="historyOverlay"
+        class="fixed inset-0 z-50 hidden"
+        aria-hidden="true"
+    >
+        <!-- Backdrop (click to close) -->
+        <div id="historyBackdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+
+        <!-- Panel -->
+        <div
+            id="historyPanel"
+            class="absolute top-0 right-0 h-full w-full max-w-4xl bg-mainbg border-l border-cardborder shadow-2xl translate-x-full transition-transform duration-300 flex flex-col"
+        >
+            <div class="flex items-center justify-between px-6 py-4 border-b border-cardborder bg-sidebar">
+                <div class="flex items-center space-x-2.5">
+                    <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <h3 class="text-base font-bold text-white">Leave History</h3>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <a
+                        href="leave_history.php"
+                        target="_blank"
+                        title="Open in full page"
+                        class="text-xs font-medium text-textmuted hover:text-white px-3 py-1.5 rounded-lg hover:bg-[#1f1d2b] transition-colors flex items-center"
+                    >
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        Full page
+                    </a>
+                    <button
+                        type="button"
+                        id="closeHistoryBtn"
+                        title="Close"
+                        class="flex items-center space-x-1.5 text-xs font-semibold bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 hover:border-rose-500 text-rose-200 hover:text-white px-3.5 py-1.5 rounded-lg transition-all"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        <span>Close</span>
+                    </button>
+                </div>
+            </div>
+            <!-- The existing leave_history.php page is embedded here -->
+            <iframe
+                id="historyFrame"
+                title="Leave History"
+                class="flex-1 w-full bg-mainbg"
+                style="border: 0;"
+                src="about:blank"
+                data-src="leave_history.php"
+            ></iframe>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const overlay   = document.getElementById('historyOverlay');
+            const backdrop  = document.getElementById('historyBackdrop');
+            const panel     = document.getElementById('historyPanel');
+            const frame     = document.getElementById('historyFrame');
+            const openBtn   = document.getElementById('openHistoryBtn');
+            const closeBtn  = document.getElementById('closeHistoryBtn');
+
+            function openHistory() {
+                // Load the history page lazily the first time it's opened
+                if (frame.getAttribute('src') === 'about:blank') {
+                    frame.setAttribute('src', frame.getAttribute('data-src'));
+                }
+                overlay.classList.remove('hidden');
+                overlay.setAttribute('aria-hidden', 'false');
+                // Next frame so the transition animates
+                requestAnimationFrame(function () {
+                    backdrop.classList.add('opacity-100');
+                    backdrop.classList.remove('opacity-0');
+                    panel.classList.remove('translate-x-full');
+                });
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeHistory() {
+                backdrop.classList.add('opacity-0');
+                backdrop.classList.remove('opacity-100');
+                panel.classList.add('translate-x-full');
+                document.body.style.overflow = '';
+                setTimeout(function () {
+                    overlay.classList.add('hidden');
+                    overlay.setAttribute('aria-hidden', 'true');
+                }, 300);
+            }
+
+            openBtn.addEventListener('click', openHistory);
+            closeBtn.addEventListener('click', closeHistory);
+            backdrop.addEventListener('click', closeHistory);
+            document.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Escape' && !overlay.classList.contains('hidden')) {
+                    closeHistory();
+                }
+            });
+        })();
     </script>
 </body>
 

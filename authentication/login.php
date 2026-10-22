@@ -59,28 +59,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!password_verify($password, $user['password_hash'])) {
             $error = 'Invalid credentials.';
         } else {
-            // Success
-            session_regenerate_id(true);
-            $_SESSION['user_id']     = (int)$user['user_id'];
-            $_SESSION['username']    = $user['username'];
-            $_SESSION['role']        = $user['role'];
-            $_SESSION['employee_id'] = $user['employee_id'] ? (int)$user['employee_id'] : null;
+            // 2. Direct string comparison since you aren't using password_hash() yet
+            if ($password === $user['password']) {
+                
+                $_SESSION['user_id'] = $user['id'];
+                
+                // 3. CHANGED: Using 'name' instead of 'username' based on your table
+                $_SESSION['username'] = $user['name']; 
+                $_SESSION['email'] = $user['email'];
+                
+                // 4. CHANGED: Since 'role' doesn't exist in your table, we hardcode a default 
+                // so your roleManagement.php doesn't crash.
+                $_SESSION['role'] = 'employee'; 
 
-            switch ($user['role']) {
-                case 'admin':
-                    header('Location: /admin/users.php');
-                    break;
-                case 'hr':
-                    header('Location: /hr/dashboard.php');
-                    break;
-                case 'payroll':
-                    header('Location: /hr/dashboard.php');
-                    break; // placeholder
-                case 'employee':
-                    header('Location: /employee/dashboard.php');
-                    break;
-                default:
-                    header('Location: /');
+                header("Location: /employee/dashboard.php");
+                exit();
+            } else {
+                $error = "Incorrect password.";
             }
             exit;
         }

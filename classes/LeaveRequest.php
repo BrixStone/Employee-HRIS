@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/LeaveAuditLog.php';
+
 class LeaveRequest
 {
     private PDO $pdo;
@@ -52,7 +54,11 @@ class LeaveRequest
     }
 
     
-    public function approve(int $requestId, ?int $hrUserId = null): bool {
+    /**
+     * @param array $actor Reviewer account for the audit trail:
+     *                     ['id' => ?int, 'name' => ?string, 'email' => ?string, 'role' => ?string]
+     */
+    public function approve(int $requestId, ?int $hrUserId = null, array $actor = []): bool {
         try {
             $this->pdo->beginTransaction();
 
@@ -95,6 +101,15 @@ class LeaveRequest
             $lb->consume((int)$lr['employee_id'], (int)$lr['leave_type_id'], $yrStart, (float)$lr['number_of_days']);
 
             $this->pdo->commit();
+
+            $this->audit()->log(
+                $requestId,
+                (int)$lr['employee_id'],
+                LeaveAuditLog::ACTION_APPROVED,
+                'Pending',
+                'Approved',
+                $actor + ['id' => $hrUserId, 'role' => 'hr']
+            );
             return true;
 
         } catch (Throwable $e) {
@@ -103,11 +118,31 @@ class LeaveRequest
         }
     }
 
-    public function reject(int $requestId, ?int $hrUserId = null): bool {
+    public function reject(int $requestId, ?int $hrUserId = null, array $actor = []): bool {
         $sql = "UPDATE leave_requests
                 SET status='Rejected', approved_by=:by, approved_at=NOW()
-                WHERE id=:id AND status='Pending'";
+                WHERE id=:id AND status='Pending'
+                RETURNING employee_id";
         $st = $this->pdo->prepare($sql);
-        return $st->execute(['by'=>$hrUserId, 'id'=>$requestId]);
+        $st->execute(['by'=>$hrUserId, 'id'=>$requestId]);
+        $employeeId = $st->fetchColumn();
+
+        if ($employeeId === false) {
+            return false; // not found or no longer Pending
+        }
+
+        $this->audit()->log(
+            $requestId,
+            (int)$employeeId,
+            LeaveAuditLog::ACTION_REJECTED,
+            'Pending',
+            'Rejected',
+            $actor + ['id' => $hrUserId, 'role' => 'hr']
+        );
+        return true;
+    }
+
+    private function audit(): LeaveAuditLog {
+        return new LeaveAuditLog($this->pdo);
     }
 }
