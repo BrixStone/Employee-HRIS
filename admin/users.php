@@ -1,6 +1,6 @@
 <?php
 // admin/users.php
-require __DIR__ . '/../config/supabase.php';
+require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/User.php';
 
 session_start();

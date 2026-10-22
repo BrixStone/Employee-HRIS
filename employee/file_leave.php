@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
@@ -26,8 +26,8 @@ $stmt = $pdo->prepare("
         e.first_name,
         e.last_name,
         e.email
-    FROM public.users AS u
-    INNER JOIN public.employees AS e
+    FROM users AS u
+    INNER JOIN employees AS e
         ON e.id = u.employee_id
     WHERE u.id = :user_id
       AND LOWER(TRIM(u.role)) = 'employee'
@@ -47,6 +47,10 @@ if (!$employeeData) {
 
 $employeeId = (int) $employeeData['id'];
 $email = $employeeData['email'] ?? '';
+$message = '';
+$error = '';
+// employees has first/last name columns; the rest of this page uses 'name'
+$employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
 
 $defaultLeaveTypes = [
     [
@@ -89,14 +93,14 @@ $defaultLeaveTypes = [
 try {
     foreach ($defaultLeaveTypes as $defType) {
         $checkType = $pdo->prepare("
-            SELECT id FROM public.leave_types 
-            WHERE LOWER(BTRIM(leave_name)) = LOWER(BTRIM(:name)) 
+            SELECT id FROM leave_types 
+            WHERE LOWER(TRIM(leave_name)) = LOWER(TRIM(:name)) 
             LIMIT 1
         ");
         $checkType->execute(['name' => $defType['name']]);
         if (!$checkType->fetchColumn()) {
             $insertDef = $pdo->prepare("
-                INSERT INTO public.leave_types (leave_name, description, default_days, status)
+                INSERT INTO leave_types (leave_name, description, default_days, status)
                 VALUES (:name, :desc, :days, 'Active')
             ");
             $insertDef->execute([
@@ -109,7 +113,7 @@ try {
 
     $leaveTypesStmt = $pdo->query("
         SELECT id, leave_name, default_days, description
-        FROM public.leave_types
+        FROM leave_types
         WHERE status = 'Active' OR status IS NULL
         ORDER BY id ASC
     ");
@@ -138,7 +142,7 @@ $minutesLeft = 0;
 try {
     $lastReqStmt = $pdo->prepare("
         SELECT created_at 
-        FROM public.leave_requests 
+        FROM leave_requests 
         WHERE employee_id = :employee_id 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -211,8 +215,8 @@ if (
                     if ($selectedLeaveType === 'other') {
                         $findType = $pdo->prepare("
                             SELECT id
-                            FROM public.leave_types
-                            WHERE LOWER(BTRIM(leave_name)) = LOWER(BTRIM(:leave_name))
+                            FROM leave_types
+                            WHERE LOWER(TRIM(leave_name)) = LOWER(TRIM(:leave_name))
                             ORDER BY id ASC
                             LIMIT 1
                         ");
@@ -221,7 +225,7 @@ if (
 
                         if ($leaveTypeId === false) {
                             $addType = $pdo->prepare("
-                                INSERT INTO public.leave_types (
+                                INSERT INTO leave_types (
                                     leave_name,
                                     description,
                                     default_days,
@@ -233,20 +237,19 @@ if (
                                     0,
                                     'Active'
                                 )
-                                RETURNING id
                             ");
                             $addType->execute([
                                 'leave_name'  => $otherLeaveType,
                                 'description' => 'Custom leave type filed by employee'
                             ]);
-                            $leaveTypeId = $addType->fetchColumn();
+                            $leaveTypeId = (int)$pdo->lastInsertId();
                         }
                     } else {
                         $leaveTypeId = (int)$selectedLeaveType;
 
                         $checkType = $pdo->prepare("
                             SELECT id
-                            FROM public.leave_types
+                            FROM leave_types
                             WHERE id = :id
                         ");
                         $checkType->execute(['id' => $leaveTypeId]);
@@ -259,7 +262,7 @@ if (
                     $numberOfDays = $startObj->diff($endObj)->days + 1;
 
                     $insertStmt = $pdo->prepare("
-                        INSERT INTO public.leave_requests (
+                        INSERT INTO leave_requests (
                             employee_id,
                             leave_type_id,
                             start_date,
@@ -277,7 +280,6 @@ if (
                             :reason,
                             'Pending'
                         )
-                        RETURNING id
                     ");
 
                     $insertStmt->execute([
@@ -288,7 +290,7 @@ if (
                         'number_of_days' => $numberOfDays,
                         'reason'         => $reason
                     ]);
-                    $newRequestId = (int)$insertStmt->fetchColumn();
+                    $newRequestId = (int)$pdo->lastInsertId();
 
                     $pdo->commit();
 
@@ -326,7 +328,7 @@ if (
 
                     $leaveTypesStmt = $pdo->query("
                         SELECT id, leave_name, default_days, description
-                        FROM public.leave_types
+                        FROM leave_types
                         WHERE status = 'Active' OR status IS NULL
                         ORDER BY id ASC
                     ");
@@ -362,8 +364,8 @@ try {
             lr.approved_by,
             lr.approved_at,
             lr.created_at
-        FROM public.leave_requests AS lr
-        LEFT JOIN public.leave_types AS lt
+        FROM leave_requests AS lr
+        LEFT JOIN leave_types AS lt
             ON lt.id = lr.leave_type_id
         WHERE lr.employee_id = :employee_id
         ORDER BY lr.created_at DESC
@@ -379,10 +381,11 @@ try {
 }
 
 try {
+    // `leave` is a reserved word in MySQL, so it must be quoted with backticks
     $stmtLeaveBal = $pdo->prepare("
         SELECT annual_leave, sick_leave, personal_leave
-        FROM public.leave
-        WHERE LOWER(BTRIM(email)) = LOWER(BTRIM(:email))
+        FROM `leave`
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(:email))
         LIMIT 1
     ");
     $stmtLeaveBal->execute(['email' => $email]);
@@ -391,12 +394,11 @@ try {
     if (!$leaveBalData && !empty($email)) {
         try {
             $initBal = $pdo->prepare("
-                INSERT INTO public.leave (email, annual_leave, sick_leave, personal_leave)
+                INSERT INTO `leave` (email, annual_leave, sick_leave, personal_leave)
                 VALUES (:email, 12, 6, 3)
-                RETURNING annual_leave, sick_leave, personal_leave
             ");
             $initBal->execute(['email' => $email]);
-            $leaveBalData = $initBal->fetch(PDO::FETCH_ASSOC);
+            $leaveBalData = ['annual_leave' => 12, 'sick_leave' => 6, 'personal_leave' => 3];
         } catch (Throwable $t) {
             $leaveBalData = ['annual_leave' => 12, 'sick_leave' => 6, 'personal_leave' => 3];
         }
@@ -554,6 +556,8 @@ if (!function_exists('e')) {
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
+                <!-- Real-time connection status (asset/js/realtime.js) -->
+                <span class="text-xs bg-[#1f1d2b] px-3 py-1.5 rounded-lg border border-cardborder text-textmuted" data-realtime-status>Offline</span>
                 <!-- Open Leave History panel -->
                 <button
                     type="button"
@@ -630,7 +634,7 @@ if (!function_exists('e')) {
                             <span class="w-2.5 h-2.5 rounded-full bg-accent mr-2.5"></span>
                             File New Leave Request
                         </h3>
-                        <p class="text-xs text-textmuted mt-1">Leave applications are recorded in <code class="text-cyan-300">public.leave_requests</code> and queued for HR review.</p>
+                        <p class="text-xs text-textmuted mt-1">Leave applications are recorded in <code class="text-cyan-300">leave_requests</code> and queued for HR review.</p>
                     </div>
                 </div>
 
@@ -703,7 +707,7 @@ if (!function_exists('e')) {
                             value="<?= e($otherLeaveType) ?>"
                             placeholder="e.g. Sabbatical Leave, Bereavement Extension, etc."
                             class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
-                        <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">public.leave_types</code> upon submission.</p>
+                        <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">leave_types</code> upon submission.</p>
                     </div>
 
                     <!-- Date Range Selection -->
@@ -1107,8 +1111,19 @@ if (!function_exists('e')) {
                     closeHistory();
                 }
             });
+
+            // Real-time: when one of this employee's requests changes, refresh
+            // the history panel if it has been opened (the toast offers a
+            // page refresh so a half-filled form is not lost).
+            window.addEventListener('hris:realtime', function () {
+                if (frame.getAttribute('src') !== 'about:blank' && frame.contentWindow) {
+                    frame.contentWindow.location.replace(frame.getAttribute('data-src'));
+                }
+            });
         })();
     </script>
+    <!-- Real-time updates: only this employee's own leave events arrive here -->
+    <script src="../asset/js/realtime.js" data-refresh="prompt" defer></script>
 </body>
 
 </html>

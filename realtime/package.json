@@ -1,0 +1,16 @@
+{
+  "name": "hris-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebSocket server that pushes HRIS leave updates to browsers in real time",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

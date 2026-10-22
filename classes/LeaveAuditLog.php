@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/Realtime.php';
+
 /**
  * LeaveAuditLog
  * -------------
@@ -7,13 +9,13 @@
  * together with the account that performed it, and reads the full
  * transaction history back for an employee.
  *
- * Table: public.leave_request_logs (created automatically if missing,
- * see database/leave_request_logs.sql).
+ * Table: leave_request_logs (part of database/hris_mysql.sql; also created
+ * automatically if missing).
  *
  * Logging never throws: a failure to write an audit row is logged with
  * error_log() and must not break the leave action itself. Call log()
- * AFTER the main transaction has committed, because a failed statement
- * inside an open Postgres transaction aborts the whole transaction.
+ * AFTER the main transaction has committed: if the table is missing,
+ * MySQL's CREATE TABLE would implicitly commit an open transaction.
  */
 class LeaveAuditLog
 {
@@ -21,6 +23,9 @@ class LeaveAuditLog
     public const ACTION_CANCELLED = 'Cancelled';
     public const ACTION_APPROVED  = 'Approved';
     public const ACTION_REJECTED  = 'Rejected';
+
+    /** SQLSTATE for "table does not exist" (MySQL 42S02, Postgres 42P01). */
+    private const MISSING_TABLE_CODES = ['42S02', '42P01'];
 
     private PDO $pdo;
 
@@ -32,29 +37,29 @@ class LeaveAuditLog
     public function ensureTable(): void
     {
         $this->pdo->exec("
-            CREATE TABLE IF NOT EXISTS public.leave_request_logs (
-                id                 BIGSERIAL PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS leave_request_logs (
+                id                 BIGINT       NOT NULL AUTO_INCREMENT,
                 leave_request_id   BIGINT       NOT NULL,
                 employee_id        BIGINT       NOT NULL,
                 action             VARCHAR(30)  NOT NULL,
-                old_status         VARCHAR(30),
-                new_status         VARCHAR(30),
-                performed_by_id    BIGINT,
-                performed_by_name  VARCHAR(255),
-                performed_by_email VARCHAR(255),
-                performed_by_role  VARCHAR(30),
-                remarks            TEXT,
-                created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-            )
+                old_status         VARCHAR(30)  NULL,
+                new_status         VARCHAR(30)  NULL,
+                performed_by_id    BIGINT       NULL,
+                performed_by_name  VARCHAR(255) NULL,
+                performed_by_email VARCHAR(255) NULL,
+                performed_by_role  VARCHAR(30)  NULL,
+                remarks            TEXT         NULL,
+                created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_leave_request_logs_employee (employee_id, created_at),
+                KEY idx_leave_request_logs_request (leave_request_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
-        $this->pdo->exec("
-            CREATE INDEX IF NOT EXISTS idx_leave_request_logs_employee
-                ON public.leave_request_logs (employee_id, created_at DESC)
-        ");
-        $this->pdo->exec("
-            CREATE INDEX IF NOT EXISTS idx_leave_request_logs_request
-                ON public.leave_request_logs (leave_request_id)
-        ");
+    }
+
+    private static function isMissingTable(PDOException $e): bool
+    {
+        return in_array((string)$e->getCode(), self::MISSING_TABLE_CODES, true);
     }
 
     /**
@@ -71,6 +76,19 @@ class LeaveAuditLog
         array $actor,
         ?string $remarks = null
     ): bool {
+        // HR/admin actions often only know the account id: store the
+        // reviewer's real name and email so the history and the realtime
+        // notification can say who did it.
+        if (trim((string)($actor['name'] ?? '')) === ''
+            && !empty($actor['id'])
+            && strtolower((string)($actor['role'] ?? '')) !== 'employee') {
+            $known = $this->lookupReviewers([(int)$actor['id']])[(int)$actor['id']] ?? null;
+            if ($known) {
+                $actor['name']  = $known['name'];
+                $actor['email'] = $actor['email'] ?? $known['email'];
+            }
+        }
+
         $params = [
             'req'     => $leaveRequestId,
             'emp'     => $employeeId,
@@ -85,7 +103,7 @@ class LeaveAuditLog
         ];
 
         $sql = "
-            INSERT INTO public.leave_request_logs (
+            INSERT INTO leave_request_logs (
                 leave_request_id, employee_id, action, old_status, new_status,
                 performed_by_id, performed_by_name, performed_by_email, performed_by_role, remarks
             ) VALUES (
@@ -96,18 +114,68 @@ class LeaveAuditLog
 
         try {
             try {
-                return $this->pdo->prepare($sql)->execute($params);
+                $ok = $this->pdo->prepare($sql)->execute($params);
             } catch (PDOException $e) {
-                // 42P01 = undefined_table: create it once, then retry.
-                if ($e->getCode() !== '42P01') {
+                // Table missing: create it once, then retry.
+                if (!self::isMissingTable($e)) {
                     throw $e;
                 }
                 $this->ensureTable();
-                return $this->pdo->prepare($sql)->execute($params);
+                $ok = $this->pdo->prepare($sql)->execute($params);
             }
         } catch (Throwable $e) {
             error_log('LeaveAuditLog::log failed: ' . $e->getMessage());
             return false;
+        }
+
+        if ($ok) {
+            $this->broadcast($leaveRequestId, $employeeId, $action, $oldStatus, $newStatus, $params);
+        }
+        return $ok;
+    }
+
+    /**
+     * Push the transaction to the realtime server: to the owner's own
+     * channel and to HR. Other employees never receive it.
+     */
+    private function broadcast(int $requestId, int $employeeId, string $action, ?string $old, ?string $new, array $params): void
+    {
+        if (!Realtime::enabled()) {
+            return;
+        }
+        try {
+            $st = $this->pdo->prepare("
+                SELECT COALESCE(lt.leave_name, 'Leave') AS leave_name,
+                       lr.start_date, lr.end_date, lr.number_of_days,
+                       TRIM(CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, ''))) AS employee_name
+                FROM leave_requests AS lr
+                LEFT JOIN leave_types AS lt ON lt.id = lr.leave_type_id
+                LEFT JOIN employees AS e ON e.id = lr.employee_id
+                WHERE lr.id = :id
+            ");
+            $st->execute(['id' => $requestId]);
+            $req = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            Realtime::publish(
+                ['employee:' . $employeeId, 'hr'],
+                'leave.' . strtolower($action),
+                [
+                    'request_id'    => $requestId,
+                    'employee_id'   => $employeeId,
+                    'employee_name' => $req['employee_name'] ?? null,
+                    'leave_name'    => $req['leave_name'] ?? null,
+                    'start_date'    => $req['start_date'] ?? null,
+                    'end_date'      => $req['end_date'] ?? null,
+                    'days'          => isset($req['number_of_days']) ? (float)$req['number_of_days'] : null,
+                    'action'        => $action,
+                    'old_status'    => $old,
+                    'new_status'    => $new,
+                    'by_name'       => $params['by_name'],
+                    'by_role'       => $params['by_role'],
+                ]
+            );
+        } catch (Throwable $e) {
+            error_log('LeaveAuditLog::broadcast failed: ' . $e->getMessage());
         }
     }
 
@@ -128,8 +196,8 @@ class LeaveAuditLog
                 lr.id, lr.status, lr.start_date, lr.end_date, lr.number_of_days,
                 lr.approved_by, lr.approved_at, lr.created_at,
                 COALESCE(lt.leave_name, 'Custom / Other') AS leave_name
-            FROM public.leave_requests AS lr
-            LEFT JOIN public.leave_types AS lt ON lt.id = lr.leave_type_id
+            FROM leave_requests AS lr
+            LEFT JOIN leave_types AS lt ON lt.id = lr.leave_type_id
             WHERE lr.employee_id = :emp
         ");
         $st->execute(['emp' => $employeeId]);
@@ -142,19 +210,34 @@ class LeaveAuditLog
         $logs = [];
         try {
             $st = $this->pdo->prepare("
-                SELECT id, leave_request_id, action, old_status, new_status,
-                       performed_by_id, performed_by_name, performed_by_email,
-                       performed_by_role, remarks, created_at
-                FROM public.leave_request_logs
-                WHERE employee_id = :emp
+                SELECT l.id, l.leave_request_id, l.action, l.old_status, l.new_status,
+                       l.performed_by_id, l.performed_by_name, l.performed_by_email,
+                       l.performed_by_role, l.remarks, l.created_at
+                FROM leave_request_logs AS l
+                -- Only rows whose request really belongs to this employee
+                INNER JOIN leave_requests AS lr
+                    ON lr.id = l.leave_request_id AND lr.employee_id = l.employee_id
+                WHERE l.employee_id = :emp
             ");
             $st->execute(['emp' => $employeeId]);
             $logs = $st->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            if ($e->getCode() !== '42P01') {
+            if (!self::isMissingTable($e)) {
                 throw $e;
             }
         }
+
+        // Reviewer rows logged without a name (e.g. approved from a page that
+        // only knew the user id): resolve the account name from users.
+        $unnamed = [];
+        foreach ($logs as $log) {
+            if (trim((string)$log['performed_by_name']) === ''
+                && !empty($log['performed_by_id'])
+                && strtolower((string)$log['performed_by_role']) !== 'employee') {
+                $unnamed[] = (int)$log['performed_by_id'];
+            }
+        }
+        $logReviewers = $this->lookupReviewers($unnamed);
 
         $events = [];
         $loggedActions = []; // [requestId][action] = true
@@ -164,6 +247,7 @@ class LeaveAuditLog
             $req   = $requests[$reqId] ?? null;
             $loggedActions[$reqId][$log['action']] = true;
 
+            $known = $logReviewers[(int)$log['performed_by_id']] ?? null;
             $events[] = $this->event(
                 $reqId,
                 $req,
@@ -172,8 +256,8 @@ class LeaveAuditLog
                 $log['new_status'],
                 [
                     'id'    => $log['performed_by_id'],
-                    'name'  => $log['performed_by_name'],
-                    'email' => $log['performed_by_email'],
+                    'name'  => $log['performed_by_name'] ?: ($known['name'] ?? null),
+                    'email' => $log['performed_by_email'] ?: ($known['email'] ?? null),
                     'role'  => $log['performed_by_role'],
                 ],
                 $log['remarks'],
@@ -272,40 +356,27 @@ class LeaveAuditLog
         $found = [];
         $in = implode(',', array_fill(0, count($ids), '?'));
 
-        // HR / admin accounts live in public.users
+        // Reviewers are login accounts (leave_requests.approved_by = users.id).
+        // Prefer the linked employee's full name, fall back to the username.
         try {
-            $st = $this->pdo->prepare("SELECT id, username, role FROM public.users WHERE id IN ($in)");
+            $st = $this->pdo->prepare("
+                SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.email
+                FROM users AS u
+                LEFT JOIN employees AS e ON e.id = u.employee_id
+                WHERE u.id IN ($in)
+            ");
             $st->execute($ids);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $u) {
+                $full = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
                 $found[(int)$u['id']] = [
                     'id'    => (int)$u['id'],
-                    'name'  => $u['username'],
-                    'email' => null,
+                    'name'  => $full !== '' ? $full : $u['username'],
+                    'email' => $u['email'] ?? null,
                     'role'  => $u['role'] ?: 'hr',
                 ];
             }
         } catch (Throwable $e) {
-            error_log('LeaveAuditLog::lookupReviewers users: ' . $e->getMessage());
-        }
-
-        // Fallback: reviewer logged in through the employee table
-        $missing = array_values(array_diff($ids, array_keys($found)));
-        if ($missing) {
-            try {
-                $in2 = implode(',', array_fill(0, count($missing), '?'));
-                $st = $this->pdo->prepare("SELECT id, name, email FROM public.employee WHERE id IN ($in2)");
-                $st->execute($missing);
-                foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $u) {
-                    $found[(int)$u['id']] = [
-                        'id'    => (int)$u['id'],
-                        'name'  => $u['name'],
-                        'email' => $u['email'],
-                        'role'  => 'hr',
-                    ];
-                }
-            } catch (Throwable $e) {
-                error_log('LeaveAuditLog::lookupReviewers employee: ' . $e->getMessage());
-            }
+            error_log('LeaveAuditLog::lookupReviewers: ' . $e->getMessage());
         }
 
         return $found;

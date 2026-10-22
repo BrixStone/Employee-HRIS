@@ -3,36 +3,48 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
 
-// 1. Check login session
-if (!isset($_SESSION['user_id'])) {
+// 1. Check login session (same rules as file_leave.php)
+if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
     header("Location: ../authentication/login.php");
     exit();
 }
 
-$employeeId = (int)$_SESSION['user_id'];
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied: Employee account required.');
+}
+
 $message = '';
 $error = '';
 
-// 2. Fetch logged in employee details
+// 2. Fetch the employee linked to the logged-in user account
 $stmt = $pdo->prepare("
-    SELECT id, name, email, phone_number, status
-    FROM public.employee
-    WHERE id = :id
+    SELECT e.id, e.first_name, e.last_name, e.email, e.phone, e.employment_status AS status
+    FROM users AS u
+    INNER JOIN employees AS e ON e.id = u.employee_id
+    WHERE u.id = :user_id
+      AND LOWER(TRIM(u.role)) = 'employee'
+      AND u.status = 'Active'
+    LIMIT 1
 ");
-$stmt->execute(['id' => $employeeId]);
+$stmt->execute(['user_id' => (int)$_SESSION['user_id']]);
 $employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$employeeData) {
+    session_unset();
     session_destroy();
     header("Location: ../authentication/login.php");
     exit();
 }
 
+// leave_requests.employee_id references employees.id
+$employeeId = (int)$employeeData['id'];
+$employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
 $email = $employeeData['email'] ?? '';
 
 // 3. LeaveHistory Service Class
@@ -61,8 +73,8 @@ class LeaveHistoryService
                 lr.approved_by,
                 lr.approved_at,
                 lr.created_at
-            FROM public.leave_requests AS lr
-            LEFT JOIN public.leave_types AS lt
+            FROM leave_requests AS lr
+            LEFT JOIN leave_types AS lt
                 ON lt.id = lr.leave_type_id
             WHERE lr.employee_id = :employee_id
         ";
@@ -109,7 +121,7 @@ class LeaveHistoryService
                 COALESCE(SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END), 0) AS total_rejected,
                 COALESCE(SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END), 0) AS total_cancelled,
                 COALESCE(SUM(CASE WHEN status = 'Approved' THEN number_of_days ELSE 0 END), 0) AS approved_days
-            FROM public.leave_requests
+            FROM leave_requests
             WHERE employee_id = :employee_id
         ");
         $stmt->execute(['employee_id' => $employeeId]);
@@ -127,7 +139,7 @@ class LeaveHistoryService
     {
         $stmt = $this->pdo->query("
             SELECT id, leave_name 
-            FROM public.leave_types 
+            FROM leave_types 
             ORDER BY leave_name ASC
         ");
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -136,8 +148,8 @@ class LeaveHistoryService
     public function getAvailableYears(int $employeeId): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS req_year
-            FROM public.leave_requests
+            SELECT DISTINCT YEAR(created_at) AS req_year
+            FROM leave_requests
             WHERE employee_id = :employee_id
             ORDER BY req_year DESC
         ");
@@ -153,7 +165,7 @@ class LeaveHistoryService
     public function cancelRequest(int $requestId, int $employeeId, array $actor = []): bool
     {
         $stmt = $this->pdo->prepare("
-            UPDATE public.leave_requests
+            UPDATE leave_requests
             SET status = 'Cancelled'
             WHERE id = :id AND employee_id = :employee_id AND status = 'Pending'
         ");
@@ -254,8 +266,8 @@ function roleLabel(?string $role): string
 try {
     $stmtLeaveBal = $pdo->prepare("
         SELECT annual_leave, sick_leave, personal_leave
-        FROM public.leave
-        WHERE LOWER(BTRIM(email)) = LOWER(BTRIM(:email))
+        FROM `leave`
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(:email))
         LIMIT 1
     ");
     $stmtLeaveBal->execute(['email' => $email]);
@@ -412,6 +424,8 @@ if (!function_exists('e')) {
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
+                <!-- Real-time connection status (asset/js/realtime.js) -->
+                <span class="text-xs bg-[#1f1d2b] px-3 py-2 rounded-xl border border-cardborder text-textmuted" data-realtime-status>Offline</span>
 
                 <!-- Exit Button: Returns to Leave Management (file_leave.php) -->
                 <a
@@ -1010,5 +1024,7 @@ if (!function_exists('e')) {
             });
         }
     </script>
+    <!-- Real-time updates: only this employee's own leave events arrive here -->
+    <script src="../asset/js/realtime.js" data-refresh="auto" defer></script>
 </body>
 </html>

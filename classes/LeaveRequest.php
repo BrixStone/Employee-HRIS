@@ -121,15 +121,18 @@ class LeaveRequest
     public function reject(int $requestId, ?int $hrUserId = null, array $actor = []): bool {
         $sql = "UPDATE leave_requests
                 SET status='Rejected', approved_by=:by, approved_at=NOW()
-                WHERE id=:id AND status='Pending'
-                RETURNING employee_id";
+                WHERE id=:id AND status='Pending'";
         $st = $this->pdo->prepare($sql);
         $st->execute(['by'=>$hrUserId, 'id'=>$requestId]);
-        $employeeId = $st->fetchColumn();
 
-        if ($employeeId === false) {
+        if ($st->rowCount() === 0) {
             return false; // not found or no longer Pending
         }
+
+        // MySQL has no UPDATE ... RETURNING, so read the owner separately
+        $own = $this->pdo->prepare("SELECT employee_id FROM leave_requests WHERE id = :id");
+        $own->execute(['id' => $requestId]);
+        $employeeId = $own->fetchColumn();
 
         $this->audit()->log(
             $requestId,
