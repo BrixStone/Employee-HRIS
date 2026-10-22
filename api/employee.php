@@ -42,7 +42,7 @@ if ($id === false || $id === null || $id < 1) {
 }
 
 try {
-    require_once __DIR__ . '/../config/supabase.php';
+    require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../classes/Employee.php';
 
     $model = new Employee($pdo);
