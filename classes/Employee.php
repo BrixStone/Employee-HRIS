@@ -192,9 +192,8 @@ class Employee
         $sql = "
             SELECT employee_id
             FROM employees
-            WHERE employee_id ~ '^EMP-[0-9]+$'
-            ORDER BY CAST(SUBSTRING(employee_id FROM 5)
-        AS INTEGER) DESC
+            WHERE employee_id REGEXP '^EMP-[0-9]+$'
+            ORDER BY CAST(SUBSTRING(employee_id, 5) AS UNSIGNED) DESC
             LIMIT 1       
         ";
         $stmt = $this->pdo->prepare($sql);

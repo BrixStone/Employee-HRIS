@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 // Prevent browser from displaying a cached dashboard after logout
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -18,7 +18,7 @@ if (strtolower(trim($_SESSION['role'])) !== 'employee') {
     exit('Access denied: Employee account required.');
 }
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;
@@ -78,7 +78,7 @@ if ($attendanceData) {$timeIn = new DateTime($attendanceData['time_in']);$timeOu
 }
 
 // Fetch Real-Time Leave Balances from Supabase 'leave' table
-$stmtLeave =$pdo->prepare("SELECT annual_leave, sick_leave, personal_leave FROM public.leave WHERE email = :email LIMIT 1");
+$stmtLeave =$pdo->prepare("SELECT annual_leave, sick_leave, personal_leave FROM `leave` WHERE email = :email LIMIT 1");
 $stmtLeave->execute(['email' =>$userEmail]);
 $leaveData =$stmtLeave->fetch();
 
@@ -212,6 +212,8 @@ $payPeriodString = date('M 1 - M t, Y');
             </div>
             <div class="flex items-center space-x-6">
                 <span id="live-datetime" class="text-sm text-textmuted font-medium tracking-wide"></span>
+                <!-- Real-time connection status (asset/js/realtime.js) -->
+                <span class="text-xs bg-[#1f1d2b] px-3 py-1.5 rounded-lg border border-cardborder text-textmuted" data-realtime-status>Offline</span>
             </div>
         </header>
 
@@ -346,5 +348,7 @@ $payPeriodString = date('M 1 - M t, Y');
         updateDateTime();
         setInterval(updateDateTime, 1000);
     </script>
+    <!-- Real-time updates: only this employee's own leave events arrive here -->
+    <script src="../asset/js/realtime.js" data-refresh="prompt" defer></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../authentication/guard.php';
 require_role(['admin']);
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/User.php';
 
 $userModel = new User($pdo);

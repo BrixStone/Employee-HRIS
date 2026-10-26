@@ -86,7 +86,7 @@
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
       "title": "Scrape Errors",
       "type": "stat",
-      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_scrape_errors_total", "legendFormat": "Errors", "refId": "A" }]
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_scrape_errors", "legendFormat": "Errors", "refId": "A" }]
     },
     {
       "collapsed": false,
@@ -313,6 +313,106 @@
         { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_leave_requests_by_status_total{status=\"Rejected\"}", "legendFormat": "Rejected", "refId": "C" },
         { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_leave_requests_by_status_total{status=\"Cancelled\"}", "legendFormat": "Cancelled", "refId": "D" }
       ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
+      "id": 103,
+      "title": "🧾 Leave Transactions (Audit Log)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Actions recorded in public.leave_request_logs: who filed, approved, rejected or cancelled a leave request.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "id": 40,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] }, "showUnfilled": true },
+      "title": "Transactions by Action",
+      "type": "bargauge",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_leave_transactions_total", "legendFormat": "{{action}}", "refId": "A", "instant": true }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "id": 41,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] }, "showUnfilled": true },
+      "title": "Leave Requests by Type",
+      "type": "bargauge",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_leave_requests_by_type_total", "legendFormat": "{{leave_type}}", "refId": "A", "instant": true }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 },
+      "id": 104,
+      "title": "⚡ Real-time (WebSocket)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "realtime/server.js, started by terraform apply. DOWN means browsers fall back to manual refresh.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 0, "text": "DOWN" }, "1": { "color": "green", "index": 1, "text": "UP" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 39 },
+      "id": 50,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "title": "WebSocket Server",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(up{job=\"hris_realtime\"}) or vector(0)", "legendFormat": "Realtime", "refId": "A" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Browsers currently connected for live updates",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 4, "y": 39 },
+      "id": 51,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "Live Connections",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_realtime_connections", "legendFormat": "{{role}}", "refId": "A" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Leave events pushed to browsers in the last hour",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "decimals": 0 }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
+      "id": 52,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] }, "showUnfilled": true },
+      "title": "Real-time Events (last 1h)",
+      "type": "bargauge",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (type) (increase(hris_realtime_events_total[1h]))", "legendFormat": "{{type}}", "refId": "A", "instant": true }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2, "fillOpacity": 15 } }
+      },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 43 },
+      "id": 53,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "Connections Over Time",
+      "type": "timeseries",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hris_realtime_connections", "legendFormat": "{{role}}", "refId": "A" }]
     }
   ],
   "refresh": "30s",
@@ -324,6 +424,6 @@
   "timezone": "Asia/Manila",
   "title": "HRIS Employee & Leave Dashboard",
   "uid": "hris-main-dashboard",
-  "version": 1
+  "version": 3
 }
 

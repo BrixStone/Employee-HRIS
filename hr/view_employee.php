@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/../config/supabase.php';
+require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
 
 $employeeModel = new Employee($pdo);

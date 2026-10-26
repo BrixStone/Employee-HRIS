@@ -33,7 +33,7 @@ if (!in_array($role, ['admin', 'hr'], true)) {
 }
 
 try {
-    require_once __DIR__ . '/../config/supabase.php';
+    require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../classes/Employee.php';
 
     $model = new Employee($pdo);

@@ -1,10 +1,12 @@
 <?php
 // authentication/login.php
 session_start();
-require_once __DIR__ . '/../config/supabase.php'; // provides $pdo
+require_once __DIR__ . '/../config/database.php'; // provides $pdo (MySQL)
 
-// If already logged in, send to role home
-if (!empty($_SESSION['role'])) {
+// If already logged in, send to role home. Only on GET: a submitted login
+// form must always be checked, otherwise signing in as a different user
+// silently keeps the previous user's session (and shows their data).
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !empty($_SESSION['role'])) {
     switch ($_SESSION['role']) {
         case 'admin':
             header('Location: /admin/users.php');
@@ -59,12 +61,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!password_verify($password, $user['password_hash'])) {
             $error = 'Invalid credentials.';
         } else {
-            // Success
+            // Success: drop everything from any previous login before
+            // storing the new identity, then issue a fresh session id.
+            $_SESSION = [];
             session_regenerate_id(true);
             $_SESSION['user_id']     = (int)$user['user_id'];
             $_SESSION['username']    = $user['username'];
             $_SESSION['role']        = $user['role'];
             $_SESSION['employee_id'] = $user['employee_id'] ? (int)$user['employee_id'] : null;
+            $_SESSION['email']       = $user['emp_email'] ?? null;
 
             switch ($user['role']) {
                 case 'admin':

@@ -3,7 +3,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../classes/LeaveAuditLog.php';
+
 date_default_timezone_set('Asia/Manila');
 
 if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
@@ -24,8 +26,8 @@ $stmt = $pdo->prepare("
         e.first_name,
         e.last_name,
         e.email
-    FROM public.users AS u
-    INNER JOIN public.employees AS e
+    FROM users AS u
+    INNER JOIN employees AS e
         ON e.id = u.employee_id
     WHERE u.id = :user_id
       AND LOWER(TRIM(u.role)) = 'employee'
@@ -45,6 +47,10 @@ if (!$employeeData) {
 
 $employeeId = (int) $employeeData['id'];
 $email = $employeeData['email'] ?? '';
+$message = '';
+$error = '';
+// employees has first/last name columns; the rest of this page uses 'name'
+$employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
 
 $defaultLeaveTypes = [
     [
@@ -87,14 +93,14 @@ $defaultLeaveTypes = [
 try {
     foreach ($defaultLeaveTypes as $defType) {
         $checkType = $pdo->prepare("
-            SELECT id FROM public.leave_types 
-            WHERE LOWER(BTRIM(leave_name)) = LOWER(BTRIM(:name)) 
+            SELECT id FROM leave_types 
+            WHERE LOWER(TRIM(leave_name)) = LOWER(TRIM(:name)) 
             LIMIT 1
         ");
         $checkType->execute(['name' => $defType['name']]);
         if (!$checkType->fetchColumn()) {
             $insertDef = $pdo->prepare("
-                INSERT INTO public.leave_types (leave_name, description, default_days, status)
+                INSERT INTO leave_types (leave_name, description, default_days, status)
                 VALUES (:name, :desc, :days, 'Active')
             ");
             $insertDef->execute([
@@ -107,7 +113,7 @@ try {
 
     $leaveTypesStmt = $pdo->query("
         SELECT id, leave_name, default_days, description
-        FROM public.leave_types
+        FROM leave_types
         WHERE status = 'Active' OR status IS NULL
         ORDER BY id ASC
     ");
@@ -136,7 +142,7 @@ $minutesLeft = 0;
 try {
     $lastReqStmt = $pdo->prepare("
         SELECT created_at 
-        FROM public.leave_requests 
+        FROM leave_requests 
         WHERE employee_id = :employee_id 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -209,8 +215,8 @@ if (
                     if ($selectedLeaveType === 'other') {
                         $findType = $pdo->prepare("
                             SELECT id
-                            FROM public.leave_types
-                            WHERE LOWER(BTRIM(leave_name)) = LOWER(BTRIM(:leave_name))
+                            FROM leave_types
+                            WHERE LOWER(TRIM(leave_name)) = LOWER(TRIM(:leave_name))
                             ORDER BY id ASC
                             LIMIT 1
                         ");
@@ -219,7 +225,7 @@ if (
 
                         if ($leaveTypeId === false) {
                             $addType = $pdo->prepare("
-                                INSERT INTO public.leave_types (
+                                INSERT INTO leave_types (
                                     leave_name,
                                     description,
                                     default_days,
@@ -231,20 +237,19 @@ if (
                                     0,
                                     'Active'
                                 )
-                                RETURNING id
                             ");
                             $addType->execute([
                                 'leave_name'  => $otherLeaveType,
                                 'description' => 'Custom leave type filed by employee'
                             ]);
-                            $leaveTypeId = $addType->fetchColumn();
+                            $leaveTypeId = (int)$pdo->lastInsertId();
                         }
                     } else {
                         $leaveTypeId = (int)$selectedLeaveType;
 
                         $checkType = $pdo->prepare("
                             SELECT id
-                            FROM public.leave_types
+                            FROM leave_types
                             WHERE id = :id
                         ");
                         $checkType->execute(['id' => $leaveTypeId]);
@@ -257,7 +262,7 @@ if (
                     $numberOfDays = $startObj->diff($endObj)->days + 1;
 
                     $insertStmt = $pdo->prepare("
-                        INSERT INTO public.leave_requests (
+                        INSERT INTO leave_requests (
                             employee_id,
                             leave_type_id,
                             start_date,
@@ -285,8 +290,26 @@ if (
                         'number_of_days' => $numberOfDays,
                         'reason'         => $reason
                     ]);
+                    $newRequestId = (int)$pdo->lastInsertId();
 
                     $pdo->commit();
+
+                    // Audit trail: record who filed it (after commit so a log
+                    // failure can never roll back the request itself).
+                    (new LeaveAuditLog($pdo))->log(
+                        $newRequestId,
+                        $employeeId,
+                        LeaveAuditLog::ACTION_FILED,
+                        null,
+                        'Pending',
+                        [
+                            'id'    => $employeeId,
+                            'name'  => $employeeData['name'] ?? null,
+                            'email' => $employeeData['email'] ?? null,
+                            'role'  => $_SESSION['role'] ?? 'employee',
+                        ],
+                        $reason
+                    );
 
                     $message = "Leave request successfully filed and submitted to database!";
 
@@ -305,7 +328,7 @@ if (
 
                     $leaveTypesStmt = $pdo->query("
                         SELECT id, leave_name, default_days, description
-                        FROM public.leave_types
+                        FROM leave_types
                         WHERE status = 'Active' OR status IS NULL
                         ORDER BY id ASC
                     ");
@@ -341,8 +364,8 @@ try {
             lr.approved_by,
             lr.approved_at,
             lr.created_at
-        FROM public.leave_requests AS lr
-        LEFT JOIN public.leave_types AS lt
+        FROM leave_requests AS lr
+        LEFT JOIN leave_types AS lt
             ON lt.id = lr.leave_type_id
         WHERE lr.employee_id = :employee_id
         ORDER BY lr.created_at DESC
@@ -358,10 +381,11 @@ try {
 }
 
 try {
+    // `leave` is a reserved word in MySQL, so it must be quoted with backticks
     $stmtLeaveBal = $pdo->prepare("
         SELECT annual_leave, sick_leave, personal_leave
-        FROM public.leave
-        WHERE LOWER(BTRIM(email)) = LOWER(BTRIM(:email))
+        FROM `leave`
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(:email))
         LIMIT 1
     ");
     $stmtLeaveBal->execute(['email' => $email]);
@@ -370,12 +394,11 @@ try {
     if (!$leaveBalData && !empty($email)) {
         try {
             $initBal = $pdo->prepare("
-                INSERT INTO public.leave (email, annual_leave, sick_leave, personal_leave)
+                INSERT INTO `leave` (email, annual_leave, sick_leave, personal_leave)
                 VALUES (:email, 12, 6, 3)
-                RETURNING annual_leave, sick_leave, personal_leave
             ");
             $initBal->execute(['email' => $email]);
-            $leaveBalData = $initBal->fetch(PDO::FETCH_ASSOC);
+            $leaveBalData = ['annual_leave' => 12, 'sick_leave' => 6, 'personal_leave' => 3];
         } catch (Throwable $t) {
             $leaveBalData = ['annual_leave' => 12, 'sick_leave' => 6, 'personal_leave' => 3];
         }
@@ -533,6 +556,18 @@ if (!function_exists('e')) {
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
+                <!-- Real-time connection status (asset/js/realtime.js) -->
+                <span class="text-xs bg-[#1f1d2b] px-3 py-1.5 rounded-lg border border-cardborder text-textmuted" data-realtime-status>Offline</span>
+                <!-- Open Leave History panel -->
+                <button
+                    type="button"
+                    id="openHistoryBtn"
+                    title="View your leave history"
+                    class="flex items-center space-x-2 text-xs font-semibold bg-accent hover:bg-accenthover text-white px-4 py-2 rounded-xl transition-all shadow-md"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Leave History</span>
+                </button>
             </div>
         </header>
 
@@ -599,7 +634,7 @@ if (!function_exists('e')) {
                             <span class="w-2.5 h-2.5 rounded-full bg-accent mr-2.5"></span>
                             File New Leave Request
                         </h3>
-                        <p class="text-xs text-textmuted mt-1">Leave applications are recorded in <code class="text-cyan-300">public.leave_requests</code> and queued for HR review.</p>
+                        <p class="text-xs text-textmuted mt-1">Leave applications are recorded in <code class="text-cyan-300">leave_requests</code> and queued for HR review.</p>
                     </div>
                 </div>
 
@@ -672,7 +707,7 @@ if (!function_exists('e')) {
                             value="<?= e($otherLeaveType) ?>"
                             placeholder="e.g. Sabbatical Leave, Bereavement Extension, etc."
                             class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
-                        <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">public.leave_types</code> upon submission.</p>
+                        <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">leave_types</code> upon submission.</p>
                     </div>
 
                     <!-- Date Range Selection -->
@@ -979,6 +1014,116 @@ if (!function_exists('e')) {
             calculateDays();
         });
     </script>
+
+    <!-- ============ Leave History Slide-Over Panel ============ -->
+    <div
+        id="historyOverlay"
+        class="fixed inset-0 z-50 hidden"
+        aria-hidden="true"
+    >
+        <!-- Backdrop (click to close) -->
+        <div id="historyBackdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+
+        <!-- Panel -->
+        <div
+            id="historyPanel"
+            class="absolute top-0 right-0 h-full w-full max-w-4xl bg-mainbg border-l border-cardborder shadow-2xl translate-x-full transition-transform duration-300 flex flex-col"
+        >
+            <div class="flex items-center justify-between px-6 py-4 border-b border-cardborder bg-sidebar">
+                <div class="flex items-center space-x-2.5">
+                    <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <h3 class="text-base font-bold text-white">Leave History</h3>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <a
+                        href="leave_history.php"
+                        target="_blank"
+                        title="Open in full page"
+                        class="text-xs font-medium text-textmuted hover:text-white px-3 py-1.5 rounded-lg hover:bg-[#1f1d2b] transition-colors flex items-center"
+                    >
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        Full page
+                    </a>
+                    <button
+                        type="button"
+                        id="closeHistoryBtn"
+                        title="Close"
+                        class="flex items-center space-x-1.5 text-xs font-semibold bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 hover:border-rose-500 text-rose-200 hover:text-white px-3.5 py-1.5 rounded-lg transition-all"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        <span>Close</span>
+                    </button>
+                </div>
+            </div>
+            <!-- The existing leave_history.php page is embedded here -->
+            <iframe
+                id="historyFrame"
+                title="Leave History"
+                class="flex-1 w-full bg-mainbg"
+                style="border: 0;"
+                src="about:blank"
+                data-src="leave_history.php"
+            ></iframe>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const overlay   = document.getElementById('historyOverlay');
+            const backdrop  = document.getElementById('historyBackdrop');
+            const panel     = document.getElementById('historyPanel');
+            const frame     = document.getElementById('historyFrame');
+            const openBtn   = document.getElementById('openHistoryBtn');
+            const closeBtn  = document.getElementById('closeHistoryBtn');
+
+            function openHistory() {
+                // Load the history page lazily the first time it's opened
+                if (frame.getAttribute('src') === 'about:blank') {
+                    frame.setAttribute('src', frame.getAttribute('data-src'));
+                }
+                overlay.classList.remove('hidden');
+                overlay.setAttribute('aria-hidden', 'false');
+                // Next frame so the transition animates
+                requestAnimationFrame(function () {
+                    backdrop.classList.add('opacity-100');
+                    backdrop.classList.remove('opacity-0');
+                    panel.classList.remove('translate-x-full');
+                });
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeHistory() {
+                backdrop.classList.add('opacity-0');
+                backdrop.classList.remove('opacity-100');
+                panel.classList.add('translate-x-full');
+                document.body.style.overflow = '';
+                setTimeout(function () {
+                    overlay.classList.add('hidden');
+                    overlay.setAttribute('aria-hidden', 'true');
+                }, 300);
+            }
+
+            openBtn.addEventListener('click', openHistory);
+            closeBtn.addEventListener('click', closeHistory);
+            backdrop.addEventListener('click', closeHistory);
+            document.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Escape' && !overlay.classList.contains('hidden')) {
+                    closeHistory();
+                }
+            });
+
+            // Real-time: when one of this employee's requests changes, refresh
+            // the history panel if it has been opened (the toast offers a
+            // page refresh so a half-filled form is not lost).
+            window.addEventListener('hris:realtime', function () {
+                if (frame.getAttribute('src') !== 'about:blank' && frame.contentWindow) {
+                    frame.contentWindow.location.replace(frame.getAttribute('data-src'));
+                }
+            });
+        })();
+    </script>
+    <!-- Real-time updates: only this employee's own leave events arrive here -->
+    <script src="../asset/js/realtime.js" data-refresh="prompt" defer></script>
 </body>
 
 </html>

@@ -6,16 +6,19 @@ scrape_configs:
 
   # -----------------------------------------------------------------------
   # HRIS PHP Application Metrics
-  # Scraped from the hris-exporter sidecar running inside Docker.
-  # No Windows Firewall rules needed.
+  # Scraped from the hris-exporter container on the shared Docker network.
   # -----------------------------------------------------------------------
   - job_name: 'hris_php_app'
     scrape_interval: 30s
-    static_configs:
-      - targets:
-          - 'hris-exporter:9091'
+    # metrics.php queries Supabase over the internet; a scrape can take
+    # several seconds, so allow more than the 10s default.
+    scrape_timeout: 25s
     metrics_path: '/monitoring/metrics.php'
     scheme: http
+    static_configs:
+      - targets: ['hris-exporter:9091']
+        labels:
+          app: 'hris'
 
   # -----------------------------------------------------------------------
   # Prometheus self-monitoring

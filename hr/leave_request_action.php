@@ -1,9 +1,12 @@
 <?php
-require __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../authentication/guard.php';
+// Only signed-in HR/admin accounts may approve or reject leave
+require_role(['hr', 'admin']);
+
+require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/LeaveRequest.php';
 require __DIR__ . '/../classes/LeaveBalance.php';
 
-session_start();
 $currentUserId = $_SESSION['user_id'] ?? null;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -19,11 +22,18 @@ if ($id <= 0 || !in_array($action, ['approve','reject'], true)) {
 
 $lr = new LeaveRequest($pdo);
 
+// Reviewer account recorded in the leave transaction history. The display
+// name and email are looked up from users/employees when the log is written.
+$actor = [
+    'id'   => $currentUserId !== null ? (int)$currentUserId : null,
+    'role' => $_SESSION['role'] ?? 'hr',
+];
+
 try {
     if ($action === 'approve') {
-        $lr->approve($id, $currentUserId);
+        $lr->approve($id, $currentUserId !== null ? (int)$currentUserId : null, $actor);
     } else {
-        $lr->reject($id, $currentUserId);
+        $lr->reject($id, $currentUserId !== null ? (int)$currentUserId : null, $actor);
     }
     header('Location: /hr/leave_request.php?status=Pending'); exit;
 } catch (Throwable $e) {
