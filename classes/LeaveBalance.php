@@ -25,10 +25,9 @@ class LeaveBalance
         $sql = "
         INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days, remaining_days)
         VALUES (:emp, :type, :yr, :alloc, 0, :alloc)
-        ON CONFLICT (employee_id, leave_type_id, year)
-        DO UPDATE SET
-            allocated_days = EXCLUDED.allocated_days,
-            remaining_days = GREATEST(EXCLUDED.allocated_days - leave_balances.used_days, 0),
+        ON DUPLICATE KEY UPDATE
+            remaining_days = GREATEST(VALUES(allocated_days) - used_days, 0),
+            allocated_days = VALUES(allocated_days),
             updated_at = NOW()
         ";
         $st = $this->pdo->prepare($sql);
@@ -44,8 +43,10 @@ class LeaveBalance
     public function consume(int $employeeId, int $leaveTypeId, int $year, float $days): bool {
         $sql = "
         UPDATE leave_balances
-        SET used_days = used_days + :d,
-            remaining_days = GREATEST(allocated_days - (used_days + :d), 0),
+        -- MySQL evaluates SET left to right, so remaining_days must be
+        -- computed before used_days changes (Postgres used the old values).
+        SET remaining_days = GREATEST(allocated_days - (used_days + :d), 0),
+            used_days = used_days + :d,
             updated_at = NOW()
         WHERE employee_id = :emp AND leave_type_id = :type AND year = :yr
         ";
@@ -58,7 +59,7 @@ class LeaveBalance
         $sql = "
         INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days, remaining_days)
         VALUES (:emp, :type, :yr, :alloc, 0, :alloc)
-        ON CONFLICT (employee_id, leave_type_id, year) DO NOTHING
+        ON DUPLICATE KEY UPDATE id = id
         ";
         $st = $this->pdo->prepare($sql);
         return $st->execute([

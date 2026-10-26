@@ -1,14 +1,14 @@
 <?php
 // hr/leave_management.php
 
-require __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../authentication/guard.php';
+// Only signed-in HR/admin accounts may manage leave types, balances and approvals
+require_role(['hr', 'admin']);
+
+require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/LeaveType.php';
 require __DIR__ . '/../classes/LeaveBalance.php';
 require __DIR__ . '/../classes/LeaveRequest.php';
-
-session_start();
-// Optional: enforce HR role here based on your auth system.
-// if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'hr') { http_response_code(403); exit('Forbidden'); }
 
 $lt = new LeaveType($pdo);
 $lb = new LeaveBalance($pdo);
@@ -63,10 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Invalid request/action.');
             }
 
+            // Reviewer for the transaction history; the name is looked up
+            // from users/employees when the log is written.
+            $actor = ['role' => $_SESSION['role'] ?? 'hr'];
             if ($action === 'approve') {
-                $lr->approve($id, $hrUserId);
+                $lr->approve($id, $hrUserId !== null ? (int)$hrUserId : null, $actor);
             } else {
-                $lr->reject($id, $hrUserId);
+                $lr->reject($id, $hrUserId !== null ? (int)$hrUserId : null, $actor);
             }
             header('Location: /hr/leave_management.php?tab=requests&status=Pending'); exit;
         }
@@ -112,6 +115,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 ?>
 
 <h1>Leave Management</h1>
+<p>Real-time updates: <strong data-realtime-status>Offline</strong></p>
 
 <?php if ($err): ?>
   <p style="color:#b00;"><?= h($err) ?></p>
@@ -286,3 +290,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
   </table>
 
 <?php endif; ?>
+
+<!-- Real-time: HR hears every leave event. The requests list reloads itself;
+     the other tabs show a Refresh button so forms being filled are kept. -->
+<script src="../asset/js/realtime.js" data-refresh="<?= $tab === 'requests' ? 'auto' : 'prompt' ?>" defer></script>

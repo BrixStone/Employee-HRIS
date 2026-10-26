@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/../config/supabase.php';
+require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
 require __DIR__ . '/../classes/Department.php';
 require __DIR__ . '/../classes/Position.php';
@@ -94,7 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit;
                     } catch (PDOException $e) {
                         $msg = $e->getMessage();
-                        if (str_contains($msg, 'duplicate') || str_contains($msg, '23505')) {
+                        // MySQL duplicate key: SQLSTATE 23000 / driver error 1062 ("Duplicate entry ...")
+                        if (stripos($msg, 'duplicate') !== false || (int)($e->errorInfo[1] ?? 0) === 1062) {
                             $error = 'Employee ID already exists. Please use a different one.';
                         } else {
                             $error = 'Unable to update employee. ' . $msg;

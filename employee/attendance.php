@@ -1,7 +1,7 @@
 
 <?php
 session_start();
-require_once __DIR__ . '/../config/supabase.php';
+require_once __DIR__ . '/../config/database.php';
 
 date_default_timezone_set('Asia/Manila');
 
@@ -37,6 +37,8 @@ if (!$employeeData) {
 }
 
 $email = $employeeData['email'];
+// employees has first/last name columns; the rest of this page uses 'name'
+$employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
 
 if (empty($email)) {
     exit('No email is associated with this employee.');
@@ -81,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         }
     } elseif ($action === 'break_time') {
-        // FIXED: Using exact database column name "Break_Time" with quotes for PostgreSQL
-        $findStmt = $pdo->prepare('SELECT id, time_in, "Break_Time" FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
+        // MySQL quotes identifiers with backticks; "Break_Time" would be a string literal
+        $findStmt = $pdo->prepare('SELECT id, time_in, `Break_Time` FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
         $findStmt->execute(['email' => $email]);
         $activeShift = $findStmt->fetch();
 
@@ -96,12 +98,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($currentDecimalTime < 12.0 || $currentDecimalTime > 13.0) {
                 $error = "Break time is only allowed between 12:00 PM and 1:00 PM. Current time is " . date('h:i A') . ".";
             } else {
-                $updateBreak = $pdo->prepare('UPDATE attendance SET "Break_Time" = :break_time WHERE id = :id');
+                $updateBreak = $pdo->prepare('UPDATE attendance SET `Break_Time` = :break_time WHERE id = :id');
                 $updateBreak->execute(['break_time' =>$currentTime, 'id' => $activeShift['id']]);$message = "Break Time recorded successfully at " . date('h:i:s A') . ".";
             }
         }
     } elseif ($action === 'time_out') {
-        $findStmt =$pdo->prepare('SELECT id, time_in, "Break_Time" FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
+        $findStmt =$pdo->prepare('SELECT id, time_in, `Break_Time` FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
         $findStmt->execute(['email' =>$email]);
         $activeShift =$findStmt->fetch();
 
@@ -127,8 +129,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// Fetch history (Using explicit quotes for "Break_Time")
-$historyStmt =$pdo->prepare('SELECT id, created_at, email, time_in, "Break_Time", time_out, workhours FROM attendance WHERE email = :email ORDER BY time_in DESC');
+// Fetch history (backticks keep the mixed-case Break_Time column name)
+$historyStmt =$pdo->prepare('SELECT id, created_at, email, time_in, `Break_Time`, time_out, workhours FROM attendance WHERE email = :email ORDER BY time_in DESC');
 $historyStmt->execute(['email' =>$email]);
 $attendanceLogs =$historyStmt->fetchAll();
 

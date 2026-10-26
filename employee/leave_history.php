@@ -1,3 +1,300 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../classes/LeaveAuditLog.php';
+
+date_default_timezone_set('Asia/Manila');
+
+// 1. Check login session (same rules as file_leave.php)
+if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
+    header("Location: ../authentication/login.php");
+    exit();
+}
+
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
+    http_response_code(403);
+    exit('Access denied: Employee account required.');
+}
+
+$message = '';
+$error = '';
+
+// 2. Fetch the employee linked to the logged-in user account
+$stmt = $pdo->prepare("
+    SELECT e.id, e.first_name, e.last_name, e.email, e.phone, e.employment_status AS status
+    FROM users AS u
+    INNER JOIN employees AS e ON e.id = u.employee_id
+    WHERE u.id = :user_id
+      AND LOWER(TRIM(u.role)) = 'employee'
+      AND u.status = 'Active'
+    LIMIT 1
+");
+$stmt->execute(['user_id' => (int)$_SESSION['user_id']]);
+$employeeData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$employeeData) {
+    session_unset();
+    session_destroy();
+    header("Location: ../authentication/login.php");
+    exit();
+}
+
+// leave_requests.employee_id references employees.id
+$employeeId = (int)$employeeData['id'];
+$employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
+$email = $employeeData['email'] ?? '';
+
+// 3. LeaveHistory Service Class
+class LeaveHistoryService
+{
+    private PDO $pdo;
+
+    public function __construct(PDO $pdo)
+    {
+        $this->pdo = $pdo;
+    }
+
+    public function getHistory(int $employeeId, string $status = '', string $typeId = '', string $year = '', string $search = ''): array
+    {
+        $sql = "
+            SELECT
+                lr.id,
+                lr.employee_id,
+                lr.leave_type_id,
+                COALESCE(lt.leave_name, 'Custom / Other') AS leave_name,
+                lr.start_date,
+                lr.end_date,
+                lr.number_of_days,
+                lr.reason,
+                lr.status,
+                lr.approved_by,
+                lr.approved_at,
+                lr.created_at
+            FROM leave_requests AS lr
+            LEFT JOIN leave_types AS lt
+                ON lt.id = lr.leave_type_id
+            WHERE lr.employee_id = :employee_id
+        ";
+
+        $params = ['employee_id' => $employeeId];
+
+        if ($status !== '' && $status !== 'all') {
+            $sql .= " AND lr.status = :status";
+            $params['status'] = $status;
+        }
+
+        if ($typeId !== '' && $typeId !== 'all') {
+            $sql .= " AND lr.leave_type_id = :type_id";
+            $params['type_id'] = (int)$typeId;
+        }
+
+        if ($year !== '' && $year !== 'all') {
+            $sql .= " AND (EXTRACT(YEAR FROM lr.start_date) = :year OR EXTRACT(YEAR FROM lr.created_at) = :year)";
+            $params['year'] = (int)$year;
+        }
+
+        if ($search !== '') {
+            $sql .= " AND (
+                LOWER(lr.reason) LIKE :search 
+                OR LOWER(lt.leave_name) LIKE :search
+            )";
+            $params['search'] = '%' . strtolower(trim($search)) . '%';
+        }
+
+        $sql .= " ORDER BY lr.created_at DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getStats(int $employeeId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT
+                COUNT(*) AS total_filed,
+                COALESCE(SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END), 0) AS total_approved,
+                COALESCE(SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END), 0) AS total_pending,
+                COALESCE(SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END), 0) AS total_rejected,
+                COALESCE(SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END), 0) AS total_cancelled,
+                COALESCE(SUM(CASE WHEN status = 'Approved' THEN number_of_days ELSE 0 END), 0) AS approved_days
+            FROM leave_requests
+            WHERE employee_id = :employee_id
+        ");
+        $stmt->execute(['employee_id' => $employeeId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'total_filed' => 0,
+            'total_approved' => 0,
+            'total_pending' => 0,
+            'total_rejected' => 0,
+            'total_cancelled' => 0,
+            'approved_days' => 0
+        ];
+    }
+
+    public function getLeaveTypes(): array
+    {
+        $stmt = $this->pdo->query("
+            SELECT id, leave_name 
+            FROM leave_types 
+            ORDER BY leave_name ASC
+        ");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function getAvailableYears(int $employeeId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT DISTINCT YEAR(created_at) AS req_year
+            FROM leave_requests
+            WHERE employee_id = :employee_id
+            ORDER BY req_year DESC
+        ");
+        $stmt->execute(['employee_id' => $employeeId]);
+        $years = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $currentYear = (int)date('Y');
+        if (!in_array($currentYear, $years)) {
+            array_unshift($years, $currentYear);
+        }
+        return $years;
+    }
+
+    public function cancelRequest(int $requestId, int $employeeId, array $actor = []): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE leave_requests
+            SET status = 'Cancelled'
+            WHERE id = :id AND employee_id = :employee_id AND status = 'Pending'
+        ");
+        $stmt->execute(['id' => $requestId, 'employee_id' => $employeeId]);
+        $cancelled = $stmt->rowCount() > 0;
+
+        if ($cancelled) {
+            (new LeaveAuditLog($this->pdo))->log(
+                $requestId,
+                $employeeId,
+                LeaveAuditLog::ACTION_CANCELLED,
+                'Pending',
+                'Cancelled',
+                $actor
+            );
+        }
+        return $cancelled;
+    }
+}
+
+$historyService = new LeaveHistoryService($pdo);
+
+// 4. Handle Cancel Request Action
+if (
+    ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && ($_POST['action'] ?? '') === 'cancel_request'
+) {
+    $cancelId = (int)($_POST['request_id'] ?? 0);
+    if ($cancelId > 0) {
+        $cancelActor = [
+            'id'    => $employeeId,
+            'name'  => $employeeData['name'] ?? null,
+            'email' => $employeeData['email'] ?? null,
+            'role'  => $_SESSION['role'] ?? 'employee',
+        ];
+        if ($historyService->cancelRequest($cancelId, $employeeId, $cancelActor)) {
+            $message = "Leave application #{$cancelId} has been successfully cancelled.";
+        } else {
+            $error = "Unable to cancel request #{$cancelId}. Only requests with 'Pending' status can be cancelled.";
+        }
+    }
+}
+
+// 5. Query Filters
+$filterStatus = trim($_GET['status'] ?? 'all');
+$filterType = trim($_GET['type'] ?? 'all');
+$filterYear = trim($_GET['year'] ?? 'all');
+$searchKeyword = trim($_GET['q'] ?? '');
+
+$leaveLogs = $historyService->getHistory($employeeId, $filterStatus, $filterType, $filterYear, $searchKeyword);
+$stats = $historyService->getStats($employeeId);
+$availableTypes = $historyService->getLeaveTypes();
+$availableYears = $historyService->getAvailableYears($employeeId);
+
+// 5b. Full transaction history (Filed / Cancelled / Approved / Rejected) with the
+//     account that performed each action.
+try {
+    $transactions = (new LeaveAuditLog($pdo))->getTransactionsForEmployee($employeeId, $employeeData);
+} catch (PDOException $e) {
+    error_log('Leave transaction history error: ' . $e->getMessage());
+    $transactions = [];
+    if ($error === '') {
+        $error = 'Unable to load the leave transaction history.';
+    }
+}
+$latestReview = LeaveAuditLog::latestReviewByRequest($transactions);
+
+$txCounts = ['all' => count($transactions), 'Filed' => 0, 'Approved' => 0, 'Rejected' => 0, 'Cancelled' => 0];
+foreach ($transactions as $tx) {
+    if (isset($txCounts[$tx['action']])) {
+        $txCounts[$tx['action']]++;
+    }
+}
+
+/** Display name for the account behind a transaction. */
+function actorLabel(array $tx, int $selfId): string
+{
+    $name = trim((string)($tx['actor_name'] ?? ''));
+    if ($name === '') {
+        $name = !empty($tx['actor_id']) ? 'Account #' . $tx['actor_id'] : 'System';
+    }
+    $isSelf = ($tx['actor_role'] ?? '') === 'employee' && (int)($tx['actor_id'] ?? 0) === $selfId;
+    return $isSelf ? $name . ' (You)' : $name;
+}
+
+function roleLabel(?string $role): string
+{
+    return match (strtolower((string)$role)) {
+        'hr'       => 'HR',
+        'admin'    => 'Admin',
+        'employee' => 'Employee',
+        ''         => 'Unknown',
+        default    => ucfirst((string)$role),
+    };
+}
+
+// 6. Fetch leave balances for overview cards
+try {
+    $stmtLeaveBal = $pdo->prepare("
+        SELECT annual_leave, sick_leave, personal_leave
+        FROM `leave`
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(:email))
+        LIMIT 1
+    ");
+    $stmtLeaveBal->execute(['email' => $email]);
+    $leaveBalData = $stmtLeaveBal->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $leaveBalData = false;
+}
+
+$balances = [
+    'annual'   => $leaveBalData['annual_leave'] ?? 0,
+    'sick'     => $leaveBalData['sick_leave'] ?? 0,
+    'personal' => $leaveBalData['personal_leave'] ?? 0
+];
+
+$user = [
+    'full_name' => htmlspecialchars($employeeData['name'] ?? '', ENT_QUOTES, 'UTF-8'),
+    'email'     => htmlspecialchars($employeeData['email'] ?? '', ENT_QUOTES, 'UTF-8'),
+    'status'    => htmlspecialchars($employeeData['status'] ?? 'Active Employee', ENT_QUOTES, 'UTF-8'),
+    'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name'] ?? 'User') . '&background=4763ff&color=fff'
+];
+
+if (!function_exists('e')) {
+    function e($value): string {
+        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,10 +424,13 @@
                     <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
                     <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
                 </span>
+                <!-- Real-time connection status (asset/js/realtime.js) -->
+                <span class="text-xs bg-[#1f1d2b] px-3 py-2 rounded-xl border border-cardborder text-textmuted" data-realtime-status>Offline</span>
 
                 <!-- Exit Button: Returns to Leave Management (file_leave.php) -->
                 <a
                     href="file_leave.php"
+                    target="_top"
                     title="Exit and return to Leave Management"
                     class="flex items-center space-x-2 text-xs font-semibold bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 hover:border-rose-500 text-rose-200 hover:text-white px-4 py-2 rounded-xl transition-all shadow-md group"
                 >
@@ -160,6 +460,7 @@
                 <!-- Secondary Exit Link to Leave Management -->
                 <a
                     href="file_leave.php"
+                    target="_top"
                     class="inline-flex items-center text-xs font-semibold bg-[#1f1d2b] hover:bg-rose-950/50 hover:border-rose-600/50 border border-cardborder px-4 py-2.5 rounded-xl text-gray-300 hover:text-rose-300 transition-colors"
                 >
                     <svg class="w-4 h-4 mr-1.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -430,11 +731,12 @@
                                         </td>
 
                                         <!-- Review Details -->
+                                        <?php $rev = $latestReview[(int)$log['id']] ?? null; ?>
                                         <td class="py-4 px-4 text-xs text-textmuted">
                                             <?php if ($log['status'] === 'Approved'): ?>
                                                 <span class="text-emerald-300 font-medium flex items-center">
                                                     <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                                    Approved <?= !empty($log['approved_by']) ? 'by Admin #' . e($log['approved_by']) : '' ?>
+                                                    Approved by <?= e($rev ? actorLabel($rev, $employeeId) : 'HR') ?>
                                                 </span>
                                                 <span class="block text-[11px] text-textmuted mt-0.5">
                                                     <?= !empty($log['approved_at']) ? e(date('M d, Y h:i A', strtotime($log['approved_at']))) : '' ?>
@@ -442,13 +744,13 @@
                                             <?php elseif ($log['status'] === 'Rejected'): ?>
                                                 <span class="text-rose-300 font-medium flex items-center">
                                                     <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                                    Declined <?= !empty($log['approved_by']) ? 'by Admin #' . e($log['approved_by']) : '' ?>
+                                                    Declined by <?= e($rev ? actorLabel($rev, $employeeId) : 'HR') ?>
                                                 </span>
                                                 <span class="block text-[11px] text-textmuted mt-0.5">
                                                     <?= !empty($log['approved_at']) ? e(date('M d, Y h:i A', strtotime($log['approved_at']))) : '' ?>
                                                 </span>
                                             <?php elseif ($log['status'] === 'Cancelled'): ?>
-                                                <span class="text-gray-400 italic">Withdrawn by Employee</span>
+                                                <span class="text-gray-400 italic">Withdrawn by <?= e($rev ? actorLabel($rev, $employeeId) : 'Employee') ?></span>
                                             <?php else: ?>
                                                 <span class="italic text-amber-400/90 flex items-center">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 animate-pulse"></span>
@@ -507,6 +809,148 @@
                 </div>
             </div>
 
+            <!-- ================= Transaction History (Audit Trail) ================= -->
+            <?php
+            $txStyles = [
+                'Filed'     => ['dot' => 'bg-blue-400',    'badge' => 'bg-blue-950/80 border-blue-500/50 text-blue-300',          'verb' => 'Filed by'],
+                'Approved'  => ['dot' => 'bg-emerald-400', 'badge' => 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300', 'verb' => 'Approved by'],
+                'Rejected'  => ['dot' => 'bg-rose-400',    'badge' => 'bg-rose-950/80 border-rose-500/50 text-rose-300',          'verb' => 'Rejected by'],
+                'Cancelled' => ['dot' => 'bg-gray-400',    'badge' => 'bg-gray-900 border-gray-700 text-gray-300',                'verb' => 'Cancelled by'],
+            ];
+            $statusText = static function (?string $s): string {
+                return match ($s) {
+                    'Pending'   => 'text-amber-300',
+                    'Approved'  => 'text-emerald-300',
+                    'Rejected'  => 'text-rose-300',
+                    'Cancelled' => 'text-gray-400',
+                    default     => 'text-textmuted',
+                };
+            };
+            ?>
+            <div class="bg-cardbg border border-cardborder rounded-2xl shadow-xl overflow-hidden" id="transactionHistory">
+                <div class="p-6 border-b border-cardborder flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 mr-2.5"></span>
+                            Transaction History
+                        </h3>
+                        <p class="text-xs text-textmuted mt-0.5">
+                            Every action on your leave requests (filed, approved, rejected, cancelled) and the account that performed it
+                        </p>
+                    </div>
+
+                    <!-- Action filter (client-side) -->
+                    <div class="flex flex-wrap gap-1.5" role="group" aria-label="Filter transactions by action">
+                        <?php foreach (['all' => 'All', 'Filed' => 'Filed / Pending', 'Approved' => 'Approved', 'Rejected' => 'Rejected', 'Cancelled' => 'Cancelled'] as $key => $label): ?>
+                            <button
+                                type="button"
+                                data-tx-filter="<?= e($key) ?>"
+                                aria-pressed="<?= $key === 'all' ? 'true' : 'false' ?>"
+                                class="tx-filter-btn text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors <?= $key === 'all' ? 'bg-accent border-accent text-white' : 'bg-[#1b0d35] border-cardborder text-textmuted hover:text-white' ?>"
+                            >
+                                <?= e($label) ?> <span class="opacity-70">(<?= (int)$txCounts[$key] ?>)</span>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-cardborder text-textmuted text-xs uppercase tracking-wider bg-[#10071f]/60">
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Date &amp; Time</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Ref #</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Leave</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Action</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Status Change</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Performed By</th>
+                                <th scope="col" class="py-3.5 px-4 font-semibold">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-cardborder text-sm" id="txTableBody">
+                            <?php if (empty($transactions)): ?>
+                                <tr data-tx-empty>
+                                    <td colspan="7" class="py-10 text-center text-textmuted text-sm">No transactions recorded yet.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($transactions as $tx):
+                                    $style = $txStyles[$tx['action']] ?? $txStyles['Filed'];
+                                ?>
+                                    <tr class="hover:bg-[#150a25] transition-colors" data-tx-action="<?= e($tx['action']) ?>">
+                                        <td class="py-3.5 px-4 text-xs whitespace-nowrap">
+                                            <?php if (!empty($tx['occurred_at'])): ?>
+                                                <span class="text-white"><?= e(date('M d, Y', strtotime($tx['occurred_at']))) ?></span>
+                                                <span class="block text-[11px] text-textmuted"><?= e(date('h:i A', strtotime($tx['occurred_at']))) ?></span>
+                                            <?php else: ?>
+                                                <span class="text-textmuted italic" title="This action happened before transaction logging was enabled, so its exact time was not stored.">Time not recorded</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-xs font-mono text-cyan-400 font-semibold">
+                                            #<?= str_pad((string)$tx['request_id'], 5, '0', STR_PAD_LEFT) ?>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-xs">
+                                            <span class="font-semibold text-white"><?= e($tx['leave_name']) ?></span>
+                                            <?php if (!empty($tx['start_date'])): ?>
+                                                <span class="block text-[11px] text-textmuted">
+                                                    <?= e(date('M d', strtotime($tx['start_date']))) ?> – <?= e(date('M d, Y', strtotime($tx['end_date']))) ?>
+                                                    · <?= (float)$tx['number_of_days'] ?> day(s)
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="py-3.5 px-4 whitespace-nowrap">
+                                            <span class="inline-flex items-center border text-xs px-2.5 py-1 rounded-md font-medium <?= $style['badge'] ?>">
+                                                <span class="w-1.5 h-1.5 rounded-full mr-1.5 <?= $style['dot'] ?>"></span>
+                                                <?= e($tx['action']) ?>
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-xs whitespace-nowrap">
+                                            <?php if (!empty($tx['old_status'])): ?>
+                                                <span class="<?= $statusText($tx['old_status']) ?>"><?= e($tx['old_status']) ?></span>
+                                                <span class="text-textmuted mx-1" aria-hidden="true">&rarr;</span>
+                                                <span class="sr-only">to</span>
+                                            <?php else: ?>
+                                                <span class="text-textmuted">New</span>
+                                                <span class="text-textmuted mx-1" aria-hidden="true">&rarr;</span>
+                                                <span class="sr-only">to</span>
+                                            <?php endif; ?>
+                                            <span class="font-semibold <?= $statusText($tx['new_status']) ?>"><?= e($tx['new_status'] ?? '—') ?></span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-xs">
+                                            <div class="flex items-center space-x-2.5">
+                                                <img
+                                                    src="https://ui-avatars.com/api/?name=<?= urlencode(trim((string)($tx['actor_name'] ?? '')) ?: 'System') ?>&background=281545&color=fff&size=64"
+                                                    alt=""
+                                                    class="w-7 h-7 rounded-full border border-cardborder shrink-0"
+                                                >
+                                                <div class="min-w-0">
+                                                    <p class="font-semibold text-white truncate">
+                                                        <span class="sr-only"><?= e($style['verb']) ?> </span><?= e(actorLabel($tx, $employeeId)) ?>
+                                                    </p>
+                                                    <p class="text-[11px] text-textmuted truncate">
+                                                        <?= e(roleLabel($tx['actor_role'])) ?>
+                                                        <?php if (!empty($tx['actor_email'])): ?>
+                                                            · <?= e($tx['actor_email']) ?>
+                                                        <?php elseif (!empty($tx['actor_id'])): ?>
+                                                            · ID #<?= (int)$tx['actor_id'] ?>
+                                                        <?php endif; ?>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-xs text-gray-300 max-w-xs break-words">
+                                            <?= !empty($tx['remarks']) ? e($tx['remarks']) : '<span class="text-textmuted/50">—</span>' ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                <tr data-tx-no-match class="hidden">
+                                    <td colspan="7" class="py-10 text-center text-textmuted text-sm">No transactions for this filter.</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
     </main>
 
@@ -534,6 +978,35 @@
         setInterval(updateLiveClock, 1000);
         updateLiveClock();
 
+        // Transaction History action filter
+        (function () {
+            const buttons = document.querySelectorAll('.tx-filter-btn');
+            const rows = document.querySelectorAll('#txTableBody tr[data-tx-action]');
+            const noMatch = document.querySelector('#txTableBody tr[data-tx-no-match]');
+            const active = ['bg-accent', 'border-accent', 'text-white'];
+            const idle = ['bg-[#1b0d35]', 'border-cardborder', 'text-textmuted'];
+
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const filter = btn.dataset.txFilter;
+                    let shown = 0;
+                    rows.forEach(row => {
+                        const match = filter === 'all' || row.dataset.txAction === filter;
+                        row.classList.toggle('hidden', !match);
+                        if (match) shown++;
+                    });
+                    if (noMatch) noMatch.classList.toggle('hidden', shown > 0);
+
+                    buttons.forEach(b => {
+                        const on = b === btn;
+                        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                        active.forEach(c => b.classList.toggle(c, on));
+                        idle.forEach(c => b.classList.toggle(c, !on));
+                    });
+                });
+            });
+        })();
+
         // Optional Live Client Search
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
@@ -551,5 +1024,7 @@
             });
         }
     </script>
+    <!-- Real-time updates: only this employee's own leave events arrive here -->
+    <script src="../asset/js/realtime.js" data-refresh="auto" defer></script>
 </body>
 </html>

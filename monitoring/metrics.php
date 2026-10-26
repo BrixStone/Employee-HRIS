@@ -2,39 +2,48 @@
 /**
  * Prometheus Metrics Endpoint
  * ===========================
- * Exposes HRIS application metrics in Prometheus text format.
- * Scraped by Prometheus at http://<your-host>/monitoring/metrics.php
+ * Exposes HRIS application metrics in the Prometheus text exposition format.
+ * Scraped by Prometheus from the hris-exporter container at
+ *   http://hris-exporter:9091/monitoring/metrics.php
  *
  * Metrics exposed:
- *   hris_db_up                          - Database connectivity (1=up, 0=down)
- *   hris_employees_total                - Total number of employees
- *   hris_employees_active_total         - Active employees
- *   hris_employees_inactive_total       - Inactive employees
- *   hris_leave_requests_total           - Total leave requests (labelled by status)
- *   hris_leave_requests_pending_total   - Pending leave requests
- *   hris_leave_requests_this_month      - Leave requests filed this calendar month
- *   hris_leave_types_total              - Number of configured leave types
- *   hris_scrape_duration_seconds        - Time taken to collect metrics
- *   hris_scrape_errors_total            - Number of errors during metric collection
- *   hris_php_version_info               - PHP version label gauge (always 1)
+ *   hris_up                               - Endpoint reachable (always 1)
+ *   hris_db_up                            - Database connectivity (1=up, 0=down)
+ *   hris_db_query_duration_seconds        - Round-trip time of SELECT 1
+ *   hris_employees_total                  - Total employees
+ *   hris_employees_active_total           - Active employees
+ *   hris_employees_inactive_total         - Inactive employees
+ *   hris_leave_requests_total             - Total leave requests
+ *   hris_leave_requests_by_status_total   - Leave requests by status {status}
+ *   hris_leave_days_by_status_total       - Leave days by status {status}
+ *   hris_leave_requests_this_month        - Requests filed this calendar month
+ *   hris_leave_requests_by_type_total     - Leave requests by type {leave_type}
+ *   hris_leave_transactions_total         - Audit-log transactions by action {action}
+ *   hris_leave_types_total                - Configured leave types
+ *   hris_scrape_duration_seconds          - Time taken to collect metrics
+ *   hris_scrape_errors                    - Errors during this scrape
+ *   hris_php_version_info                 - PHP version label gauge (always 1)
  */
 
 declare(strict_types=1);
 
 // ---------------------------------------------------------------------------
 // Security: only allow Prometheus / internal network access.
-// Adjust ALLOWED_NETWORKS to match your Prometheus server IP / Docker subnet.
 // ---------------------------------------------------------------------------
-define('ALLOWED_NETWORKS', [
+const ALLOWED_NETWORKS = [
     '127.0.0.1',
     '::1',
-    '172.0.0.0/8',   // Docker default bridge range
-    '10.0.0.0/8',    // Private LAN
-    '192.168.0.0/16',
-]);
+    '172.16.0.0/12',  // Docker bridge networks
+    '10.0.0.0/8',     // Private LAN
+    '192.168.0.0/16', // Private LAN / Docker Desktop
+];
 
 function ipIsAllowed(string $ip): bool
 {
+    // Unwrap IPv4-mapped IPv6 addresses such as ::ffff:172.18.0.3
+    if (stripos($ip, '::ffff:') === 0) {
+        $ip = substr($ip, 7);
+    }
     foreach (ALLOWED_NETWORKS as $cidr) {
         if (strpos($cidr, '/') === false) {
             if ($ip === $cidr) return true;
@@ -50,199 +59,218 @@ function ipIsAllowed(string $ip): bool
     return false;
 }
 
-$clientIp = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-if (!ipIsAllowed($clientIp)) {
-    http_response_code(403);
-    exit("403 Forbidden\n");
+if (PHP_SAPI !== 'cli') {
+    $clientIp = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (!ipIsAllowed($clientIp)) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit("403 Forbidden\n");
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap: DB connection (suppress errors; metric reports db_up=0 on fail)
+// Metric registry: groups samples per metric so HELP/TYPE appear exactly once
+// per metric name, as the exposition format requires.
 // ---------------------------------------------------------------------------
-$scrapeStart = microtime(true);
-$scrapeErrors = 0;
-
-$pdo = null;
-try {
-    require_once __DIR__ . '/../config/supabase.php';
-    // $pdo is set by supabase.php
-} catch (Throwable $e) {
-    $pdo = null;
-    $scrapeErrors++;
-}
-
-// ---------------------------------------------------------------------------
-// Metric collector
-// ---------------------------------------------------------------------------
-class MetricRegistry
+final class MetricRegistry
 {
-    private array $lines = [];
+    /** @var array<string, array{help:string, type:string, samples:list<string>}> */
+    private array $metrics = [];
 
     public function gauge(string $name, string $help, float|int $value, array $labels = []): void
     {
-        $this->lines[] = "# HELP {$name} {$help}";
-        $this->lines[] = "# TYPE {$name} gauge";
-        $this->lines[] = $name . $this->labelStr($labels) . " {$value}";
+        $this->add($name, 'gauge', $help, $value, $labels);
     }
 
-    public function counter(string $name, string $help, float|int $value, array $labels = []): void
+    private function add(string $name, string $type, string $help, float|int $value, array $labels): void
     {
-        $this->lines[] = "# HELP {$name} {$help}";
-        $this->lines[] = "# TYPE {$name} counter";
-        $this->lines[] = $name . $this->labelStr($labels) . " {$value}";
+        if (!isset($this->metrics[$name])) {
+            $this->metrics[$name] = ['help' => $help, 'type' => $type, 'samples' => []];
+        }
+        $this->metrics[$name]['samples'][] = $name . $this->labelStr($labels) . ' ' . $this->num($value);
     }
 
     private function labelStr(array $labels): string
     {
-        if (empty($labels)) return '';
+        if (!$labels) return '';
         $parts = [];
         foreach ($labels as $k => $v) {
-            $v = str_replace('"', '\\"', (string)$v);
-            $parts[] = "{$k}=\"{$v}\"";
+            $v = str_replace(['\\', '"', "\n"], ['\\\\', '\\"', '\\n'], (string)$v);
+            $parts[] = $k . '="' . $v . '"';
         }
         return '{' . implode(',', $parts) . '}';
     }
 
+    private function num(float|int $v): string
+    {
+        if (is_int($v)) return (string)$v;
+        if (is_nan($v)) return 'NaN';
+        return rtrim(rtrim(sprintf('%.6F', $v), '0'), '.') ?: '0';
+    }
+
     public function render(): string
     {
-        return implode("\n", $this->lines) . "\n";
+        $out = [];
+        foreach ($this->metrics as $name => $m) {
+            $out[] = "# HELP {$name} " . str_replace(["\\", "\n"], ["\\\\", "\\n"], $m['help']);
+            $out[] = "# TYPE {$name} {$m['type']}";
+            foreach ($m['samples'] as $s) {
+                $out[] = $s;
+            }
+        }
+        return implode("\n", $out) . "\n";
     }
 }
 
-$reg = new MetricRegistry();
+$reg          = new MetricRegistry();
+$scrapeStart  = microtime(true);
+$scrapeErrors = 0;
+
+function metricError(string $where, Throwable $e, int &$counter): void
+{
+    $counter++;
+    error_log("metrics.php [{$where}]: " . $e->getMessage());
+}
 
 // ---------------------------------------------------------------------------
-// 1. PHP version info
+// DB connection (MySQL). HRIS_DB_THROW_ON_FAIL makes database.php throw instead of
+// die(), so a DB outage is reported as hris_db_up 0 rather than breaking
+// the scrape with a plain-text error page.
 // ---------------------------------------------------------------------------
+define('HRIS_DB_THROW_ON_FAIL', true);
+$pdo = null;
+try {
+    require __DIR__ . '/../config/database.php';
+} catch (Throwable $e) {
+    $pdo = null;
+    metricError('connect', $e, $scrapeErrors);
+}
+
+$reg->gauge('hris_up', 'HRIS metrics endpoint is reachable (always 1)', 1);
 $reg->gauge(
     'hris_php_version_info',
-    'PHP version info (always 1, use labels to read version)',
+    'PHP version info (always 1, read the version from labels)',
     1,
-    ['version' => PHP_VERSION, 'major' => PHP_MAJOR_VERSION]
+    ['version' => PHP_VERSION, 'major' => (string)PHP_MAJOR_VERSION]
 );
+$reg->gauge('hris_db_up', 'Database connectivity check (1=up, 0=down)', $pdo instanceof PDO ? 1 : 0);
 
-// ---------------------------------------------------------------------------
-// 2. DB connectivity
-// ---------------------------------------------------------------------------
-$dbUp = ($pdo !== null) ? 1 : 0;
-$reg->gauge('hris_db_up', 'Database connectivity check (1=up, 0=down)', $dbUp);
+if ($pdo instanceof PDO) {
 
-if ($pdo !== null) {
+    // DB round trip
+    try {
+        $t0 = microtime(true);
+        $pdo->query('SELECT 1')->fetchColumn();
+        $reg->gauge('hris_db_query_duration_seconds', 'Round-trip time for a simple SELECT 1 query', round(microtime(true) - $t0, 6));
+    } catch (Throwable $e) {
+        metricError('rtt', $e, $scrapeErrors);
+    }
 
-    // -----------------------------------------------------------------------
-    // 3. Employee metrics
-    // -----------------------------------------------------------------------
+    // Employees (employment_status: Active | Inactive | On Leave | Suspended)
     try {
         $row = $pdo->query("
             SELECT
-                COUNT(*)                                          AS total,
-                COUNT(*) FILTER (WHERE LOWER(status) = 'active') AS active,
-                COUNT(*) FILTER (WHERE LOWER(status) != 'active' OR status IS NULL) AS inactive
-            FROM public.employee
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN employment_status = 'Active' THEN 1 ELSE 0 END), 0) AS active
+            FROM employees
         ")->fetch(PDO::FETCH_ASSOC);
-
-        $reg->gauge('hris_employees_total',          'Total number of employees in the system',     (int)$row['total']);
-        $reg->gauge('hris_employees_active_total',   'Number of active employees',                  (int)$row['active']);
-        $reg->gauge('hris_employees_inactive_total', 'Number of inactive / deactivated employees',  (int)$row['inactive']);
+        $total  = (int)$row['total'];
+        $active = (int)$row['active'];
     } catch (Throwable $e) {
-        $scrapeErrors++;
-        $reg->gauge('hris_employees_total',          'Total number of employees in the system', 0);
-        $reg->gauge('hris_employees_active_total',   'Number of active employees',              0);
-        $reg->gauge('hris_employees_inactive_total', 'Number of inactive employees',             0);
+        metricError('employees', $e, $scrapeErrors);
+        $total = $active = 0;
     }
+    $reg->gauge('hris_employees_total', 'Total number of employees in the system', $total);
+    $reg->gauge('hris_employees_active_total', 'Number of active employees', $active);
+    $reg->gauge('hris_employees_inactive_total', 'Number of inactive / deactivated employees', $total - $active);
 
-    // -----------------------------------------------------------------------
-    // 4. Leave request metrics
-    // -----------------------------------------------------------------------
+    // Leave requests by status (always emit all four so panels never go blank)
+    $byStatus = ['Pending' => 0, 'Approved' => 0, 'Rejected' => 0, 'Cancelled' => 0];
+    $daysBy   = ['Pending' => 0.0, 'Approved' => 0.0, 'Rejected' => 0.0, 'Cancelled' => 0.0];
+    $reqTotal = 0;
     try {
         $rows = $pdo->query("
-            SELECT
-                status,
-                COUNT(*) AS cnt
-            FROM public.leave_requests
+            SELECT status, COUNT(*) AS cnt, COALESCE(SUM(number_of_days), 0) AS days
+            FROM leave_requests
             GROUP BY status
         ")->fetchAll(PDO::FETCH_ASSOC);
-
-        $byStatus = ['Pending' => 0, 'Approved' => 0, 'Rejected' => 0, 'Cancelled' => 0];
-        $total    = 0;
         foreach ($rows as $r) {
-            $byStatus[$r['status']] = (int)$r['cnt'];
-            $total += (int)$r['cnt'];
+            // Normalise 'pending' / 'PENDING' etc. to the label the dashboard uses
+            $status = ucfirst(strtolower(trim((string)$r['status']))) ?: 'Unknown';
+            $byStatus[$status] = ($byStatus[$status] ?? 0) + (int)$r['cnt'];
+            $daysBy[$status]   = ($daysBy[$status] ?? 0.0) + (float)$r['days'];
+            $reqTotal += (int)$r['cnt'];
         }
-
-        $reg->gauge('hris_leave_requests_total', 'Total leave requests ever filed', $total);
-
-        foreach ($byStatus as $status => $cnt) {
-            $reg->gauge(
-                'hris_leave_requests_by_status_total',
-                'Leave requests grouped by current status',
-                $cnt,
-                ['status' => $status]
-            );
-        }
-
     } catch (Throwable $e) {
-        $scrapeErrors++;
-        $reg->gauge('hris_leave_requests_total', 'Total leave requests ever filed', 0);
+        metricError('leave_status', $e, $scrapeErrors);
+    }
+    $reg->gauge('hris_leave_requests_total', 'Total leave requests ever filed', $reqTotal);
+    foreach ($byStatus as $status => $cnt) {
+        $reg->gauge('hris_leave_requests_by_status_total', 'Leave requests grouped by current status', $cnt, ['status' => $status]);
+    }
+    foreach ($daysBy as $status => $days) {
+        $reg->gauge('hris_leave_days_by_status_total', 'Leave days grouped by current request status', $days, ['status' => $status]);
     }
 
-    // -----------------------------------------------------------------------
-    // 5. Leave requests filed this calendar month
-    // -----------------------------------------------------------------------
+    // Filed this month (Asia/Manila calendar month)
     try {
         $count = (int)$pdo->query("
-            SELECT COUNT(*) FROM public.leave_requests
-            WHERE date_trunc('month', created_at) = date_trunc('month', NOW())
+            SELECT COUNT(*) FROM leave_requests
+            WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+              AND created_at <  DATE_FORMAT(NOW() + INTERVAL 1 MONTH, '%Y-%m-01')
         ")->fetchColumn();
-        $reg->gauge('hris_leave_requests_this_month', 'Leave requests filed in the current calendar month', $count);
     } catch (Throwable $e) {
-        $scrapeErrors++;
-        $reg->gauge('hris_leave_requests_this_month', 'Leave requests filed in the current calendar month', 0);
+        metricError('this_month', $e, $scrapeErrors);
+        $count = 0;
+    }
+    $reg->gauge('hris_leave_requests_this_month', 'Leave requests filed in the current calendar month', $count);
+
+    // Requests by leave type
+    try {
+        $rows = $pdo->query("
+            SELECT COALESCE(lt.leave_name, 'Other') AS leave_name, COUNT(*) AS cnt
+            FROM leave_requests lr
+            LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+            GROUP BY COALESCE(lt.leave_name, 'Other')
+        ")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $reg->gauge('hris_leave_requests_by_type_total', 'Leave requests grouped by leave type', (int)$r['cnt'], ['leave_type' => $r['leave_name']]);
+        }
+    } catch (Throwable $e) {
+        metricError('by_type', $e, $scrapeErrors);
     }
 
-    // -----------------------------------------------------------------------
-    // 6. Leave types count
-    // -----------------------------------------------------------------------
+    // Audit-log transactions (table is created on first logged action)
+    $tx = ['Filed' => 0, 'Approved' => 0, 'Rejected' => 0, 'Cancelled' => 0];
     try {
-        $ltCount = (int)$pdo->query("SELECT COUNT(*) FROM public.leave_types")->fetchColumn();
-        $reg->gauge('hris_leave_types_total', 'Number of configured leave types', $ltCount);
-    } catch (Throwable $e) {
-        $scrapeErrors++;
-        $reg->gauge('hris_leave_types_total', 'Number of configured leave types', 0);
+        $rows = $pdo->query("SELECT action, COUNT(*) AS cnt FROM leave_request_logs GROUP BY action")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $tx[(string)$r['action']] = (int)$r['cnt'];
+        }
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S02') { // table not created yet is not an error
+            metricError('transactions', $e, $scrapeErrors);
+        }
+    }
+    foreach ($tx as $action => $cnt) {
+        $reg->gauge('hris_leave_transactions_total', 'Recorded leave transactions by action (audit log)', $cnt, ['action' => $action]);
     }
 
-    // -----------------------------------------------------------------------
-    // 7. DB response time (simple round-trip)
-    // -----------------------------------------------------------------------
+    // Leave types
     try {
-        $t0 = microtime(true);
-        $pdo->query("SELECT 1")->fetchColumn();
-        $dbRtt = round(microtime(true) - $t0, 6);
-        $reg->gauge('hris_db_query_duration_seconds', 'Round-trip time for a simple SELECT 1 query', $dbRtt);
+        $ltCount = (int)$pdo->query('SELECT COUNT(*) FROM leave_types')->fetchColumn();
     } catch (Throwable $e) {
-        $scrapeErrors++;
+        metricError('leave_types', $e, $scrapeErrors);
+        $ltCount = 0;
     }
+    $reg->gauge('hris_leave_types_total', 'Number of configured leave types', $ltCount);
 }
 
-// ---------------------------------------------------------------------------
-// 8. Scrape duration & errors
-// ---------------------------------------------------------------------------
-$scrapeDuration = round(microtime(true) - $scrapeStart, 6);
-$reg->gauge(
-    'hris_scrape_duration_seconds',
-    'Time taken to collect all HRIS metrics (seconds)',
-    $scrapeDuration
-);
-$reg->counter(
-    'hris_scrape_errors_total',
-    'Number of errors encountered during this metrics scrape',
-    $scrapeErrors
-);
+$reg->gauge('hris_scrape_duration_seconds', 'Time taken to collect all HRIS metrics (seconds)', round(microtime(true) - $scrapeStart, 6));
+$reg->gauge('hris_scrape_errors', 'Number of errors encountered during this metrics scrape', $scrapeErrors);
 
-// ---------------------------------------------------------------------------
-// Output
-// ---------------------------------------------------------------------------
-header('Content-Type: text/plain; version=0.0.4; charset=utf-8');
-header('Cache-Control: no-cache, no-store');
+if (PHP_SAPI !== 'cli') {
+    header('Content-Type: text/plain; version=0.0.4; charset=utf-8');
+    header('Cache-Control: no-cache, no-store');
+}
 echo $reg->render();
-

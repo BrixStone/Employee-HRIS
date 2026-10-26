@@ -1,6 +1,6 @@
 <?php
     session_start();
-    require 'config/database.php';
+    require __DIR__ . '/../config/database.php';
 
     if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $username = trim($_POST['username']);
