@@ -1,48 +1,64 @@
-Employee HRIS
 
-An Employee Human Resource Information System built with PHP, MySQL, Docker, and Terraform. The project includes monitoring and real-time communication services using Prometheus, Grafana, and a WebSocket server.
+# Employee HRIS
 
-Table of Contents
-Overview
-Technology Stack
-Prerequisites
-Project Structure
-Getting Started
-Accessing the Application
-Monitoring
-Starting and Stopping the System
-Docker and Terraform
-Troubleshooting
-Important Notes
-Overview
+A web-based **Human Resource Information System (HRIS)** built with PHP, MySQL, Docker, and Terraform. The project includes monitoring and real-time communication services using Prometheus, Grafana, and a WebSocket server.
 
-Employee HRIS is a web-based human resource management system. Docker provides a consistent environment for running the application and its supporting services. Terraform provisions the monitoring and real-time infrastructure.
+---
 
-The project separates the main application stack from the monitoring infrastructure to make development and deployment easier to manage.
+## 📑 Table of Contents
 
-Technology Stack
-Technology	Purpose
-PHP	Application backend
-MySQL 8.0	Database
-Docker	Runs applications and services in containers
-Docker Compose	Starts and manages the application stack
-Terraform	Provisions monitoring and real-time infrastructure
-Prometheus	Collects and stores metrics
-Grafana	Visualizes metrics through dashboards
-WebSocket server	Supports real-time communication
-Prerequisites
+- [Overview](#overview)
+- [Technology Stack](#technology-stack)
+- [Prerequisites](#prerequisites)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Accessing the Application](#accessing-the-application)
+- [Monitoring](#monitoring)
+- [Starting and Stopping the System](#starting-and-stopping-the-system)
+- [Docker and Terraform](#docker-and-terraform)
+- [Troubleshooting](#troubleshooting)
+- [Important Notes](#important-notes)
 
-Install the following before running the project:
+---
 
-Git
-Docker Desktop
-Terraform
-PHP dependencies managed by Composer, if required by your local workflow
+## 📖 Overview
 
-Make sure Docker Desktop is running before executing Docker Compose or Terraform commands.
+Employee HRIS is a web-based human resource management system designed to manage employee-related operations.
 
-Project Structure
-text
+Docker provides a consistent environment for running the application and its supporting services. Terraform provisions the monitoring and real-time infrastructure.
+
+## 🛠️ Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| PHP | Application backend |
+| MySQL 8.0 | Database management |
+| Docker | Containerization |
+| Docker Compose | Application orchestration |
+| Terraform | Infrastructure provisioning |
+| Prometheus | Metrics collection |
+| Grafana | Monitoring dashboards |
+| WebSocket Server | Real-time communication |
+
+---
+
+## 📋 Prerequisites
+
+Install the following tools before running the project:
+
+- [Git](https://git-scm.com/downloads)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Terraform](https://developer.hashicorp.com/terraform/install)
+- [PHP](https://www.php.net/downloads), if needed locally
+- [Composer](https://getcomposer.org/download/), if needed locally
+
+> **Note:** PHP and Composer may not need to be installed locally if your Docker configuration handles dependencies inside containers.
+
+---
+
+## 📁 Project Structure
+
+```text
 Employee-HRIS/
 ├── admin/                  # HR administration
 ├── api/                    # API endpoints
@@ -50,268 +66,297 @@ Employee-HRIS/
 ├── classes/                # PHP classes
 ├── config/                 # Application configuration
 ├── database/               # Database-related files
-├── employee/                # Employee features
+├── employee/               # Employee features
 ├── hr/                     # HR features
 ├── monitoring/
 │   ├── docker-compose.yml  # Application and database services
-│   ├── prometheus.yml      # Prometheus scrape configuration
+│   ├── prometheus.yml      # Prometheus configuration
 │   ├── grafana/
 │   │   └── provisioning/   # Grafana provisioning
 │   └── initdb/             # MySQL initialization scripts
 ├── realtime/               # WebSocket server
-├── terraform/              # Terraform infrastructure configuration
+├── terraform/              # Infrastructure configuration
 ├── tests/                  # Tests
 ├── composer.json           # PHP dependencies
 ├── hris-start.ps1          # Startup helper
 ├── hris-stop.ps1           # Shutdown helper
 ├── index.php               # Application entry point
 └── README.md
+```
 
-Getting Started
-1. Clone the repository
-powershell
-git clone <https://github.com/Stuwart-afk/Employee-HRIS.git>
+---
+
+## 🚀 Getting Started
+
+### 1. Clone the Repository
+
+```powershell
+git clone https://github.com/Stuwart-afk/Employee-HRIS.git
 cd Employee-HRIS
+```
 
+### 2. Configure Environment Variables
 
+Create a `monitoring/.env` file:
 
-2. Configure environment variables
-
-Create the environment file expected by Docker Compose in the monitoring/ directory.
-
-For example, monitoring/.env:
-
-dotenv
+```dotenv
 MYSQL_ROOT_PASSWORD=replace_with_a_secure_root_password
 MYSQL_PASSWORD=replace_with_a_secure_app_password
 GRAFANA_ADMIN_PASSWORD=replace_with_a_secure_grafana_password
+```
 
+Replace the example values with strong passwords.
 
-Use your own strong passwords. Do not commit .env files or actual secrets to GitHub.
+> **Security:** Never commit `.env` files or actual secrets to GitHub.
 
-3. Start the Docker application stack
+### 3. Start the Docker Application Stack
 
 From the repository root, run:
 
-powershell
+```powershell
 docker compose -f monitoring/docker-compose.yml up -d --build
+```
 
+Check running containers:
 
-This builds the required application images and starts the services defined in the Compose file.
-
-Check the running containers:
-
-powershell
+```powershell
 docker ps
+```
 
+View service logs:
 
-Check the service logs:
-
-powershell
+```powershell
 docker compose -f monitoring/docker-compose.yml logs -f
+```
 
+Press `Ctrl + C` to stop following logs. This does not stop the containers.
 
-Press Ctrl+C to stop following logs. This does not stop the containers.
+### 4. Initialize Terraform
 
-4. Initialize Terraform
+Navigate to the Terraform directory:
 
-Open a separate terminal in the Terraform directory:
-
-powershell
+```powershell
 cd terraform
 terraform init
 terraform validate
 terraform plan
+```
 
-terraform init initializes Terraform and downloads the required providers.
-terraform validate checks the configuration for errors.
-terraform plan previews the infrastructure changes without applying them.
+- `terraform init` initializes Terraform and downloads providers.
+- `terraform validate` checks the configuration.
+- `terraform plan` previews infrastructure changes.
 
 Review the plan before continuing.
 
-Important: The current Terraform configuration creates the Grafana, Prometheus, and WebSocket containers. The current Compose file also defines services with overlapping container names and ports. Do not start both configurations simultaneously until the overlapping resources have been separated or reconciled.
+> **Important:** Docker Compose and Terraform may define containers with overlapping names or ports. Reconcile the configurations before starting both stacks simultaneously.
 
-If you are using the provided hris-start.ps1 helper, review its commands and configuration before using it. It may start both the Terraform infrastructure and the Docker Compose stack.
-
-5. Apply Terraform
+### 5. Apply Terraform
 
 After reviewing the plan, run:
 
-powershell
+```powershell
 terraform apply
+```
 
+Review the proposed changes and enter `yes` when prompted.
 
-Review the proposed changes and enter yes when Terraform asks for confirmation.
+---
 
-Terraform will create or update the resources described in its configuration.
+## 🌐 Accessing the Application
 
-Accessing the Application
+Once the services are running, use these addresses:
 
-Once the relevant services are running, use the following addresses:
+| Service | URL |
+|---|---|
+| PHP Application | [http://localhost:8000](http://localhost:8000) |
+| Grafana | [http://localhost:3000](http://localhost:3000) |
+| Prometheus | [http://localhost:9090](http://localhost:9090) |
+| Metrics Endpoint | [http://localhost:9091/monitoring/metrics.php](http://localhost:9091/monitoring/metrics.php) |
+| WebSocket Server | `ws://localhost:8090/ws` |
 
-Service	URL
-PHP application	http://localhost:8000
-Grafana	http://localhost:3000
-Prometheus	http://localhost:9090
-Metrics endpoint	http://localhost:9091/monitoring/metrics.php
-WebSocket server	ws://localhost:8090/ws
+Grafana's administrator username is configured as `admin`. The password comes from the applicable environment or Terraform variable.
 
-Grafana's administrator username is configured as admin. Its password comes from the applicable environment variable or Terraform variable.
+---
 
-The WebSocket address is intended for WebSocket clients; opening it as a normal webpage may not display a web interface.
+## 📊 Monitoring
 
-Monitoring
-Prometheus
+### Prometheus
 
-Prometheus scrapes metrics from configured targets, including the PHP metrics exporter and the WebSocket server.
+Open the [Prometheus Targets page](http://localhost:9090/targets) and verify that the expected targets show `UP`.
 
-Open:
+If a target shows `DOWN`, check its scrape URL, hostname, port, Docker network, and application logs.
 
-http://localhost:9090/targets
+### Grafana
 
-Check that the expected targets show UP.
+Open [Grafana](http://localhost:3000) and sign in using your configured administrator credentials.
 
-If a target shows DOWN, check its scrape URL, container network, and application logs.
+The project provisions Grafana configuration from:
 
-Grafana
-
-Open:
-
-http://localhost:3000
-
-Sign in using the configured administrator credentials. The project provisions Grafana configuration from monitoring/grafana/provisioning/.
+```text
+monitoring/grafana/provisioning/
+```
 
 Select the Prometheus data source and open the configured HRIS dashboard.
 
-If the dashboard is empty, verify that Prometheus targets are up and that the dashboard queries match the metrics exposed by the application.
+If the dashboard is empty:
 
-Starting and Stopping the System
-Start the Docker Compose stack
+1. Verify that Prometheus is running.
+2. Confirm that the targets are `UP`.
+3. Check the Grafana data source.
+4. Verify that the dashboard queries use existing metric names.
 
-From the repository root:
+---
 
-powershell
+## 🐳 Starting and Stopping the System
+
+### Start the Docker Compose Stack
+
+```powershell
 docker compose -f monitoring/docker-compose.yml up -d
+```
 
+Rebuild the images when necessary:
 
-To rebuild images after changing application or Dockerfile code:
-
-powershell
+```powershell
 docker compose -f monitoring/docker-compose.yml up -d --build
+```
 
-Stop the Docker Compose stack
-powershell
+### Stop the Docker Compose Stack
+
+Stop services without removing containers:
+
+```powershell
 docker compose -f monitoring/docker-compose.yml stop
+```
 
+Remove Compose-managed containers and networks:
 
-This stops the Compose-managed services without removing the containers.
-
-To remove the Compose containers and network:
-
-powershell
+```powershell
 docker compose -f monitoring/docker-compose.yml down
+```
 
+Named volumes are normally retained by `docker compose down`.
 
-Named volumes are normally retained by down, so database data can persist.
+> **Warning:** Avoid `docker compose down -v` unless you intend to delete the associated volumes and stored data.
 
-Warning: Avoid docker compose down -v unless you intentionally want to remove the associated named volumes and their stored data.
-
-Stop Terraform-managed infrastructure
+### Stop Terraform-Managed Infrastructure
 
 From the Terraform directory:
 
-powershell
+```powershell
 terraform destroy
+```
 
+Review the proposed changes before confirming. Verify whether any persistent volumes or database data will be affected.
 
-Review the plan and confirm when prompted. This removes Terraform-managed infrastructure resources, including its managed containers and network. Named volumes may have separate lifecycle behavior, so verify what Terraform plans to remove before confirming.
+### Use the Helper Scripts
 
-Use the helper scripts
+Start the system:
 
-From the repository root, the provided PowerShell helpers can simplify daily operation:
-
-powershell
+```powershell
 .\hris-start.ps1
+```
 
-powershell
+Stop the system:
+
+```powershell
 .\hris-stop.ps1
+```
 
+Review these scripts first to understand which services they manage.
 
-These scripts should be reviewed against the current configuration to confirm which services they start and stop. Avoid manually removing Terraform-managed containers while expecting Terraform to manage their lifecycle afterward.
+---
 
-Docker and Terraform
+## 🏗️ Docker and Terraform
 
-Docker and Terraform serve different purposes.
+Docker and Terraform have different responsibilities.
 
-Docker and Docker Compose
+### Docker and Docker Compose
 
-Docker runs containers.
-Docker Compose defines and starts a group of related services.
-Compose is convenient for daily application development and local testing.
+- Docker runs applications in containers.
+- Docker Compose defines and starts related services.
+- Compose supports local development and testing.
 
-Terraform
+### Terraform
 
-Terraform describes infrastructure in configuration files.
-Terraform creates and manages resources such as containers, networks, and volumes through providers.
-Terraform tracks managed resources in its state file and can update infrastructure when the configuration changes.
+- Terraform defines infrastructure using configuration files.
+- Terraform manages resources such as containers and networks through providers.
+- Terraform tracks managed resources in its state file.
 
-For this project, the intended division is:
+### Intended Infrastructure Separation
 
-Docker Compose: PHP application, MySQL, and PHP metrics exporter.
-Terraform: Grafana, Prometheus, and the WebSocket server.
+| Tool | Intended Responsibility |
+|---|---|
+| Docker Compose | PHP application, MySQL, and PHP metrics exporter |
+| Terraform | Grafana, Prometheus, and WebSocket server |
 
-To keep this separation reliable, each service should have one clearly defined owner. Avoid defining the same container in both Compose and Terraform.
+Each service should have one clearly defined owner. Avoid managing the same container through both Compose and Terraform.
 
-Troubleshooting
-Container name conflict
+---
 
-Example:
+## 🔧 Troubleshooting
 
-text
+### Container Name Conflict
+
+Example error:
+
+```text
 Conflict. The container name "/hris_mysql" is already in use
+```
 
+List all containers:
 
-This means a container with that name already exists. Check:
-
-powershell
+```powershell
 docker ps -a
+```
 
+Check whether a container with the same name already exists before creating another one.
 
-If the existing container is managed by your Compose project, start it with Compose instead of creating another container with the same name.
+### Prometheus Target Is Down
 
-Prometheus target is DOWN
-Open the Prometheus Targets page.
-Check the target's configured hostname and port.
-Confirm that Prometheus and the exporter share a Docker network.
-Check the exporter logs:
-powershell
-docker logs hris_exporter
+1. Open the [Prometheus Targets page](http://localhost:9090/targets).
+2. Check the configured hostname and port.
+3. Confirm that Prometheus and the exporter share a Docker network.
+4. Check exporter logs:
 
-Test the metrics endpoint from the host:
-powershell
-Invoke-WebRequest http://localhost:9091/monitoring/metrics.php
+   ```powershell
+   docker logs hris_exporter
+   ```
 
-Terraform wants to recreate containers
+5. Test the metrics endpoint:
+
+   ```powershell
+   Invoke-WebRequest http://localhost:9091/monitoring/metrics.php
+   ```
+
+### Terraform Wants to Recreate Containers
 
 Run:
 
-powershell
+```powershell
 terraform plan
+```
 
+Inspect the proposed actions before applying changes. Unexpected recreation may result from configuration changes, missing resources, container name changes, or differences between Terraform state and the actual environment.
 
-Inspect the proposed actions. A container may need recreation because of a name change, a configuration change, a missing resource, or a difference between Terraform state and the actual Docker environment.
+### Grafana Has No Data
 
-Do not apply changes blindly if the plan unexpectedly replaces containers or affects persistent data.
+- Confirm that Prometheus is running.
+- Verify that the targets are `UP`.
+- Check the configured Grafana data source.
+- Confirm that the dashboard queries reference existing metrics.
 
-Grafana has no data
-Confirm Prometheus is running.
-Confirm the relevant Prometheus targets are UP.
-Check that the Grafana data source points to the correct Prometheus service.
-Verify that dashboard queries reference metric names that actually exist.
-Important Notes
-Never commit passwords, shared secrets, .env files, or sensitive Terraform state to a public repository.
-Keep the Terraform state file backed up and protected.
-Review terraform plan before applying changes.
-Use one owner for each container to avoid conflicts.
-Back up important database data before removing containers or volumes.
-Port availability and configuration may differ between development machines.
+---
+
+## 🔒 Important Notes
+
+- Never commit passwords, shared secrets, `.env` files, or sensitive Terraform state to a public repository.
+- Keep Terraform state backed up and protected.
+- Review `terraform plan` before applying changes.
+- Use one owner for each container.
+- Back up important database data before removing containers or volumes.
+- Verify port availability and configuration before deployment.
+
+---
+
+**Employee HRIS** — Human resource management with containerized infrastructure, monitoring, and real-time communication.
