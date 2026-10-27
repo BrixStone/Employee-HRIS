@@ -12,4 +12,4 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <h1>my HR dashboard</h1>
 <p>THIS IS MY HR DASHBOARD</p>
 <p>just changes</p>
-
+<p>just anoter changes</p>
