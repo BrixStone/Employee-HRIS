@@ -13,3 +13,4 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <p>THIS IS MY HR DASHBOARD</p>
 <p>just changes</p>
 <p>just anoter changes</p>
+<p>and another changes</p>
