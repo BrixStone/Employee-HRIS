@@ -1,2 +1,3 @@
 config/supabase.php
 /vendor/
+.env
