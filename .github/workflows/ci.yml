@@ -4,11 +4,16 @@ name: PHP CI
 on:
   push:
     branches: [main]
+
   pull_request:
-    branches: [main]
+    branches: [develop, main]
+
+permissions:
+  contents: read
 
 jobs:
   check-php:
+    name: PHP Syntax and Static Analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -19,9 +24,17 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
 
       - name: Check PHP syntax
         run: |
           find . -type f -name "*.php" \
             -not -path "./.git/*" \
+            -not -path "./vendor/*" \
             -print0 | xargs -0 -r -n1 php -l
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
