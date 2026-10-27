@@ -12,8 +12,28 @@ permissions:
   contents: read
 
 jobs:
-  check-php:
-    name: PHP Syntax and Static Analysis
+  php-syntax:
+    name: PHP Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Check PHP syntax
+        run: |
+          find . -type f -name "*.php" \
+            -not -path "./.git/*" \
+            -not -path "./vendor/*" \
+            -print0 | xargs -0 -r -n1 php -l
+
+  phpstan:
+    name: PHPStan Static Analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -28,13 +48,6 @@ jobs:
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
-
-      - name: Check PHP syntax
-        run: |
-          find . -type f -name "*.php" \
-            -not -path "./.git/*" \
-            -not -path "./vendor/*" \
-            -print0 | xargs -0 -r -n1 php -l
 
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --no-progress
