@@ -1,1 +1,1 @@
-{"ws_port":8090,"publish_url":"http://127.0.0.1:8090/publish","secret":"/fnfQR/jhOVxUPOrZUJqfk+510reT5nS8WEVjpMHx7w="}
+{"managed_by":"terraform/main.tf","publish_url":"http://hris-realtime:8090/publish","secret":"sC1zLUwcZWMOS6tqlg6fWqm7egpRewJpi185qwFdduFchEjO","ws_port":8090}
