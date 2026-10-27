@@ -20,6 +20,18 @@ scrape_configs:
         labels:
           app: 'hris'
 
+  
+  # ---------------------------------------------------------
+  # HRIS WebSocket / Real-time metrics
+  # ---------------------------------------------------------
+  - job_name: 'hris_realtime'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['realtime:8090']
+        labels:
+          app: 'hris'
+
   # -----------------------------------------------------------------------
   # Prometheus self-monitoring
   # -----------------------------------------------------------------------
