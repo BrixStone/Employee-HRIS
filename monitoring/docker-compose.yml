@@ -62,6 +62,27 @@ services:
     networks:
       - monitoring
 
+  # ----------------------------------------------------------
+  # PHP metrics exporter — runs metrics.php INSIDE Docker so
+  # Prometheus can scrape it without Windows Firewall issues.
+  # Mounts the project root read-only.
+  # ----------------------------------------------------------
+  
+  realtime:
+    build:
+      context: ../realtime
+    image: hris-realtime:latest
+    container_name: hris_realtime
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ../config/realtime.json:/srv/realtime/realtime.json:ro
+    environment:
+      HRIS_REALTIME_CONFIG: /srv/realtime/realtime.json
+    networks:
+      - monitoring
+
   hris-exporter:
     build:
       context: .
