@@ -1,3 +1,4 @@
 config/supabase.php
 /vendor/
 .env
+terraform.tfvars
