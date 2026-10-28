@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* EMPLOYEES PAGE — search, filters, and employee table */
+.page-employees .content>form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:16px;margin:0 0 20px;border:1px solid var(--line);border-radius:14px;background:#160b25}.page-employees .content>form>div{margin:0;min-width:180px}.page-employees .content>table{border:1px solid var(--line);border-radius:12px;overflow:hidden}

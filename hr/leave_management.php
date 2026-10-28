@@ -1,3 +1,4 @@
+<link rel="stylesheet" href="../asset/css/hr_dashboard.css">
 <?php
 // hr/leave_management.php
 

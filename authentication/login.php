@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: /admin/users.php');
                     break;
                 case 'hr':
-                    header('Location: /hr/dashboard.php');
+                    header('Location: /hr/employees.php');
                     break;
                 case 'payroll':
                     header('Location: /hr/dashboard.php');

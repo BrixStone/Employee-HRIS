@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* REPORTS PAGE — report landing area */
+.page-report .content>h1{margin-bottom:18px}.page-report .content>p{max-width:760px;padding:22px;border:1px solid var(--line);border-radius:14px;background:#160b25;color:var(--muted)}
