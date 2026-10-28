@@ -1,0 +1,23 @@
+"global":
+  "evaluation_interval": "15s"
+  "scrape_interval": "15s"
+"scrape_configs":
+- "job_name": "prometheus"
+  "static_configs":
+  - "targets":
+    - "localhost:9090"
+- "job_name": "hris_exporter"
+  "metrics_path": "/monitoring/metrics.php"
+  "static_configs":
+  - "labels":
+      "app": "hris"
+    "targets":
+    - "hris-exporter:9091"
+- "job_name": "hris_realtime"
+  "metrics_path": "/metrics"
+  "scrape_interval": "15s"
+  "static_configs":
+  - "labels":
+      "app": "hris"
+    "targets":
+    - "hris-realtime:8090"

@@ -1,115 +1,116 @@
 # ============================================================
-# NOTE: terraform/ now runs this same stack plus the real-time
-# WebSocket server (cd terraform; terraform apply). Use either
-# Terraform or this compose file, not both: they share ports
-# and container names.
+# HRIS Docker Compose
 #
-# HRIS Monitoring Stack
-# - Prometheus:    collects metrics from the PHP exporter sidecar
-# - Grafana:       visualizes metrics with a pre-built dashboard
-# - hris-exporter: PHP-CLI server running metrics.php inside Docker
-#                  (bypasses Windows Firewall entirely — no admin needed)
+# Managed by Docker Compose:
+#   - MySQL
+#   - PHP application
+#   - PHP metrics exporter
 #
-# Usage:
-#   cd monitoring
-#   docker compose up -d --build
+# Managed separately by Terraform:
+#   - Prometheus
+#   - Grafana
+#   - Realtime WebSocket server
+#
+# Startup order:
+#   1. Run terraform init and terraform apply
+#   2. Run docker compose up -d --build
 #
 # Access:
-#   Grafana    → http://localhost:3000  (user: admin / password: hris@admin)
-#   Prometheus → http://localhost:9090
-#   Metrics    → http://localhost:9091/monitoring/metrics.php
+#   HRIS       -> http://localhost:8000
+#   Metrics    -> http://localhost:9091/monitoring/metrics.php
+#   Prometheus -> http://localhost:9090
+#   Grafana    -> http://localhost:3000
+#   WebSocket  -> ws://localhost:8090/ws
 # ============================================================
-
+name: hris-docker
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: hris_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: hris
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_USER: hris_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - monitoring
+
+  hris-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hris_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../:/app
+    working_dir: /app
+    command: ["php", "-S", "0.0.0.0:8000", "-t", "/app"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: hris
+      DB_USER: hris_app
+      DB_PASS: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - hris_net
 
   # ----------------------------------------------------------
-  # PHP metrics exporter — runs metrics.php INSIDE Docker so
-  # Prometheus can scrape it without Windows Firewall issues.
-  # Mounts the project root read-only.
+  # PHP metrics exporter
   # ----------------------------------------------------------
   hris-exporter:
-    # Built from monitoring/exporter/Dockerfile (pdo_mysql pre-installed)
     build:
-      context: ./exporter
-    image: hris-exporter:latest
+      context: .
+      dockerfile: Dockerfile
+    image: monitoring-hris-exporter
     container_name: hris_exporter
     restart: unless-stopped
     ports:
-      # Bound to localhost only: the metrics are for this machine, not the LAN
-      - "127.0.0.1:9091:9091"
+      - "9091:9091"
     volumes:
       - ../:/app:ro
     working_dir: /app
-    # MySQL (XAMPP) runs on the Windows host, not in this container, so
-    # config/database.php is pointed at the host through these variables.
+    command: ["php", "-S", "0.0.0.0:9091", "-t", "/app"]
     environment:
-      DB_HOST: ${HRIS_DB_HOST:-host.docker.internal}
-      DB_PORT: ${HRIS_DB_PORT:-3306}
-      DB_NAME: ${HRIS_DB_NAME:-hris}
-      # Same account as the app (XAMPP default). For a read-only account, run
-      #   GRANT SELECT ON hris.* TO 'hris_metrics'@'127.0.0.1' IDENTIFIED BY '...';
-      # and set HRIS_DB_USER / HRIS_DB_PASS before `docker compose up`.
-      DB_USER: ${HRIS_DB_USER:-root}
-      DB_PASS: ${HRIS_DB_PASS:-}
-    # Makes host.docker.internal resolvable on this custom network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:9091/monitoring/metrics.php') ? 0 : 1);"]
-      interval: 30s
-      timeout: 25s
-      retries: 3
-      start_period: 10s
-    networks:
-      - monitoring
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: hris_prometheus
-    restart: unless-stopped
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: hris
+      DB_USER: hris_app
+      DB_PASS: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
     depends_on:
-      - hris-exporter
+      mysql:
+        condition: service_healthy
     networks:
-      - monitoring
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: hris_grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=hris@admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_DOMAIN=localhost
-      - GF_ANALYTICS_REPORTING_ENABLED=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-    depends_on:
-      - prometheus
-    networks:
-      - monitoring
+      monitoring:
+      hris_net:
+        aliases:
+          - hris-exporter
 
 volumes:
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
+  mysql_data:
 
 networks:
   monitoring:
     driver: bridge
+
+  # Terraform must create this network first.
+  # Compose will reuse it instead of creating or managing it.
+  hris_net:
+    external: true
+    name: hris_net

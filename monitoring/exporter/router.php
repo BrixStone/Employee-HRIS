@@ -5,7 +5,7 @@
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
 if ($path === '/monitoring/metrics.php' || $path === '/metrics') {
-    require '/app/monitoring/metrics.php';
+    require_once __DIR__ . '/../metrics.php';
     return true;
 }
 
