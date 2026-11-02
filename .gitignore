@@ -2,3 +2,4 @@ config/supabase.php
 /vendor/
 .env
 terraform.tfvars
+node_modules/
