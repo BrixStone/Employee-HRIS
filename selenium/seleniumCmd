@@ -1,0 +1,2 @@
+Invoke-Item .\mochawesome-report\mochawesome.html --- get report of the test in html
+npm test to run your test

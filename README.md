@@ -294,6 +294,153 @@ Each service should have one clearly defined owner. Avoid managing the same cont
 
 ---
 
+
+## 🧪 Selenium Automated Testing
+
+The project uses Selenium WebDriver with JavaScript, Mocha, and Mochawesome for browser automation and HTML test reports.
+
+### Prerequisites
+
+- Node.js and npm
+- Google Chrome
+- GNU Make (optional, for Makefile commands)
+
+### 1. Install GNU Make on Windows
+
+You can install GNU Make using GnuWin32.
+
+1. Download the GNU Make installer from the [GnuWin32 Make download page](https://gnuwin32.sourceforge.net/packages/make.htm).
+2. Run the installer and complete the installation.
+3. The default installation directory is usually:
+
+   ```text
+   C:\Program Files (x86)\GnuWin32
+   ```
+
+4. The directory containing `make.exe` is typically:
+
+   ```text
+   C:\Program Files (x86)\GnuWin32\bin
+   ```
+
+### 2. Add GNU Make to the Windows PATH
+
+To make the `make` command available in PowerShell and VS Code:
+
+1. Open Windows Search and search for **Edit the system environment variables**.
+2. Click **Environment Variables**.
+3. Under **User variables**, select `Path` and click **Edit**.
+4. Click **New** and add:
+
+   ```text
+   C:\Program Files (x86)\GnuWin32\bin
+   ```
+
+5. Click **OK** to save all changes.
+6. Completely restart VS Code so the integrated terminal inherits the updated PATH.
+
+Verify the installation:
+
+```powershell
+make --version
+```
+
+If PowerShell displays the GNU Make version, the installation is successful.
+
+If the command is still not recognized, check that `make.exe` exists in the directory above and confirm that the directory is included in your PATH.
+
+### 3. Install Selenium Dependencies
+
+From the repository root, navigate to the Selenium directory:
+
+```powershell
+cd selenium
+npm install
+```
+
+This installs the dependencies declared in `package.json`, including Selenium WebDriver, Mocha, and Mochawesome.
+
+### 4. Run Tests Using the Makefile
+
+Return to the repository root:
+
+```powershell
+cd ..
+```
+
+Display the available Makefile commands:
+
+```powershell
+make help
+```
+
+Run the tests and generate the configured report:
+
+```powershell
+make test
+```
+
+If your Makefile defines a separate report target, you can also run:
+
+```powershell
+make test-report
+```
+
+These commands depend on the targets defined in the project's `Makefile`.
+
+### 5. Run Tests Without Make
+
+GNU Make is optional. You can run the commands directly in PowerShell.
+
+Navigate to the Selenium directory:
+
+```powershell
+cd selenium
+```
+
+Run the standalone JavaScript test:
+
+```powershell
+node test.js
+```
+
+This runs `test.js` directly. It does not automatically produce a Mochawesome report unless the script is specifically configured to do so.
+
+To run the Mocha test suite using the npm script:
+
+```powershell
+npm test
+```
+
+Alternatively, invoke Mocha and Mochawesome manually:
+
+```powershell
+npx mocha hris.test.js --reporter mochawesome
+```
+
+If your Mocha tests are stored in `test.js`, use:
+
+```powershell
+npx mocha test.js --reporter mochawesome
+```
+
+The HTML report is normally generated at:
+
+```text
+selenium/mochawesome-report/mochawesome.html
+```
+
+Open the HTML file in your browser to review the test results.
+
+### Important Notes
+
+- Start the HRIS application before running tests that access `http://localhost:8000`.
+- `node test.js` executes a JavaScript file directly.
+- `npm test` executes the test command configured in `package.json`.
+- `npx mocha ... --reporter mochawesome` runs Mocha directly and generates a Mochawesome report.
+- GNU Make is optional. Team members who do not install it can use the direct commands above.
+
+
 ## 🔧 Troubleshooting
 
 ### Container Name Conflict

@@ -1,0 +1,233 @@
+{
+  "stats": {
+    "suites": 1,
+    "tests": 6,
+    "passes": 6,
+    "pending": 0,
+    "failures": 0,
+    "start": "2026-10-29T21:12:56.184Z",
+    "end": "2026-10-29T21:12:59.539Z",
+    "duration": 3355,
+    "testsRegistered": 6,
+    "passPercent": 100,
+    "pendingPercent": 0,
+    "other": 0,
+    "hasOther": false,
+    "skipped": 0,
+    "hasSkipped": false
+  },
+  "results": [
+    {
+      "uuid": "66ad6484-b67d-4d51-9b59-e25d9e62ff72",
+      "title": "",
+      "fullFile": "D:\\PHP-Project\\Employee-HRIS\\selenium\\hris.test.js",
+      "file": "\\hris.test.js",
+      "beforeHooks": [],
+      "afterHooks": [],
+      "tests": [],
+      "suites": [
+        {
+          "uuid": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+          "title": "HRIS Employee Portal Tests",
+          "fullFile": "D:\\PHP-Project\\Employee-HRIS\\selenium\\hris.test.js",
+          "file": "\\hris.test.js",
+          "beforeHooks": [
+            {
+              "title": "\"before all\" hook in \"HRIS Employee Portal Tests\"",
+              "fullTitle": "HRIS Employee Portal Tests \"before all\" hook in \"HRIS Employee Portal Tests\"",
+              "timedOut": false,
+              "duration": 539,
+              "state": null,
+              "speed": null,
+              "pass": false,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "driver = await new Builder()\n    .forBrowser(Browser.CHROME)\n    .build();",
+              "err": {},
+              "uuid": "0b19bc72-1923-4e58-bb8a-8ea754733700",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": true,
+              "skipped": false
+            }
+          ],
+          "afterHooks": [
+            {
+              "title": "\"after all\" hook in \"HRIS Employee Portal Tests\"",
+              "fullTitle": "HRIS Employee Portal Tests \"after all\" hook in \"HRIS Employee Portal Tests\"",
+              "timedOut": false,
+              "duration": 40,
+              "state": null,
+              "speed": null,
+              "pass": false,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "if (driver) {\n    await driver.quit();\n}",
+              "err": {},
+              "uuid": "7d6be1c2-57e4-479c-a182-72bd9bd77ad6",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": true,
+              "skipped": false
+            }
+          ],
+          "tests": [
+            {
+              "title": "UI Test: should load the login page",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should load the login page",
+              "timedOut": false,
+              "duration": 144,
+              "state": "passed",
+              "speed": "slow",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "await driver.get(\n    'http://localhost:8000/authentication/login.php'\n);\nawait driver.wait(until.elementLocated(By.id('identifier')), 10000);\nassert.equal(\n    await driver.getTitle(),\n    'Sign in'\n);",
+              "err": {},
+              "uuid": "aa43cee4-5fbe-4179-8115-2d0f8a2359df",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "UI Test: should display username, password, and sign-in button",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should display username, password, and sign-in button",
+              "timedOut": false,
+              "duration": 55,
+              "state": "passed",
+              "speed": "medium",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "const username = await driver.findElement(By.id('identifier'));\nconst password = await driver.findElement(By.id('password'));\nconst button = await driver.findElement(\n    By.css('button[type=\"submit\"]')\n);\nassert.equal(await username.isDisplayed(), true);\nassert.equal(await password.isDisplayed(), true);\nassert.equal(await button.isDisplayed(), true);",
+              "err": {},
+              "uuid": "5d4ce41b-4c3d-4c50-b3b3-e5e18fbf968d",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "UI Test: should accept a username or email",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should accept a username or email",
+              "timedOut": false,
+              "duration": 85,
+              "state": "passed",
+              "speed": "slow",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "const username = await driver.findElement(By.id('identifier'));\nawait username.clear();\nawait username.sendKeys('test@example.com');\nassert.equal(\n    await username.getAttribute('value'),\n    'test@example.com'\n);",
+              "err": {},
+              "uuid": "429a023d-3503-4b83-893c-51f08411fb90",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "UI Test: should accept password input",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should accept password input",
+              "timedOut": false,
+              "duration": 67,
+              "state": "passed",
+              "speed": "medium",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "const password = await driver.findElement(By.id('password'));\nawait password.clear();\nawait password.sendKeys('WrongPassword123');\nassert.ok(\n    (await password.getAttribute('value')).length > 0\n);",
+              "err": {},
+              "uuid": "bc61af59-f7b6-4103-afb5-3a4f7061bde9",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "UI Test: should reject invalid login credentials",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should reject invalid login credentials",
+              "timedOut": false,
+              "duration": 1246,
+              "state": "passed",
+              "speed": "slow",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "await driver.get(\n    'http://localhost:8000/authentication/login.php'\n);\nawait driver.findElement(By.id('identifier'))\n    .sendKeys('test@example.com');\nawait driver.findElement(By.id('password'))\n    .sendKeys('WrongPassword123');\nawait driver.findElement(\n    By.css('button[type=\"submit\"]')\n).click();\nawait driver.sleep(1000);\nconst currentUrl = await driver.getCurrentUrl();\nassert.ok(\n    currentUrl.includes('/authentication/login.php'),\n    `Expected to remain on login page, but reached: ${currentUrl}`\n);",
+              "err": {},
+              "uuid": "aa574a4b-dced-4d97-97e5-c362055ff54b",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "UI Test: should log in and display the employee dashboard",
+              "fullTitle": "HRIS Employee Portal Tests UI Test: should log in and display the employee dashboard",
+              "timedOut": false,
+              "duration": 1172,
+              "state": "passed",
+              "speed": "slow",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "// Replace these with valid credentials for a test employee\nconst testUsername = 'brandon';\nconst testPassword = 'brandon123';\nawait driver.get(\n    'http://localhost:8000/authentication/login.php'\n);\nawait driver.findElement(By.id('identifier'))\n    .sendKeys(testUsername);\nawait driver.findElement(By.id('password'))\n    .sendKeys(testPassword);\nawait driver.findElement(\n    By.css('button[type=\"submit\"]')\n).click();\n// Wait for the dashboard to load\nawait driver.wait(\n    until.urlContains('/employee/dashboard.php'),\n    10000\n);\n// Verify we reached the dashboard\nassert.ok(\n    (await driver.getCurrentUrl())\n        .includes('/employee/dashboard.php'),\n    'Expected to reach the employee dashboard'\n);\n// Verify dashboard content is displayed\nconst dashboardHeading = await driver.wait(\n    until.elementLocated(\n        By.xpath(\"//*[contains(normalize-space(.), 'Employee Dashboard')]\")\n    ),\n    10000\n);\nassert.equal(await dashboardHeading.isDisplayed(), true);",
+              "err": {},
+              "uuid": "a5b7829e-9dfa-4543-a588-2966541d5e25",
+              "parentUUID": "bd69da0c-c1ce-4959-a0b4-990430fca892",
+              "isHook": false,
+              "skipped": false
+            }
+          ],
+          "suites": [],
+          "passes": [
+            "aa43cee4-5fbe-4179-8115-2d0f8a2359df",
+            "5d4ce41b-4c3d-4c50-b3b3-e5e18fbf968d",
+            "429a023d-3503-4b83-893c-51f08411fb90",
+            "bc61af59-f7b6-4103-afb5-3a4f7061bde9",
+            "aa574a4b-dced-4d97-97e5-c362055ff54b",
+            "a5b7829e-9dfa-4543-a588-2966541d5e25"
+          ],
+          "failures": [],
+          "pending": [],
+          "skipped": [],
+          "duration": 2769,
+          "root": false,
+          "rootEmpty": false,
+          "_timeout": 30000
+        }
+      ],
+      "passes": [],
+      "failures": [],
+      "pending": [],
+      "skipped": [],
+      "duration": 0,
+      "root": true,
+      "rootEmpty": true,
+      "_timeout": 2000
+    }
+  ],
+  "meta": {
+    "mocha": {
+      "version": "12.0.3"
+    },
+    "mochawesome": {
+      "options": {
+        "quiet": false,
+        "reportFilename": "mochawesome",
+        "saveHtml": true,
+        "saveJson": true,
+        "consoleReporter": "spec",
+        "useInlineDiffs": false,
+        "code": true
+      },
+      "version": "8.1.1"
+    },
+    "marge": {
+      "options": null,
+      "version": "6.3.2"
+    }
+  }
+}
