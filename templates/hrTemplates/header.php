@@ -26,9 +26,8 @@
                 <a href="../hr/leave_management.php">Leave Management</a>
             </li>
 
-            <li>
-                <a href="../hr/report.php">Report</a>
-            </li>
+            <li><a href="/hr/report.php">Reports</a></li>
+
              
             <li>
                 <a href="/authentication/logout.php">Sign out</a>
