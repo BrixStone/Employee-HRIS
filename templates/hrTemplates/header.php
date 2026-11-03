@@ -24,24 +24,36 @@ $cssPage = preg_replace('/[^a-z0-9_-]/', '', $currentPage);
 <link rel="stylesheet" href="../assets/css/hris-base.css">
 <link rel="stylesheet" href="../assets/css/pages/<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?>.css">
 </head>
-<body class="hris-app page-<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?>">
-<aside class="sidebar">
-  <a class="logo-group" href="/hr/dashboard.php" aria-label="HRIS dashboard">
-    <span class="logo-mark">H</span><span class="logo-text"><strong>HRIS</strong><small>Admin Control</small></span>
-  </a>
-  <nav class="nav-list" aria-label="Main navigation">
-    <a class="nav-item <?= $currentPage === 'dashboard' ? 'active' : '' ?>" href="/hr/dashboard.php"><span class="nav-icon">▦</span><span>Dashboard</span></a>
-    <a class="nav-item <?= in_array($currentPage, ['employees','add_employee','edit_employee','view_employee','employee_deactivate'], true) ? 'active' : '' ?>" href="/hr/employees.php"><span class="nav-icon">♙</span><span>Employees</span></a>
-    <a class="nav-item <?= $currentPage === 'leave_management' ? 'active' : '' ?>" href="/hr/leave_management.php"><span class="nav-icon">◷</span><span>Leave Management</span></a>
-    <a class="nav-item <?= $currentPage === 'department' ? 'active' : '' ?>" href="/hr/department.php"><span class="nav-icon">▤</span><span>Departments</span></a>
-    <a class="nav-item <?= $currentPage === 'position' ? 'active' : '' ?>" href="/hr/position.php"><span class="nav-icon">▣</span><span>Positions</span></a>
-    <a class="nav-item <?= $currentPage === 'report' ? 'active' : '' ?>" href="/hr/report.php"><span class="nav-icon">▥</span><span>Reports &amp; Audits</span></a>
-  </nav>
-  <div class="sidebar-footer"><div class="footer-line"></div><div class="admin-profile"><span class="avatar">HR</span><span class="admin-info"><strong>HR Administration</strong><span>Human Resources</span></span></div></div>
-</aside>
-<main class="main">
-  <header class="topbar">
-    <div class="topbar-title"><span class="eyebrow">HUMAN RESOURCES</span><strong><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></strong></div>
-    <div class="topbar-actions"><span class="system-status"><span class="status-dot"></span> HR Workspace</span></div>
-  </header>
-  <section class="content">
+
+<body>
+
+<header>
+    <h1>HR Dashboard</h1>
+
+    <nav>
+        <ul>
+            <li>
+                <a href="../hr/employees.php">Employee Management</a>
+            </li>
+
+            <li>
+                <a href="../hr/department.php">Department Management</a>
+            </li>
+
+            <li>
+                <a href="../hr/leave_management.php">Leave Management</a>
+            </li>
+
+            <li><a href="/hr/report.php">Reports</a></li>
+
+             
+            <li>
+                <a href="/authentication/logout.php">Sign out</a>
+            </li>
+
+            
+        </ul>
+    </nav>
+</header>
+
+<main>
