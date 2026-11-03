@@ -1,0 +1,805 @@
+
+/* =========================================================
+   RESET
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #000;
+    font-family: Inter, Arial, sans-serif;
+}
+
+body {
+    overflow: hidden;
+}
+
+.hris-login {
+    width: 100%;
+    height: 100vh;
+    min-height: 700px;
+    position: relative;
+    overflow: hidden;
+    text-align: left;
+    font-size: 16px;
+    color: #fff;
+    font-family: Inter, Arial, sans-serif;
+}
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+.boliviainteligente-vzg-skzowiu {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.boliviainteligente-vzg-skzowiu-child {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.boliviainteligente-vzg-skzowiu-item {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(40, 40, 40, 0.31);
+}
+
+/* =========================================================
+   LOGO
+========================================================= */
+
+.logo-group {
+    position: absolute;
+    top: 24px;
+    left: 27px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    z-index: 20;
+}
+
+.logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #8b5cf6, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-wrapper-captioncalendar {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-wrapper-captioncalendar svg {
+    width: 100%;
+    height: 100%;
+}
+
+.logo-text-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+}
+
+.hris {
+    font-weight: 800;
+}
+
+.better-people-brighter {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+/* =========================================================
+   LEFT SIDE HEADING
+========================================================= */
+
+.heading-stack {
+    position: absolute;
+    top: clamp(100px, 14vh, 140px);
+    left: clamp(40px, 6vw, 85px);
+    width: min(650px, 46vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: clamp(58px, 6vw, 90px);
+    z-index: 5;
+}
+
+.heading-stack > .sign-in {
+    align-self: stretch;
+    line-height: 1.05;
+    font-weight: 800;
+}
+
+.back {
+    color: #0051ff;
+}
+
+.log-in-to {
+    max-width: 620px;
+    font-size: 24px;
+    line-height: 150%;
+    color: rgba(255, 255, 255, 0.93);
+}
+
+/* =========================================================
+   FEATURES
+========================================================= */
+
+.features-list {
+    position: absolute;
+    left: clamp(40px, 5vw, 85px);
+    bottom: clamp(200px, 13vh, 125px);
+    width: min(484px, 40vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+    z-index: 5;
+}
+
+.feature-row,
+.feature-row2,
+.feature-row3 {
+    position: relative;
+    width: 100%;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.feature-row3 {
+    position: absolute;
+    left: clamp(40px, 5vw, 85px);
+    bottom: clamp(120px, 6vh, 55px);
+    width: min(484px, 40vw);
+    z-index: 5;
+}
+
+.icon-circle,
+.icon-circle3 {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    margin: 0;
+    border-radius: 20px;
+    background-color: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-wrapper-captionbriefcase,
+.icon-wrapper-captionuser {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-wrapper-captionbriefcase svg,
+.icon-wrapper-captionuser svg {
+    width: 100%;
+    height: 100%;
+}
+
+.feature-text,
+.feature-text2,
+.feature-text3 {
+    position: static;
+    width: calc(100% - 68px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin: 0;
+}
+
+.track-your-attendance {
+    font-weight: 600;
+}
+
+.view-your-attendance {
+    color: #9ca3af;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   LOGIN CONTAINER
+========================================================= */
+
+.login-container {
+    position: absolute;
+    top: 50%;
+    right: clamp(40px, 10vw, 180px);
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    z-index: 10;
+}
+
+/* =========================================================
+   LOGIN CARD
+========================================================= */
+
+.right-signin-card {
+    width: 412px;
+    height: 553px;
+    border-radius: 24px;
+    background:
+        linear-gradient(rgba(30, 26, 46, 0.50),
+                        rgba(30, 26, 46, 0.50)) padding-box,
+        linear-gradient(
+            -28.59deg,
+            #aadcff,
+            rgba(106, 55, 221, 0) 41.07%,
+            rgba(138, 137, 238, 0) 57.06%,
+            #aadcff
+        ) border-box;
+    border: 3px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px;
+    position: relative;
+    isolation: isolate;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   SIGN IN HEADER
+========================================================= */
+
+.signin-header {
+    width: calc(100% - 80px);
+    position: absolute;
+    top: 40px;
+    left: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    z-index: 4;
+    font-size: 40px;
+}
+
+.sign-in {
+    position: relative;
+}
+
+.enter-your-credentials {
+    font-size: 16px;
+    color: #9ca3af;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   FORM FIELDS
+========================================================= */
+
+.right-signin-card form {
+    margin: 0;
+    padding: 0;
+}
+
+.form-fields {
+    width: calc(100% - 64px);
+    height: 205px;
+    position: absolute;
+    top: 161px;
+    left: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    isolation: isolate;
+    gap: 16px;
+    z-index: 3;
+    color: #fff;
+}
+
+/* =========================================================
+   USERNAME / EMAIL FIELD
+========================================================= */
+
+.field-email {
+    width: 100%;
+    height: 89px;
+    position: absolute;
+    top: 13px;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    z-index: 0;
+}
+
+.input-email-box {
+    width: calc(100% - 12px);
+    height: 62px;
+    position: absolute;
+    top: 0;
+    left: 6px;
+    border-radius: 8px;
+    background-color: rgba(16, 11, 30, 0);
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    z-index: 0;
+}
+
+.youexamplecom {
+    width: calc(100% - 40px);
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #edf0f6;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    z-index: 2;
+}
+
+.youexamplecom::placeholder {
+    color: #c3c8d5;
+    opacity: 1;
+}
+
+.user-icon {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 22px;
+    right: 8px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.line {
+    width: calc(100% - 12px);
+    height: 1px;
+    position: absolute;
+    top: 62px;
+    left: 6px;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    z-index: 1;
+}
+
+/* =========================================================
+   PASSWORD FIELD
+========================================================= */
+
+.field-password {
+    width: calc(100% - 6px);
+    height: 64px;
+    position: absolute;
+    top: 122px;
+    left: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    z-index: 1;
+}
+
+.input-password-box {
+    width: 100%;
+    height: 64px;
+    position: relative;
+    border-radius: 8px;
+    background-color: rgba(16, 11, 30, 0);
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    z-index: 0;
+}
+
+.enter-your-password {
+    width: calc(100% - 40px);
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #edf0f6;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    z-index: 2;
+}
+
+.enter-your-password::placeholder {
+    color: #c3c8d5;
+    opacity: 1;
+}
+
+.user-icon2 {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 23px;
+    right: 16px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.password {
+    width: 100%;
+    position: absolute;
+    top: -25px;
+    left: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: #edf0f6;
+    z-index: 4;
+    pointer-events: none;
+}
+
+.line2 {
+    width: calc(100% - 12px);
+    height: 1px;
+    position: absolute;
+    top: 64px;
+    left: 0;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    z-index: 2;
+}
+
+.email-address {
+    width: calc(100% - 72px);
+    position: absolute;
+    top: -25px;
+    left: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: #edf0f6;
+    z-index: 4;
+    pointer-events: none;
+}
+
+/* =========================================================
+   FORM OPTIONS
+========================================================= */
+
+.form-options {
+    width: calc(100% - 96px);
+    position: absolute;
+    top: 366px;
+    left: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    z-index: 5;
+    font-size: 13px;
+}
+
+.forgot-password {
+    position: relative;
+    font-weight: 500;
+    color: #3b82f6;
+    text-decoration: none;
+}
+
+.forgot-password:hover {
+    text-decoration: underline;
+}
+
+/* =========================================================
+   LOGIN BUTTON
+========================================================= */
+
+.action-button-group {
+    width: calc(100% - 84px);
+    position: absolute;
+    top: 439px;
+    left: 42px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    z-index: 5;
+}
+
+.btn-login {
+    width: 100%;
+    height: 46px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+    cursor: pointer;
+    color: #fff;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 15px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-login:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+}
+
+.login {
+    font-weight: 600;
+}
+
+/* =========================================================
+   LOGIN ERROR
+========================================================= */
+
+.error {
+    position: absolute;
+    top: 115px;
+    left: 32px;
+    width: calc(100% - 64px);
+    color: #ffb4b4;
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    z-index: 10;
+}
+
+/* =========================================================
+   SMALL LAPTOP
+========================================================= */
+
+@media (max-width: 1100px) {
+    .login-container {
+        right: 40px;
+    }
+
+    .right-signin-card {
+        width: 390px;
+    }
+
+    .heading-stack {
+        width: 40vw;
+        font-size: clamp(48px, 5vw, 75px);
+    }
+
+    .log-in-to {
+        font-size: 20px;
+    }
+
+    .features-list,
+    .feature-row3 {
+        width: 38vw;
+    }
+}
+
+/* =========================================================
+   SMALLER LAPTOP
+========================================================= */
+
+@media (max-width: 900px) {
+    .login-container {
+        right: 25px;
+    }
+
+    .right-signin-card {
+        width: 370px;
+        height: 520px;
+    }
+
+    .heading-stack {
+        top: 110px;
+        left: 40px;
+        width: 38vw;
+        font-size: 48px;
+    }
+
+    .log-in-to {
+        font-size: 18px;
+    }
+
+    .features-list {
+        left: 40px;
+        bottom: 100px;
+        width: 38vw;
+        gap: 18px;
+    }
+
+    .feature-row3 {
+        left: 40px;
+        bottom: 35px;
+        width: 38vw;
+    }
+}
+
+/* =========================================================
+   TABLET / MOBILE
+========================================================= */
+
+@media (max-width: 760px) {
+    body {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .hris-login {
+        height: auto;
+        min-height: 100vh;
+        overflow: hidden;
+        padding-top: 100px;
+        padding-bottom: 50px;
+    }
+
+    .boliviainteligente-vzg-skzowiu {
+        position: absolute;
+        min-height: 100%;
+    }
+
+    .heading-stack {
+        position: relative;
+        top: auto;
+        left: auto;
+        width: calc(100% - 40px);
+        margin: 0 20px 35px;
+        font-size: 48px;
+    }
+
+    .features-list,
+    .feature-row3 {
+        display: none;
+    }
+
+    .login-container {
+        position: relative;
+        top: auto;
+        right: auto;
+        transform: none;
+        width: 100%;
+        padding: 0 20px;
+    }
+
+    .right-signin-card {
+        width: 100%;
+        max-width: 412px;
+        height: 553px;
+    }
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 500px) {
+    .hris-login {
+        padding-top: 85px;
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .logo-group {
+        top: 20px;
+        left: 20px;
+    }
+
+    .heading-stack {
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        font-size: 40px;
+    }
+
+    .log-in-to {
+        font-size: 17px;
+    }
+
+    .login-container {
+        padding: 0;
+    }
+
+    .right-signin-card {
+        width: 100%;
+        height: 530px;
+        padding: 30px;
+    }
+
+    .signin-header {
+        top: 35px;
+        left: 30px;
+        width: calc(100% - 60px);
+        font-size: 34px;
+    }
+
+    .enter-your-credentials {
+        font-size: 14px;
+    }
+
+    .form-fields {
+        top: 155px;
+        left: 32px;
+        width: calc(100% - 64px);
+    }
+
+    .form-options {
+        left: 30px;
+        width: calc(100% - 60px);
+    }
+
+    .action-button-group {
+        left: 30px;
+        width: calc(100% - 60px);
+    }
+}
+
+/* =========================================================
+   VERY SMALL PHONE
+========================================================= */
+
+@media (max-width: 380px) {
+    .right-signin-card {
+        height: 520px;
+        padding: 25px;
+    }
+
+    .signin-header {
+        left: 25px;
+        width: calc(100% - 50px);
+        font-size: 30px;
+    }
+
+    .form-fields {
+        left: 26px;
+        width: calc(100% - 52px);
+    }
+
+    .form-options {
+        left: 25px;
+        width: calc(100% - 50px);
+    }
+
+    .action-button-group {
+        left: 25px;
+        width: calc(100% - 50px);
+    }
+}

@@ -1,4 +1,3 @@
-<link rel="stylesheet" href="../asset/css/hr_dashboard.css">
 <?php
 require_once __DIR__ . '/../authentication/guard.php';
 // Only signed-in HR/admin accounts may approve or reject leave
