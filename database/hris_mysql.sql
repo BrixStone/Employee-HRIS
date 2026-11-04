@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS employees (
     date_hired        DATE         NOT NULL,
     employment_type   VARCHAR(50)  NOT NULL DEFAULT 'Full-time',
     employment_status VARCHAR(30)  NOT NULL DEFAULT 'Active',
+    avatar            VARCHAR(255) NULL,                    -- web path to uploaded profile photo
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT employees_pkey PRIMARY KEY (id),

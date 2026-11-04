@@ -258,7 +258,7 @@ body {
 
 .right-signin-card {
     width: 412px;
-    height: 553px;
+    min-height: 553px;
     border-radius: 24px;
     background:
         linear-gradient(rgba(30, 26, 46, 0.50),
@@ -273,8 +273,9 @@ body {
     border: 3px solid transparent;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 22px;
     padding: 40px;
     position: relative;
     isolation: isolate;
@@ -286,10 +287,8 @@ body {
 ========================================================= */
 
 .signin-header {
-    width: calc(100% - 80px);
-    position: absolute;
-    top: 40px;
-    left: 40px;
+    width: 100%;
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -315,19 +314,20 @@ body {
 .right-signin-card form {
     margin: 0;
     padding: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .form-fields {
-    width: calc(100% - 64px);
-    height: 205px;
-    position: absolute;
-    top: 161px;
-    left: 32px;
+    width: 100%;
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     isolation: isolate;
-    gap: 16px;
+    gap: 26px;
     z-index: 3;
     color: #fff;
 }
@@ -338,39 +338,39 @@ body {
 
 .field-email {
     width: 100%;
-    height: 89px;
-    position: absolute;
-    top: 13px;
-    left: 0;
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 8px;
     z-index: 0;
 }
 
 .input-email-box {
-    width: calc(100% - 12px);
-    height: 62px;
-    position: absolute;
-    top: 0;
-    left: 6px;
+    width: 100%;
+    height: 48px;
+    position: relative;
+    border: 1px solid transparent;
     border-radius: 8px;
-    background-color: rgba(16, 11, 30, 0);
+    background-color: rgba(255, 255, 255, 0.04);
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: 0 16px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
     z-index: 0;
 }
 
+.input-email-box:focus-within {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
 .youexamplecom {
-    width: calc(100% - 40px);
+    flex: 1 1 auto;
+    width: auto;
     height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    min-height: 0;
     margin: 0;
-    padding: 0;
+    padding: 0 28px 0 0;
     border: none;
     outline: none;
     background: transparent;
@@ -390,18 +390,18 @@ body {
     width: 16px;
     height: 16px;
     position: absolute;
-    top: 22px;
-    right: 8px;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
     z-index: 3;
     pointer-events: none;
 }
 
 .line {
-    width: calc(100% - 12px);
+    width: 100%;
     height: 1px;
-    position: absolute;
-    top: 62px;
-    left: 6px;
+    position: relative;
+    margin-top: 2px;
     background: linear-gradient(90deg, #76f5e8, #3b82f6);
     z-index: 1;
 }
@@ -411,38 +411,40 @@ body {
 ========================================================= */
 
 .field-password {
-    width: calc(100% - 6px);
-    height: 64px;
-    position: absolute;
-    top: 122px;
-    left: 6px;
+    width: 100%;
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 8px;
     z-index: 1;
 }
 
 .input-password-box {
     width: 100%;
-    height: 64px;
+    height: 48px;
     position: relative;
+    border: 1px solid transparent;
     border-radius: 8px;
-    background-color: rgba(16, 11, 30, 0);
+    background-color: rgba(255, 255, 255, 0.04);
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: 0 16px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
     z-index: 0;
 }
 
+.input-password-box:focus-within {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
 .enter-your-password {
-    width: calc(100% - 40px);
+    flex: 1 1 auto;
+    width: auto;
     height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    min-height: 0;
     margin: 0;
-    padding: 0;
+    padding: 0 60px 0 0;
     border: none;
     outline: none;
     background: transparent;
@@ -462,17 +464,81 @@ body {
     width: 16px;
     height: 16px;
     position: absolute;
-    top: 23px;
-    right: 16px;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
     z-index: 3;
+    opacity: 0.8;
     pointer-events: none;
+}
+
+/* Hide the browser's native password reveal control (the extra "black eye").
+   Edge/IE expose it via ::-ms-reveal; some Chromium builds / password managers
+   inject their own control, so suppress the common WebKit hooks too. */
+.enter-your-password::-ms-reveal,
+.enter-your-password::-ms-clear {
+    display: none;
+}
+
+.enter-your-password::-webkit-credentials-auto-fill-button,
+.enter-your-password::-webkit-strong-password-auto-fill-button,
+.enter-your-password::-webkit-contacts-auto-fill-button {
+    visibility: hidden;
+    display: none !important;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+}
+
+/* Password visibility toggle (clickable eye icon) */
+.password-toggle {
+    width: 24px;
+    height: 24px;
+    position: absolute;
+    top: 50%;
+    right: 36px;
+    transform: translateY(-50%);
+    z-index: 5;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0.75;
+    transition: opacity 0.15s ease;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    opacity: 1;
+    outline: none;
+}
+
+.password-toggle svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.password-toggle .icon-eye-off {
+    display: none;
+}
+
+.password-toggle.is-visible .icon-eye {
+    display: none;
+}
+
+.password-toggle.is-visible .icon-eye-off {
+    display: block;
 }
 
 .password {
     width: 100%;
-    position: absolute;
-    top: -25px;
-    left: 0;
+    position: relative;
     font-size: 14px;
     font-weight: 400;
     color: #edf0f6;
@@ -481,20 +547,17 @@ body {
 }
 
 .line2 {
-    width: calc(100% - 12px);
+    width: 100%;
     height: 1px;
-    position: absolute;
-    top: 64px;
-    left: 0;
+    position: relative;
+    margin-top: 2px;
     background: linear-gradient(90deg, #76f5e8, #3b82f6);
     z-index: 2;
 }
 
 .email-address {
-    width: calc(100% - 72px);
-    position: absolute;
-    top: -25px;
-    left: 0;
+    width: 100%;
+    position: relative;
     font-size: 14px;
     font-weight: 400;
     color: #edf0f6;
@@ -507,13 +570,12 @@ body {
 ========================================================= */
 
 .form-options {
-    width: calc(100% - 96px);
-    position: absolute;
-    top: 366px;
-    left: 48px;
+    width: 100%;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    margin-top: -6px;
     z-index: 5;
     font-size: 13px;
 }
@@ -534,13 +596,12 @@ body {
 ========================================================= */
 
 .action-button-group {
-    width: calc(100% - 84px);
-    position: absolute;
-    top: 439px;
-    left: 42px;
+    width: 100%;
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    margin-top: 4px;
     z-index: 5;
 }
 
@@ -575,16 +636,25 @@ body {
    LOGIN ERROR
 ========================================================= */
 
-.error {
-    position: absolute;
-    top: 115px;
-    left: 32px;
-    width: calc(100% - 64px);
-    color: #ffb4b4;
-    font-size: 12px;
+/* Inline validation: red outline on fields + error text under the field */
+.has-error .input-email-box,
+.has-error .input-password-box {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.has-error .line,
+.has-error .line2 {
+    background: #ef4444;
+}
+
+.field-error {
+    width: 100%;
+    margin: 6px 0 0;
+    color: #ff6b6b;
+    font-size: 12.5px;
     line-height: 1.4;
     overflow-wrap: anywhere;
-    z-index: 10;
 }
 
 /* =========================================================
@@ -626,7 +696,6 @@ body {
 
     .right-signin-card {
         width: 370px;
-        height: 520px;
     }
 
     .heading-stack {
@@ -703,7 +772,6 @@ body {
     .right-signin-card {
         width: 100%;
         max-width: 412px;
-        height: 553px;
     }
 }
 
@@ -740,35 +808,15 @@ body {
 
     .right-signin-card {
         width: 100%;
-        height: 530px;
         padding: 30px;
     }
 
     .signin-header {
-        top: 35px;
-        left: 30px;
-        width: calc(100% - 60px);
         font-size: 34px;
     }
 
     .enter-your-credentials {
         font-size: 14px;
-    }
-
-    .form-fields {
-        top: 155px;
-        left: 32px;
-        width: calc(100% - 64px);
-    }
-
-    .form-options {
-        left: 30px;
-        width: calc(100% - 60px);
-    }
-
-    .action-button-group {
-        left: 30px;
-        width: calc(100% - 60px);
     }
 }
 
@@ -778,28 +826,49 @@ body {
 
 @media (max-width: 380px) {
     .right-signin-card {
-        height: 520px;
         padding: 25px;
     }
 
     .signin-header {
-        left: 25px;
-        width: calc(100% - 50px);
         font-size: 30px;
     }
+}
 
-    .form-fields {
-        left: 26px;
-        width: calc(100% - 52px);
-    }
+/* =========================================================
+   AMBIENT LOGIN ANIMATIONS
+   Calm, constant, on-theme motion:
+   1) the space background slowly "breathes" (very slight zoom/drift)
+   2) the sign-in card gently floats, like weightless in space
+   Both are slow and subtle so they never distract or strain the eyes.
+========================================================= */
 
-    .form-options {
-        left: 25px;
-        width: calc(100% - 50px);
-    }
+/* 1) Background slow zoom-breathing (~40s round trip) */
+.boliviainteligente-vzg-skzowiu-child {
+    transform-origin: center;
+    animation: bg-breathe 40s ease-in-out infinite;
+    will-change: transform;
+}
 
-    .action-button-group {
-        left: 25px;
-        width: calc(100% - 50px);
+@keyframes bg-breathe {
+    0%, 100% { transform: scale(1) translate3d(0, 0, 0); }
+    50%      { transform: scale(1.06) translate3d(0, -1%, 0); }
+}
+
+/* 2) Sign-in card gently floats up and down (~7s) */
+.right-signin-card {
+    animation: card-float 7s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes card-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+}
+
+/* Accessibility: hold still for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .boliviainteligente-vzg-skzowiu-child,
+    .right-signin-card {
+        animation: none;
     }
 }

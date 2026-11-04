@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         break;
 
                     case 'hr':
-                        $destination = '/hr/employees.php';
+                        $destination = '/hr/dashboard.php';
                         break;
 
                     case 'payroll':
@@ -154,13 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <?php if ($error !== ''): ?>
-                    <div class="error" role="alert">
-                        <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
-                    </div>
-                <?php endif; ?>
-
-                <form method="post" autocomplete="on">
+                <form method="post" autocomplete="on" class="<?= $error !== '' ? 'has-error' : '' ?>">
 
                     <div class="form-fields">
 
@@ -227,9 +221,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                           stroke="white" stroke-width="2"
                                           stroke-linecap="round"/>
                                 </svg>
+
+                                <button type="button"
+                                        class="password-toggle"
+                                        id="password-toggle"
+                                        aria-label="Show password"
+                                        aria-pressed="false">
+                                    <!-- Eye (password hidden) -->
+                                    <svg class="icon-eye"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         xmlns="http://www.w3.org/2000/svg"
+                                         aria-hidden="true">
+                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"
+                                              stroke="white" stroke-width="2"
+                                              stroke-linecap="round"
+                                              stroke-linejoin="round"/>
+                                        <circle cx="12" cy="12" r="3"
+                                                stroke="white" stroke-width="2"/>
+                                    </svg>
+                                    <!-- Eye off (password visible) -->
+                                    <svg class="icon-eye-off"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         xmlns="http://www.w3.org/2000/svg"
+                                         aria-hidden="true">
+                                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.5 18.5 0 0 0 1 12s4 7 11 7a9.12 9.12 0 0 0 5.39-1.61"
+                                              stroke="white" stroke-width="2"
+                                              stroke-linecap="round"
+                                              stroke-linejoin="round"/>
+                                        <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24M1 1l22 22"
+                                              stroke="white" stroke-width="2"
+                                              stroke-linecap="round"
+                                              stroke-linejoin="round"/>
+                                    </svg>
+                                </button>
                             </div>
 
                             <div class="line2"></div>
+
+                            <?php if ($error !== ''): ?>
+                                <p class="field-error" role="alert">
+                                    <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+                                </p>
+                            <?php endif; ?>
                         </div>
 
                     </div>
@@ -363,5 +398,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     </div>
 </div>
+
+<script>
+    (function () {
+        var toggle = document.getElementById('password-toggle');
+        var input = document.getElementById('password');
+
+        if (!toggle || !input) {
+            return;
+        }
+
+        toggle.addEventListener('click', function () {
+            var showing = input.getAttribute('type') === 'text';
+            input.setAttribute('type', showing ? 'password' : 'text');
+            toggle.setAttribute('aria-pressed', showing ? 'false' : 'true');
+            toggle.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+            toggle.classList.toggle('is-visible', !showing);
+            input.focus();
+        });
+    })();
+</script>
 </body>
 </html>

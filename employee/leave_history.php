@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php'; // e()
 require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
@@ -262,26 +263,6 @@ function roleLabel(?string $role): string
     };
 }
 
-// 6. Fetch leave balances for overview cards
-try {
-    $stmtLeaveBal = $pdo->prepare("
-        SELECT annual_leave, sick_leave, personal_leave
-        FROM `leave`
-        WHERE LOWER(TRIM(email)) = LOWER(TRIM(:email))
-        LIMIT 1
-    ");
-    $stmtLeaveBal->execute(['email' => $email]);
-    $leaveBalData = $stmtLeaveBal->fetch(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $leaveBalData = false;
-}
-
-$balances = [
-    'annual'   => $leaveBalData['annual_leave'] ?? 0,
-    'sick'     => $leaveBalData['sick_leave'] ?? 0,
-    'personal' => $leaveBalData['personal_leave'] ?? 0
-];
-
 $user = [
     'full_name' => htmlspecialchars($employeeData['name'] ?? '', ENT_QUOTES, 'UTF-8'),
     'email'     => htmlspecialchars($employeeData['email'] ?? '', ENT_QUOTES, 'UTF-8'),
@@ -289,188 +270,42 @@ $user = [
     'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name'] ?? 'User') . '&background=4763ff&color=fff'
 ];
 
-if (!function_exists('e')) {
-    function e($value): string {
-        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
-    }
-}
+// Shell configuration — use the shared employee template (sidebar/topbar) so
+// the layout matches every other page. When this page is opened inside the
+// Leave Management slide-over, file_leave.php loads it with ?embedded=1, and
+// the shared shell hides its sidebar/topbar to avoid a duplicate.
+$title = 'Leave History';
+$eyebrow = 'LEAVE';
+$subtitle = 'Audit trail of your filed leave requests and reviews';
+$pageCss = '';
+$realtime = true;
+$realtimeRefresh = 'auto';
+require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leave History & Applications - HRIS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+<!-- Tailwind utilities for this page's rich content. Shared base styles come
+     from hris-base.css; Tailwind only powers the fine-grained utility classes. -->
+<?php require __DIR__ . '/../templates/employeeTemplates/tailwind.php'; ?>
+<style>
+  /* Vertical rhythm between the stacked cards (replaces Tailwind space-y-6
+     from the old standalone wrapper). */
+  .lh-body > * + * { margin-top: 24px; }
+  .lh-body { width: 100%; }
+</style>
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        sidebar: '#0e0d13',
-                        mainbg: '#180a2b',
-                        cardbg: '#0a0514',
-                        cardborder: '#281545',
-                        accent: '#4763ff',
-                        accenthover: '#354beb',
-                        textmuted: '#8b8994'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
+<section class="page-head">
+  <div class="ph-text">
+    <p class="eyebrow">LEAVE</p>
+    <h1>Leave History &amp; Review Records</h1>
+    <p>Comprehensive audit trail of all filed leave requests and review outcomes.</p>
+  </div>
+  <div class="ph-actions">
+    <a class="button" href="file_leave.php">← Back to Leave Management</a>
+    <a class="primary-button" href="file_leave.php">＋ File a Leave Request</a>
+  </div>
+</section>
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #180a2b;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #281545;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #4763ff;
-        }
-    </style>
-</head>
-
-<body class="bg-mainbg text-white min-h-screen flex">
-
-    <!-- Sidebar -->
-    <aside class="w-64 shrink-0 bg-sidebar flex flex-col justify-between border-r border-cardborder">
-        <div>
-            <div class="h-20 flex items-center px-6 border-b border-cardborder mb-6">
-                <div class="w-8 h-8 rounded bg-accent flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(71,99,255,0.5)]">
-                    <div class="w-3 h-3 bg-white rounded-full"></div>
-                </div>
-
-                <div>
-                    <h1 class="font-bold text-lg leading-tight">HRIS</h1>
-                    <p class="text-[10px] text-textmuted">Employee Portal</p>
-                </div>
-            </div>
-
-            <nav class="px-4 space-y-1">
-                <a href="dashboard.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                    <span class="font-medium text-sm">Dashboard</span>
-                </a>
-                <a href="profile.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                    <span class="font-medium text-sm">My Profile</span>
-                </a>
-                <a href="attendance.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span class="font-medium text-sm">Attendance</span>
-                </a>
-                <a href="file_leave.php" class="flex items-center px-4 py-2.5 bg-[#1f1d2b] text-white rounded-lg transition-colors border-l-2 border-accent">
-                    <svg class="w-5 h-5 mr-3 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    <span class="font-medium text-sm text-accent">Leave Management</span>
-                </a>
-                <a href="payslips.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                    <span class="font-medium text-sm">Payslips</span>
-                </a>
-                <a href="settings.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    <span class="font-medium text-sm">Settings</span>
-                </a>
-
-                <div class="pt-4 mt-4 border-t border-cardborder">
-                    <a href="../authentication/logout.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                        <span class="font-medium text-sm">Log Out</span>
-                    </a>
-                </div>
-            </nav>
-        </div>
-
-        <div class="p-6 border-t border-cardborder">
-            <div class="flex items-center space-x-3 overflow-hidden">
-                <img src="<?= e($user['avatar']) ?>" alt="Profile" class="w-10 h-10 rounded-full border border-cardborder">
-
-                <div class="truncate">
-                    <h4 class="text-sm font-semibold truncate"><?= $user['full_name'] ?></h4>
-                    <p class="text-xs text-textmuted truncate"><?= $user['email'] ?></p>
-                </div>
-            </div>
-        </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="flex-1 min-w-0 flex flex-col overflow-y-auto">
-        <!-- Header with Live Running Clock & Exit Button -->
-        <header class="min-h-20 border-b border-cardborder flex items-center justify-between px-8 py-4 bg-mainbg sticky top-0 z-10">
-            <div>
-                <h2 class="text-xl font-bold">Leave History & Review Records</h2>
-                <p class="text-xs text-textmuted mt-0.5">Comprehensive audit trail of all filed leave requests and review outcomes</p>
-            </div>
-            <div class="flex items-center space-x-3">
-                <span class="text-xs bg-[#1f1d2b] px-3.5 py-2 rounded-xl border border-cardborder text-gray-200 font-mono tracking-tight flex items-center shadow-inner">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                    <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
-                </span>
-                <!-- Real-time connection status (asset/js/realtime.js) -->
-                <span class="text-xs bg-[#1f1d2b] px-3 py-2 rounded-xl border border-cardborder text-textmuted" data-realtime-status>Offline</span>
-
-                <!-- Exit Button: Returns to Leave Management (file_leave.php) -->
-                <a
-                    href="file_leave.php"
-                    target="_top"
-                    title="Exit and return to Leave Management"
-                    class="flex items-center space-x-2 text-xs font-semibold bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 hover:border-rose-500 text-rose-200 hover:text-white px-4 py-2 rounded-xl transition-all shadow-md group"
-                >
-                    <svg class="w-4 h-4 text-rose-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                    <span>Exit to Leave Management</span>
-                </a>
-            </div>
-        </header>
-
-        <div class="p-8 max-w-[1400px] w-full mx-auto space-y-6">
-
-            <!-- Sub Navigation Tabs with Exit Shortcut -->
-            <div class="flex items-center justify-between border-b border-cardborder pb-4">
-                <div class="flex space-x-2">
-                    <a href="file_leave.php" class="px-5 py-2.5 text-xs font-semibold rounded-xl text-textmuted hover:text-white hover:bg-[#1f1d2b] transition-all flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        File a Leave Request
-                    </a>
-                    <a href="leave_history.php" class="px-5 py-2.5 text-xs font-semibold rounded-xl bg-accent text-white shadow-[0_0_15px_rgba(71,99,255,0.4)] transition-all flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Leave History & Logs
-                    </a>
-                </div>
-
-                <!-- Secondary Exit Link to Leave Management -->
-                <a
-                    href="file_leave.php"
-                    target="_top"
-                    class="inline-flex items-center text-xs font-semibold bg-[#1f1d2b] hover:bg-rose-950/50 hover:border-rose-600/50 border border-cardborder px-4 py-2.5 rounded-xl text-gray-300 hover:text-rose-300 transition-colors"
-                >
-                    <svg class="w-4 h-4 mr-1.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                    </svg>
-                    Back to Leave Management
-                </a>
-            </div>
-
-            <!-- Flash Notifications -->
+<div class="lh-body">
+<!-- Flash Notifications -->
             <?php if ($message !== ''): ?>
                 <div class="bg-teal-950/80 border border-teal-500 text-teal-300 px-5 py-4 rounded-xl flex items-center shadow-lg">
                     <svg class="w-5 h-5 mr-3 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -548,7 +383,7 @@ if (!function_exists('e')) {
                                 name="q"
                                 value="<?= e($searchKeyword) ?>"
                                 placeholder="Search by reason or leave type..."
-                                class="w-full bg-[#1b0d35] text-xs text-white border border-cardborder rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-accent transition-colors"
+                                class="w-full bg-[#0a0e20] text-xs text-white border border-cardborder rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-accent transition-colors"
                             >
                         </div>
                     </div>
@@ -559,7 +394,7 @@ if (!function_exists('e')) {
                         <select
                             id="statusSelect"
                             name="status"
-                            class="w-full bg-[#1b0d35] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
+                            class="w-full bg-[#0a0e20] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
                         >
                             <option value="all" <?= $filterStatus === 'all' ? 'selected' : '' ?>>All Statuses</option>
                             <option value="Pending" <?= $filterStatus === 'Pending' ? 'selected' : '' ?>>Pending</option>
@@ -575,7 +410,7 @@ if (!function_exists('e')) {
                         <select
                             id="typeSelect"
                             name="type"
-                            class="w-full bg-[#1b0d35] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
+                            class="w-full bg-[#0a0e20] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
                         >
                             <option value="all" <?= $filterType === 'all' ? 'selected' : '' ?>>All Leave Types</option>
                             <?php foreach ($availableTypes as $t): ?>
@@ -595,7 +430,7 @@ if (!function_exists('e')) {
                         <select
                             id="yearSelect"
                             name="year"
-                            class="w-full bg-[#1b0d35] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
+                            class="w-full bg-[#0a0e20] text-xs text-white border border-cardborder rounded-xl px-3 py-2.5 focus:outline-none focus:border-accent transition-colors"
                         >
                             <option value="all" <?= $filterYear === 'all' ? 'selected' : '' ?>>All Years</option>
                             <?php foreach ($availableYears as $yr): ?>
@@ -622,7 +457,7 @@ if (!function_exists('e')) {
                             <a
                                 href="leave_history.php"
                                 title="Reset all filters"
-                                class="bg-[#1b0d35] hover:bg-[#281545] border border-cardborder text-textmuted hover:text-white text-xs py-2.5 px-2.5 rounded-xl transition-colors flex items-center justify-center"
+                                class="bg-[#0a0e20] hover:bg-[#281545] border border-cardborder text-textmuted hover:text-white text-xs py-2.5 px-2.5 rounded-xl transition-colors flex items-center justify-center"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </a>
@@ -677,7 +512,7 @@ if (!function_exists('e')) {
                                 <tr>
                                     <td colspan="9" class="py-12 text-center text-textmuted">
                                         <div class="flex flex-col items-center justify-center space-y-2">
-                                            <div class="w-12 h-12 rounded-full bg-[#1b0d35] border border-cardborder flex items-center justify-center text-textmuted">
+                                            <div class="w-12 h-12 rounded-full bg-[#0a0e20] border border-cardborder flex items-center justify-center text-textmuted">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                                             </div>
                                             <p class="font-medium text-white">No leave records found</p>
@@ -692,7 +527,7 @@ if (!function_exists('e')) {
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($leaveLogs as $log): ?>
-                                    <tr class="hover:bg-[#150a25] transition-colors group">
+                                    <tr class="hover:bg-[#0e1430] transition-colors group">
                                         <!-- Ref ID -->
                                         <td class="py-4 px-4 text-xs font-mono text-cyan-400 font-semibold">
                                             #<?= str_pad((string)$log['id'], 5, '0', STR_PAD_LEFT) ?>
@@ -846,7 +681,7 @@ if (!function_exists('e')) {
                                 type="button"
                                 data-tx-filter="<?= e($key) ?>"
                                 aria-pressed="<?= $key === 'all' ? 'true' : 'false' ?>"
-                                class="tx-filter-btn text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors <?= $key === 'all' ? 'bg-accent border-accent text-white' : 'bg-[#1b0d35] border-cardborder text-textmuted hover:text-white' ?>"
+                                class="tx-filter-btn text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors <?= $key === 'all' ? 'bg-accent border-accent text-white' : 'bg-[#0a0e20] border-cardborder text-textmuted hover:text-white' ?>"
                             >
                                 <?= e($label) ?> <span class="opacity-70">(<?= (int)$txCounts[$key] ?>)</span>
                             </button>
@@ -876,7 +711,7 @@ if (!function_exists('e')) {
                                 <?php foreach ($transactions as $tx):
                                     $style = $txStyles[$tx['action']] ?? $txStyles['Filed'];
                                 ?>
-                                    <tr class="hover:bg-[#150a25] transition-colors" data-tx-action="<?= e($tx['action']) ?>">
+                                    <tr class="hover:bg-[#0e1430] transition-colors" data-tx-action="<?= e($tx['action']) ?>">
                                         <td class="py-3.5 px-4 text-xs whitespace-nowrap">
                                             <?php if (!empty($tx['occurred_at'])): ?>
                                                 <span class="text-white"><?= e(date('M d, Y', strtotime($tx['occurred_at']))) ?></span>
@@ -951,40 +786,16 @@ if (!function_exists('e')) {
                 </div>
             </div>
 
-        </div>
-    </main>
+        </div><!-- /.lh-body -->
 
     <script>
-        // Real-Time Running Clock
-        function updateLiveClock() {
-            const el = document.getElementById('liveClockText');
-            if (!el) return;
-            const now = new Date();
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[now.getMonth()];
-            const day = String(now.getDate()).padStart(2, '0');
-            const year = now.getFullYear();
-
-            let hours = now.getHours();
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-
-            hours = hours % 12;
-            hours = hours ? String(hours).padStart(2, '0') : '12';
-
-            el.textContent = `${month} ${day}, ${year} ${hours}:${minutes}:${seconds} ${ampm}`;
-        }
-        setInterval(updateLiveClock, 1000);
-        updateLiveClock();
-
         // Transaction History action filter
         (function () {
             const buttons = document.querySelectorAll('.tx-filter-btn');
             const rows = document.querySelectorAll('#txTableBody tr[data-tx-action]');
             const noMatch = document.querySelector('#txTableBody tr[data-tx-no-match]');
             const active = ['bg-accent', 'border-accent', 'text-white'];
-            const idle = ['bg-[#1b0d35]', 'border-cardborder', 'text-textmuted'];
+            const idle = ['bg-[#0a0e20]', 'border-cardborder', 'text-textmuted'];
 
             buttons.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1024,7 +835,4 @@ if (!function_exists('e')) {
             });
         }
     </script>
-    <!-- Real-time updates: only this employee's own leave events arrive here -->
-    <script src="../asset/js/realtime.js" data-refresh="auto" defer></script>
-</body>
-</html>
+<?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>

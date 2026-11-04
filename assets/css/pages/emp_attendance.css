@@ -1,0 +1,46 @@
+/* Employee attendance — page-specific styles on top of hris-base.css */
+@import url("../hris-base.css");
+
+.alert {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.alert-success {
+  color: #7cf2d6;
+  background: rgba(52, 211, 153, .12);
+  border: 1px solid rgba(52, 211, 153, .35);
+}
+
+.alert-error {
+  color: #ffb4b4;
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .35);
+}
+
+/* DTR action buttons in the page header */
+.dtr-actions form { margin: 0; }
+.dtr-actions { align-items: center; }
+
+.btn-break {
+  color: #ffe6b0;
+  background: rgba(245, 158, 11, .14);
+  border-color: rgba(245, 158, 11, .4);
+}
+.btn-break:hover { background: rgba(245, 158, 11, .22); }
+
+.btn-timeout {
+  color: #ffc2cd;
+  background: rgba(251, 113, 133, .14);
+  border-color: rgba(251, 113, 133, .4);
+}
+.btn-timeout:hover { background: rgba(251, 113, 133, .22); }
+
+/* Attendance history coloured columns */
+.col-in { color: var(--green); }
+.col-break { color: #f6c667; }
+.col-out { color: #fb7185; }
+.col-hours { color: var(--teal); }

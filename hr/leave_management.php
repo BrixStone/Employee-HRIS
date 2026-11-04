@@ -6,6 +6,7 @@ require_once __DIR__ . '/../authentication/guard.php';
 require_role(['hr', 'admin']);
 
 require __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()
 require __DIR__ . '/../classes/LeaveType.php';
 require __DIR__ . '/../classes/LeaveBalance.php';
 require __DIR__ . '/../classes/LeaveRequest.php';
@@ -103,13 +104,6 @@ $status = $_GET['status'] ?? 'Pending';
 $validStatuses = ['Pending','Approved','Rejected','Cancelled','All'];
 if (!in_array($status, $validStatuses, true)) $status = 'Pending';
 $requests = $lr->getForHR($status === 'All' ? null : $status);
-
-// View helpers
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function fullName($row){
-    $m = !empty($row['middle_name']) ? $row['middle_name'].' ' : '';
-    return trim(($row['first_name'] ?? '').' '.$m.($row['last_name'] ?? ''));
-}
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
 ?>

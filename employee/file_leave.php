@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php'; // e()
 require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
@@ -420,13 +421,6 @@ $user = [
     'status'    => htmlspecialchars($employeeData['status'] ?? 'Active Employee', ENT_QUOTES, 'UTF-8'),
     'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name'] ?? 'User') . '&background=4763ff&color=fff'
 ];
-
-if (!function_exists('e')) {
-    function e($value): string
-    {
-        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
-    }
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -435,143 +429,37 @@ if (!function_exists('e')) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leave Management - HRIS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <?php require __DIR__ . '/../templates/employeeTemplates/tailwind.php'; ?>
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        sidebar: '#0e0d13',
-                        mainbg: '#180a2b',
-                        cardbg: '#0a0514',
-                        cardborder: '#281545',
-                        accent: '#4763ff',
-                        accenthover: '#354beb',
-                        textmuted: '#8b8994'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Master application layout: shared HRIS design system (sidebar, topbar, tokens) -->
+    <link rel="stylesheet" href="../assets/css/hris-base.css">
 
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
+        .accent-text { color: #76f5e8; }
+        /* Let the shared .main wrapper own the scroll; Tailwind content sits inside it */
+        .emp-leave-content { padding: 0; }
     </style>
 </head>
 
-<body class="bg-mainbg text-white min-h-screen flex">
+<body class="hris-app page-file_leave">
 
-    <!-- Sidebar -->
-    <aside class="w-64 shrink-0 bg-sidebar flex flex-col justify-between border-r border-cardborder">
-        <div>
-            <div class="h-20 flex items-center px-6 border-b border-cardborder mb-6">
-                <div class="w-8 h-8 rounded bg-accent flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(71,99,255,0.5)]">
-                    <div class="w-3 h-3 bg-white rounded-full"></div>
-                </div>
+<?php
+    // Master layout shell (shared sidebar + topbar) — identical to every other
+    // employee page. The leave content + its JS stay on Tailwind inside .content.
+    $title = 'Leave Management';
+    $eyebrow = 'EMPLOYEE PORTAL';
+    $subtitle = 'Submit and monitor leave requests with instant updates';
+    $pageCss = '';            // CSS already linked above; skip per-page include
+    $realtime = true;         // shared header renders the badge, shared footer loads realtime.js
+    $topbarExtra = '<a href="/employee/leave_history.php" class="primary-button" title="View your leave history">Leave History</a>';
+    require __DIR__ . '/../templates/employeeTemplates/header.php';
+?>
 
-                <div>
-                    <h1 class="font-bold text-lg leading-tight">HRIS</h1>
-                    <p class="text-[10px] text-textmuted">Employee Portal</p>
-                </div>
-            </div>
-
-            <nav class="px-4 space-y-1">
-                <a href="dashboard.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-                    </svg>
-                    <span class="font-medium text-sm">Dashboard</span>
-                </a>
-                <a href="profile.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                    </svg>
-                    <span class="font-medium text-sm">My Profile</span>
-                </a>
-                <a href="attendance.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span class="font-medium text-sm">Attendance</span>
-                </a>
-                <a href="file_leave.php" class="flex items-center px-4 py-2.5 bg-[#1f1d2b] text-white rounded-lg transition-colors border-l-2 border-accent">
-                    <svg class="w-5 h-5 mr-3 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                    </svg>
-                    <span class="font-medium text-sm text-accent">Leave Management</span>
-                </a>
-                <a href="payslips.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
-                    </svg>
-                    <span class="font-medium text-sm">Payslips</span>
-                </a>
-                <a href="settings.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    <span class="font-medium text-sm">Settings</span>
-                </a>
-
-                <div class="pt-4 mt-4 border-t border-cardborder">
-                    <a href="../authentication/logout.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                        </svg>
-                        <span class="font-medium text-sm">Log Out</span>
-                    </a>
-                </div>
-            </nav>
-        </div>
-
-        <div class="p-6 border-t border-cardborder">
-            <div class="flex items-center space-x-3 overflow-hidden">
-                <img src="<?= e($user['avatar']) ?>" alt="Profile" class="w-10 h-10 rounded-full border border-cardborder">
-
-                <div class="truncate">
-                    <h4 class="text-sm font-semibold truncate"><?= $user['full_name'] ?></h4>
-                    <p class="text-xs text-textmuted truncate"><?= $user['email'] ?></p>
-                </div>
-            </div>
-        </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="flex-1 min-w-0 flex flex-col overflow-y-auto">
-        <header class="min-h-20 border-b border-cardborder flex items-center justify-between px-8 py-4 bg-mainbg sticky top-0 z-10">
-            <div>
-                <h2 class="text-xl font-bold">Leave Management & Filing</h2>
-                <p class="text-xs text-textmuted mt-0.5">Submit and monitor leave requests with instant database synchronization</p>
-            </div>
-            <div class="flex items-center space-x-3">
-                <span class="text-xs bg-[#1f1d2b] px-3.5 py-1.5 rounded-lg border border-cardborder text-gray-200 font-mono tracking-tight flex items-center shadow-inner">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2.5 inline-block animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                    <span id="liveClockText"><?= date('M d, Y h:i:s A') ?></span>
-                </span>
-                <!-- Real-time connection status (asset/js/realtime.js) -->
-                <span class="text-xs bg-[#1f1d2b] px-3 py-1.5 rounded-lg border border-cardborder text-textmuted" data-realtime-status>Offline</span>
-                <!-- Open Leave History panel -->
-                <button
-                    type="button"
-                    id="openHistoryBtn"
-                    title="View your leave history"
-                    class="flex items-center space-x-2 text-xs font-semibold bg-accent hover:bg-accenthover text-white px-4 py-2 rounded-xl transition-all shadow-md"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span>Leave History</span>
-                </button>
-            </div>
-        </header>
-
-        <div class="p-8 max-w-[1400px] w-full mx-auto space-y-6">
+        <div class="emp-leave-content max-w-[1400px] w-full mx-auto space-y-6">
 
             <!-- Flash Notifications -->
             <?php if ($message !== ''): ?>
@@ -676,7 +564,7 @@ if (!function_exists('e')) {
                             name="leave_type_id"
                             required
                             onchange="handleLeaveTypeChange(this.value)"
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                             <option value="">-- Select Leave Type --</option>
 
                             <?php foreach ($leaveTypes as $type): ?>
@@ -706,7 +594,7 @@ if (!function_exists('e')) {
                             maxlength="150"
                             value="<?= e($otherLeaveType) ?>"
                             placeholder="e.g. Sabbatical Leave, Bereavement Extension, etc."
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">leave_types</code> upon submission.</p>
                     </div>
 
@@ -725,7 +613,7 @@ if (!function_exists('e')) {
                                 required
                                 value="<?= e($startDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         </div>
 
                         <div>
@@ -741,12 +629,12 @@ if (!function_exists('e')) {
                                 required
                                 value="<?= e($endDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
                         </div>
                     </div>
 
                     <!-- Calculated Duration Badge -->
-                    <div id="days_preview" class="hidden p-3 bg-[#150e26] border border-cardborder rounded-xl flex items-center justify-between text-xs">
+                    <div id="days_preview" class="hidden p-3 bg-[#0e1430] border border-cardborder rounded-xl flex items-center justify-between text-xs">
                         <span class="text-textmuted">Requested Duration:</span>
                         <span id="days_count" class="font-bold text-cyan-400 text-sm">0 calendar day(s)</span>
                     </div>
@@ -762,7 +650,7 @@ if (!function_exists('e')) {
                             rows="3"
                             required
                             placeholder="Please provide details about your leave application..."
-                            class="w-full bg-[#1b0d35] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors"><?= e($reason) ?></textarea>
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors"><?= e($reason) ?></textarea>
                     </div>
 
                     <div class="pt-2 flex items-center space-x-4">
@@ -772,7 +660,7 @@ if (!function_exists('e')) {
                             name="form_action"
                             value="submit"
                             <?= !$canSubmit ? 'disabled' : '' ?>
-                            class="<?= !$canSubmit ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(71,99,255,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center">
+                            class="<?= !$canSubmit ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                             </svg>
@@ -799,7 +687,7 @@ if (!function_exists('e')) {
                         </h3>
                         <p class="text-xs text-textmuted mt-0.5">Real-time status updates from the database</p>
                     </div>
-                    <span class="text-xs text-textmuted bg-[#150e26] px-3 py-1 rounded-lg border border-cardborder">
+                    <span class="text-xs text-textmuted bg-[#0e1430] px-3 py-1 rounded-lg border border-cardborder">
                         Total Requests: <?= count($leaveLogs) ?>
                     </span>
                 </div>
@@ -833,7 +721,7 @@ if (!function_exists('e')) {
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($leaveLogs as $log): ?>
-                                    <tr class="hover:bg-[#150a25] transition-colors">
+                                    <tr class="hover:bg-[#0e1430] transition-colors">
                                         <td class="py-3.5 px-4 font-semibold text-white">
                                             <?= e($log['leave_name']) ?>
                                         </td>
@@ -898,8 +786,7 @@ if (!function_exists('e')) {
                 </div>
             </div>
 
-        </div>
-    </main>
+        </div><!-- /.emp-leave-content -->
 
     <script>
         function handleLeaveTypeChange(val) {
@@ -946,29 +833,6 @@ if (!function_exists('e')) {
             document.getElementById('days_preview').classList.add('hidden');
         }
 
-        // Real-Time Running Clock (updates live every second without refreshing)
-        function updateLiveClock() {
-            const el = document.getElementById('liveClockText');
-            if (!el) return;
-            const now = new Date();
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[now.getMonth()];
-            const day = String(now.getDate()).padStart(2, '0');
-            const year = now.getFullYear();
-
-            let hours = now.getHours();
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-
-            hours = hours % 12;
-            hours = hours ? String(hours).padStart(2, '0') : '12';
-
-            el.textContent = `${month} ${day}, ${year} ${hours}:${minutes}:${seconds} ${ampm}`;
-        }
-        setInterval(updateLiveClock, 1000);
-        updateLiveClock();
-
         // 24-Hour Cooldown Countdown Timer
         let cooldownRemaining = <?= (int)$cooldownSecondsRemaining ?>;
         if (cooldownRemaining > 0) {
@@ -985,7 +849,7 @@ if (!function_exists('e')) {
                     }
                     if (submitBtn) {
                         submitBtn.disabled = false;
-                        submitBtn.className = "bg-accent hover:bg-accenthover text-white font-semibold text-sm py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(71,99,255,0.4)] transition-all flex items-center";
+                        submitBtn.className = "bg-accent hover:bg-accenthover text-white font-semibold text-sm py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all flex items-center";
                     }
                     if (submitBtnText) {
                         submitBtnText.textContent = "Submit Leave Application";
@@ -1014,116 +878,4 @@ if (!function_exists('e')) {
             calculateDays();
         });
     </script>
-
-    <!-- ============ Leave History Slide-Over Panel ============ -->
-    <div
-        id="historyOverlay"
-        class="fixed inset-0 z-50 hidden"
-        aria-hidden="true"
-    >
-        <!-- Backdrop (click to close) -->
-        <div id="historyBackdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
-
-        <!-- Panel -->
-        <div
-            id="historyPanel"
-            class="absolute top-0 right-0 h-full w-full max-w-4xl bg-mainbg border-l border-cardborder shadow-2xl translate-x-full transition-transform duration-300 flex flex-col"
-        >
-            <div class="flex items-center justify-between px-6 py-4 border-b border-cardborder bg-sidebar">
-                <div class="flex items-center space-x-2.5">
-                    <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <h3 class="text-base font-bold text-white">Leave History</h3>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <a
-                        href="leave_history.php"
-                        target="_blank"
-                        title="Open in full page"
-                        class="text-xs font-medium text-textmuted hover:text-white px-3 py-1.5 rounded-lg hover:bg-[#1f1d2b] transition-colors flex items-center"
-                    >
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                        Full page
-                    </a>
-                    <button
-                        type="button"
-                        id="closeHistoryBtn"
-                        title="Close"
-                        class="flex items-center space-x-1.5 text-xs font-semibold bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 hover:border-rose-500 text-rose-200 hover:text-white px-3.5 py-1.5 rounded-lg transition-all"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                        <span>Close</span>
-                    </button>
-                </div>
-            </div>
-            <!-- The existing leave_history.php page is embedded here -->
-            <iframe
-                id="historyFrame"
-                title="Leave History"
-                class="flex-1 w-full bg-mainbg"
-                style="border: 0;"
-                src="about:blank"
-                data-src="leave_history.php"
-            ></iframe>
-        </div>
-    </div>
-
-    <script>
-        (function () {
-            const overlay   = document.getElementById('historyOverlay');
-            const backdrop  = document.getElementById('historyBackdrop');
-            const panel     = document.getElementById('historyPanel');
-            const frame     = document.getElementById('historyFrame');
-            const openBtn   = document.getElementById('openHistoryBtn');
-            const closeBtn  = document.getElementById('closeHistoryBtn');
-
-            function openHistory() {
-                // Load the history page lazily the first time it's opened
-                if (frame.getAttribute('src') === 'about:blank') {
-                    frame.setAttribute('src', frame.getAttribute('data-src'));
-                }
-                overlay.classList.remove('hidden');
-                overlay.setAttribute('aria-hidden', 'false');
-                // Next frame so the transition animates
-                requestAnimationFrame(function () {
-                    backdrop.classList.add('opacity-100');
-                    backdrop.classList.remove('opacity-0');
-                    panel.classList.remove('translate-x-full');
-                });
-                document.body.style.overflow = 'hidden';
-            }
-
-            function closeHistory() {
-                backdrop.classList.add('opacity-0');
-                backdrop.classList.remove('opacity-100');
-                panel.classList.add('translate-x-full');
-                document.body.style.overflow = '';
-                setTimeout(function () {
-                    overlay.classList.add('hidden');
-                    overlay.setAttribute('aria-hidden', 'true');
-                }, 300);
-            }
-
-            openBtn.addEventListener('click', openHistory);
-            closeBtn.addEventListener('click', closeHistory);
-            backdrop.addEventListener('click', closeHistory);
-            document.addEventListener('keydown', function (ev) {
-                if (ev.key === 'Escape' && !overlay.classList.contains('hidden')) {
-                    closeHistory();
-                }
-            });
-
-            // Real-time: when one of this employee's requests changes, refresh
-            // the history panel if it has been opened (the toast offers a
-            // page refresh so a half-filled form is not lost).
-            window.addEventListener('hris:realtime', function () {
-                if (frame.getAttribute('src') !== 'about:blank' && frame.contentWindow) {
-                    frame.contentWindow.location.replace(frame.getAttribute('data-src'));
-                }
-            });
-        })();
-    </script>
-    <!-- Real-time updates: only this employee's own leave events arrive here -->
-    <script src="../asset/js/realtime.js" data-refresh="prompt" defer></script>
-</body>
-
-</html>
+<?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>

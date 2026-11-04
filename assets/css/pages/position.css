@@ -1,5 +1,5 @@
 /* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
 @import url("../hris-base.css");
 
-/* POSITION PAGE — position creation form and list */
-.page-position .content>form{max-width:850px;padding:22px;border:1px solid var(--line);border-radius:14px;background:#160b25;margin-bottom:25px}.page-position .content>table{margin-top:10px;border:1px solid var(--line)}
+/* POSITION PAGE — uses the shared page scaffolding (.page-head, .panel). */
+.page-position .panel-body textarea{min-height:80px}
