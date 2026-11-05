@@ -23,6 +23,9 @@ class LeaveAuditLog
     public const ACTION_CANCELLED = 'Cancelled';
     public const ACTION_APPROVED  = 'Approved';
     public const ACTION_REJECTED  = 'Rejected';
+    // A scheduled nudge to HR that a request has been Pending for a while.
+    // It does not change the request's status (old_status == new_status).
+    public const ACTION_REMINDER  = 'Reminder';
 
     /** SQLSTATE for "table does not exist" (MySQL 42S02, Postgres 42P01). */
     private const MISSING_TABLE_CODES = ['42S02', '42P01'];

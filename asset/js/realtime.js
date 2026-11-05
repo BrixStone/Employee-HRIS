@@ -56,6 +56,7 @@
 
   const COLORS = {
     filed: '#3b82f6', approved: '#10b981', rejected: '#f43f5e', cancelled: '#9ca3af',
+    reminder: '#f59e0b',
   };
 
   function toast(title, body, action, withRefresh) {
@@ -135,6 +136,10 @@
         return forHr
           ? ['Request ' + ref + ' cancelled', who + ' cancelled ' + leave + dates + '.']
           : ['Leave request cancelled', 'Your ' + leave + dates + ' ' + ref + ' was cancelled.'];
+      case 'Reminder':
+        return forHr
+          ? ['Reminder: request ' + ref + ' is waiting', who + "'s " + leave + dates + ' still needs review.']
+          : ['Your leave is still pending', 'Your ' + leave + dates + ' ' + ref + ' is awaiting HR review.'];
       default:
         return ['Leave update ' + ref, leave + ' is now ' + (ev.new_status || 'updated') + '.'];
     }
@@ -146,9 +151,12 @@
     const domEvent = new CustomEvent('hris:realtime', { detail: ev, cancelable: true });
     const handled = !window.dispatchEvent(domEvent); // page called preventDefault()
 
-    toast(title, body, action, !handled && refreshMode === 'prompt');
+    // A reminder does not change any request, so never prompt/auto-reload for it.
+    const isReminder = action === 'reminder';
 
-    if (!handled && refreshMode === 'auto') {
+    toast(title, body, action, !handled && !isReminder && refreshMode === 'prompt');
+
+    if (!handled && !isReminder && refreshMode === 'auto') {
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(reloadPage, 2500);
     }

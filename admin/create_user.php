@@ -1,4 +1,3 @@
-
 <?php
 require_once __DIR__ . '/../authentication/guard.php';
 require_role(['admin']);
