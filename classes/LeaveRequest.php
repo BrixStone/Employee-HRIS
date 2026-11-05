@@ -1,4 +1,4 @@
-classes/LeaveRequest.php<?php
+<?php
 
 require_once __DIR__ . '/LeaveAuditLog.php';
 
@@ -210,6 +210,50 @@ class LeaveRequest
             $actor + ['id' => $hrUserId, 'role' => 'hr']
         );
         return true;
+    }
+
+    /**
+     * Record a reminder that this request is still waiting for HR, and push a
+     * realtime "leave.reminder" event to the employee and HR. The request's
+     * status is unchanged (it stays Pending). Returns false if the request is
+     * not found or no longer Pending.
+     *
+     * @param array $actor Who/what sent the reminder (usually the scheduler).
+     */
+    public function remind(int $requestId, array $actor = [], ?string $remarks = null): bool {
+        $st = $this->pdo->prepare("SELECT employee_id, status FROM leave_requests WHERE id = :id LIMIT 1");
+        $st->execute(['id' => $requestId]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row || $row['status'] !== 'Pending') {
+            return false; // nothing to remind about
+        }
+
+        // old == new (Pending) because a reminder does not change the status.
+        return $this->audit()->log(
+            $requestId,
+            (int)$row['employee_id'],
+            LeaveAuditLog::ACTION_REMINDER,
+            'Pending',
+            'Pending',
+            $actor + ['role' => 'system'],
+            $remarks
+        );
+    }
+
+    /** How many reminders have already been logged for this request. */
+    public function countReminders(int $requestId): int {
+        try {
+            $st = $this->pdo->prepare("
+                SELECT COUNT(*) FROM leave_request_logs
+                WHERE leave_request_id = :id AND action = :action
+            ");
+            $st->execute(['id' => $requestId, 'action' => LeaveAuditLog::ACTION_REMINDER]);
+            return (int)$st->fetchColumn();
+        } catch (PDOException $e) {
+            // Audit table may not exist yet on a fresh install; treat as none.
+            return 0;
+        }
     }
 
     private function audit(): LeaveAuditLog {
