@@ -1,0 +1,444 @@
+/* =====================================================================
+   MY PROFILE — page styles (loaded on top of hris-base.css)
+
+   HOW TO READ THIS FILE
+   - It is split into sections. Each section starts with a "SECTION:" label.
+   - Use Ctrl+F and search for the label (e.g. "SECTION: STRENGTH METER")
+     to jump straight to the part you want.
+   - One setting per line, so each line is easy to find and change.
+
+   CONTENTS
+   1. SECTION: ALERTS            success / error message boxes
+   2. SECTION: PROFILE HEADER    the top card (avatar + name + status)
+   3. SECTION: AVATAR + RING     the clickable photo with the glowing ring
+   4. SECTION: INFO CARDS        the Personal Information cards
+   5. SECTION: STRENGTH METER    the "Profile strength" bar + chips
+   6. SECTION: ACTIVE DOT        the pulsing dot on the status pill
+   7. SECTION: REDUCED MOTION    holds animations still when asked
+   (Phone layout lives inside SECTION 4, kept in its original place.)
+   ===================================================================== */
+
+@import url("../hris-base.css");
+
+
+/* =====================================================================
+   1. SECTION: ALERTS
+   Shown after a profile photo upload (success or error).
+   ===================================================================== */
+
+.alert {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.alert-success {
+  color: #7cf2d6;
+  background: rgba(52, 211, 153, .12);
+  border: 1px solid rgba(52, 211, 153, .35);
+}
+
+.alert-error {
+  color: #ffb4b4;
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .35);
+}
+
+
+/* =====================================================================
+   2. SECTION: PROFILE HEADER
+   The top card holding the avatar, name, status and strength meter.
+   ===================================================================== */
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;              /* lets the strength meter drop below on narrow screens */
+  gap: 24px;
+  margin-bottom: 20px;
+  padding: 28px;
+}
+
+/* Note: the name/email text rules (.profile-identity) live in the AVATAR + RING
+   section below, kept in their original order so nothing can shift. */
+
+
+/* =====================================================================
+   3. SECTION: AVATAR + RING
+   The round photo with the animated gradient ring and the small
+   camera badge for changing the photo.
+   ===================================================================== */
+
+/* The photo itself: cropped to a circle (the ring is drawn by the wrapper) */
+.profile-avatar {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  flex: 0 0 92px;
+  object-fit: cover;
+  display: block;
+}
+
+/* The upload form wrapper around the avatar */
+#profileAvatarForm {
+  margin: 0;
+  flex: 0 0 92px;
+}
+
+/* The clickable button that holds the photo + ring */
+.profile-avatar-btn {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  min-height: 0;
+  padding: 4px;                 /* ring thickness */
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  display: block;
+  isolation: isolate;
+}
+
+/* The glowing gradient ring.
+   Uses the shared --pocket-angle / pocket-flow animation from hris-base.css. */
+.profile-avatar-btn::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from var(--pocket-angle),
+    #76f5e8, #3b82f6, #8b5cf6, #aadcff, #22d3ee, #76f5e8
+  );
+  filter: saturate(1.4) drop-shadow(0 0 12px rgba(118, 245, 232, .5));
+  animation: pocket-flow 3s linear infinite;
+}
+
+/* A dark disc behind the photo so the gradient only shows as a thin ring */
+.profile-avatar-btn::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.profile-avatar-btn .profile-avatar {
+  width: 100%;
+  height: 100%;
+  box-shadow: 0 10px 28px rgba(4, 8, 22, .5);
+}
+
+/* Fallback for older browsers that cannot animate the angle: spin instead */
+@supports not (background: conic-gradient(from var(--pocket-angle), red, blue)) {
+  .profile-avatar-btn::before {
+    animation: pocket-spin 3s linear infinite;
+  }
+}
+
+/* Reduced motion: hold the ring still */
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar-btn::before {
+    animation: none;
+  }
+}
+
+/* The small camera badge in the corner of the avatar */
+.profile-avatar-edit {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  color: #07122b;
+  border: 3px solid var(--panel);
+  box-shadow: 0 4px 10px rgba(4, 8, 22, .5);
+  transition: transform .15s ease;
+}
+
+.profile-avatar-edit svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Badge grows slightly on hover / keyboard focus */
+.profile-avatar-btn:hover .profile-avatar-edit,
+.profile-avatar-btn:focus-visible .profile-avatar-edit {
+  transform: scale(1.1);
+}
+
+.profile-avatar-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 4px;
+}
+
+/* The name and email text next to the avatar (kept here to preserve the
+   original rule order). */
+.profile-identity h1 {
+  margin: 0 0 4px;
+  font-size: clamp(22px, 2vw, 28px);
+}
+
+.profile-identity .muted {
+  margin: 0 0 12px;
+}
+
+
+/* =====================================================================
+   4. SECTION: INFO CARDS
+   The Personal Information cards. They rise in one-by-one on load and
+   lift + glow on hover.
+   ===================================================================== */
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.info-cell {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+
+  /* Each card rises into place when the page opens (delays set below so they
+     appear one after another). "backwards" keeps the card invisible during its
+     delay, and the hover effect still works afterwards. */
+  animation: cell-rise .55s cubic-bezier(.2, .8, .25, 1) backwards;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+/* Hover: the card lifts up and glows with the login teal */
+.info-cell:hover {
+  transform: translateY(-4px);
+  border-color: rgba(118, 245, 232, .55);
+  box-shadow: 0 14px 30px rgba(4, 8, 22, .5), 0 0 18px rgba(118, 245, 232, .14);
+}
+
+/* Each card waits a little longer than the one before it */
+.info-cell:nth-child(1) { animation-delay: .15s; }
+.info-cell:nth-child(2) { animation-delay: .25s; }
+.info-cell:nth-child(3) { animation-delay: .35s; }
+.info-cell:nth-child(4) { animation-delay: .45s; }
+.info-cell:nth-child(5) { animation-delay: .55s; }
+
+@keyframes cell-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* A full-width card that spans both columns */
+.info-cell.wide {
+  grid-column: 1 / -1;
+}
+
+.info-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.info-value {
+  font-size: 15px;
+}
+
+.info-value.teal {
+  color: var(--teal);
+}
+
+.info-value.green {
+  color: var(--green);
+}
+
+/* Phones: one card per row; the header stacks and centres; the meter goes
+   full width. (Kept here, right after the info cards, to preserve the original
+   rule order so nothing shifts.) */
+@media (max-width: 640px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-head {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .profile-strength {
+    margin-left: 0;
+    max-width: 100%;
+    width: 100%;
+    text-align: left;
+  }
+}
+
+
+/* =====================================================================
+   5. SECTION: STRENGTH METER
+   The "Profile strength" bar (fills up with a shine) plus the small
+   Name / Email / Phone / Photo chips and the tip underneath.
+   ===================================================================== */
+
+.profile-strength {
+  flex: 1 1 260px;
+  max-width: 340px;
+  margin-left: auto;            /* pushes the meter to the right of the card */
+}
+
+/* The title + percentage row above the bar */
+.strength-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.strength-title {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.strength-percent {
+  color: var(--teal);
+  font-size: 24px;
+  letter-spacing: -.02em;
+}
+
+/* The empty bar track */
+.strength-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+
+/* The coloured fill: starts at 0 width and grows to var(--fill) */
+.strength-fill {
+  position: relative;
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  background: linear-gradient(90deg, #76f5e8, #3b82f6, #8b5cf6);
+  animation: strength-grow 1.4s cubic-bezier(.2, .8, .25, 1) .3s forwards;
+}
+
+@keyframes strength-grow {
+  from { width: 0; }
+  to   { width: var(--fill); }
+}
+
+/* A soft light that slides across the bar every few seconds */
+.strength-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .4) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: strength-shine 3.6s ease-in-out 1.8s infinite;
+}
+
+@keyframes strength-shine {
+  0%        { transform: translateX(-100%); }
+  45%, 100% { transform: translateX(100%); }
+}
+
+/* The small chips: Name / Email / Phone / Photo */
+.strength-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-list li {
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  animation: chip-pop .45s ease backwards;
+}
+
+/* Chips pop in one after another */
+.strength-list li:nth-child(1) { animation-delay: .5s; }
+.strength-list li:nth-child(2) { animation-delay: .65s; }
+.strength-list li:nth-child(3) { animation-delay: .8s; }
+.strength-list li:nth-child(4) { animation-delay: .95s; }
+
+/* A chip for a detail that is filled in */
+.strength-list li.done {
+  color: #7cf2d6;
+  background: rgba(52, 211, 153, .12);
+  border-color: rgba(52, 211, 153, .32);
+}
+
+/* A chip for a detail that is still missing */
+.strength-list li.todo {
+  color: var(--muted);
+  background: rgba(255, 255, 255, .04);
+}
+
+@keyframes chip-pop {
+  from { opacity: 0; transform: translateY(6px) scale(.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.strength-tip {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+
+/* =====================================================================
+   6. SECTION: ACTIVE DOT
+   The little dot on the "Active" status pill gently pulses.
+   ===================================================================== */
+
+.profile-head .pill-active::before {
+  animation: dot-pulse 2.2s ease-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%        { box-shadow: 0 0 0 0 rgba(52, 211, 153, .55); }
+  70%, 100% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+}
+
+
+/* =====================================================================
+   7. SECTION: REDUCED MOTION
+   (The phone layout lives in SECTION 4, kept in its original position.)
+   ===================================================================== */
+
+/* Reduced motion: everything still, with the bar already filled */
+@media (prefers-reduced-motion: reduce) {
+  .info-cell,
+  .strength-list li,
+  .profile-head .pill-active::before,
+  .strength-fill::after {
+    animation: none;
+  }
+
+  .strength-fill {
+    animation: none;
+    width: var(--fill);
+  }
+}
+
+/* Pocket Profile modal styles live in assets/css/pocket-profile.css
+   (shared across all employee pages, loaded by the footer template). */
