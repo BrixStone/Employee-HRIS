@@ -1,0 +1,126 @@
+/* =====================================================================
+   REPORTS PAGE — styles (loaded on top of hris-base.css)
+   Rendered inside the shared HR dashboard shell.
+
+   CONTENTS
+   1. SECTION: HEADCOUNT CARD    the card that holds the table
+   2. SECTION: TOOLBAR           the sort / direction controls
+   3. SECTION: TABLE SPACING     keeps the table flush in the card
+   4. SECTION: EXPORT BUTTON     the green "Export CSV" button
+   5. SECTION: ERROR MESSAGE     the inline debug / error box
+   ===================================================================== */
+
+@import url("../hris-base.css");
+
+
+/* =====================================================================
+   1. SECTION: HEADCOUNT CARD
+   ===================================================================== */
+
+.page-report .report-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.page-report .report-card .card-heading {
+  margin: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.page-report .report-card .card-heading h2 {
+  margin: 0;
+}
+
+
+/* =====================================================================
+   2. SECTION: TOOLBAR (sort / direction)
+   ===================================================================== */
+
+.page-report .report-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-report .report-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.page-report .report-toolbar select {
+  min-height: 38px;
+  width: auto;
+  min-width: 140px;
+}
+
+.page-report .report-toolbar .primary-button,
+.page-report .report-toolbar .button {
+  min-height: 38px;
+}
+
+
+/* =====================================================================
+   3. SECTION: TABLE SPACING
+   Keeps the table flush to the card edges.
+   ===================================================================== */
+
+.page-report .report-card table {
+  margin: 0;
+}
+
+.page-report .report-card th:first-child,
+.page-report .report-card td:first-child {
+  padding-left: 22px;
+}
+
+.page-report .report-card th:last-child,
+.page-report .report-card td:last-child {
+  padding-right: 22px;
+}
+
+
+/* =====================================================================
+   4. SECTION: EXPORT BUTTON
+   The green "Export CSV" button in the page header.
+   ===================================================================== */
+
+.page-report .btn-green {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: linear-gradient(100deg, #0f9d6b, #10b981);
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.page-report .btn-green:hover {
+  filter: brightness(1.1);
+  color: #fff;
+}
+
+
+/* =====================================================================
+   5. SECTION: ERROR MESSAGE
+   The inline debug / query error box.
+   ===================================================================== */
+
+.page-report .error {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border: 1px solid #9f314b;
+  border-radius: 10px;
+  background: #5a1830;
+  color: #ffdbe4;
+  font-size: 13px;
+}

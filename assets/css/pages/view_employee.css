@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* EMPLOYEE PROFILE PAGE — profile details and actions */
+.page-view_employee .content>ul{margin:0 0 22px;padding:18px 22px;border:1px solid var(--line);border-radius:14px;background:#160b25;list-style:none}.page-view_employee .content>ul li{padding:7px 0;border-bottom:1px solid #332442}.page-view_employee .content>ul li:last-child{border-bottom:0}.page-view_employee .content>p:first-of-type{padding:20px;border:1px solid var(--line);border-radius:14px;background:#211432}

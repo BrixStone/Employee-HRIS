@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php'; // h()
 require __DIR__ . '/../classes/Employee.php';
 require __DIR__ . '/../classes/Department.php';
 require __DIR__ . '/../classes/Position.php';
@@ -51,7 +52,6 @@ null);
 includeCurrentIfInactive($pdo, $positions, 'positions', 'title', $emp['position_id']??
 null);
 
-function h($s) {return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function sel($a,$b) { return ((string)$a === (string)$b)? 'selected': ''; }
 
 $error = '';

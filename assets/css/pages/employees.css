@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* EMPLOYEES PAGE — uses the shared page scaffolding (.page-head, .toolbar, .table-card). */
+.page-employees .metric-card .metric-number{margin-top:6px}

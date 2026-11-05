@@ -1,6 +1,7 @@
 <?php
 // admin/users.php
 require __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()
 require __DIR__ . '/../classes/User.php';
 
 session_start();
@@ -9,13 +10,6 @@ session_start();
 
 $userModel = new User($pdo);
 $users = $userModel->getAll();
-
-
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function fullName($u){
-  $m = !empty($u['middle_name']) ? $u['middle_name'].' ' : '';
-  return trim(($u['first_name'] ?? '').' '.$m.($u['last_name'] ?? ''));
-}
 ?>
 <h1>User Management</h1>
 

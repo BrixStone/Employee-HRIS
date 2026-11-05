@@ -1,0 +1,183 @@
+/* =========================================================
+   WELCOME ANIMATION — shared by the employee & HR dashboards
+   A time-aware greeting that animates in on the hero banner,
+   with a waving emoji and a shimmering gradient name.
+   ========================================================= */
+
+/* The greeting line */
+.welcome-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 8px;
+  font-size: clamp(24px, 2.4vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  color: #fff;
+}
+
+/* Each word/part fades + lifts in, staggered */
+.welcome-hero .w-part {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: welcome-rise .6s cubic-bezier(.2, .8, .25, 1) forwards;
+}
+.welcome-hero .w-part:nth-child(1) { animation-delay: .05s; }
+.welcome-hero .w-part:nth-child(2) { animation-delay: .18s; }
+.welcome-hero .w-part:nth-child(3) { animation-delay: .32s; }
+
+@keyframes welcome-rise {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* The name gets the moonlit gradient + a slow shimmer */
+.welcome-name {
+  background: linear-gradient(100deg, #76f5e8, #3b82f6, #8b5cf6, #76f5e8);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  animation: welcome-rise .6s cubic-bezier(.2, .8, .25, 1) .32s forwards,
+             welcome-shimmer 6s linear 1s infinite;
+}
+
+@keyframes welcome-shimmer {
+  to { background-position: 250% 0; }
+}
+
+/* Waving hand */
+.welcome-wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: welcome-wave 2.4s ease-in-out .6s 3;
+}
+@keyframes welcome-wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30%      { transform: rotate(16deg); }
+  20%, 40%      { transform: rotate(-8deg); }
+  50%           { transform: rotate(10deg); }
+}
+
+/* Subtitle under the greeting fades in last */
+.welcome-sub {
+  opacity: 0;
+  animation: welcome-rise .6s ease .55s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-hero .w-part,
+  .welcome-name,
+  .welcome-wave,
+  .welcome-sub {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .welcome-name { background-position: 0 0; }
+}
+
+/* =========================================================
+   ANIMATED BANNERS
+   .hero-banner  = the big dashboard banners (employee + HR)
+   .page-head    = the header banner on every inner page
+   .profile-head = the profile card banner on the My Profile page
+
+   Three layers, all around or behind the content. The text and
+   buttons never move:
+   1) a flowing gradient outline (same teal -> blue -> violet look
+      as the avatar ring and the Pocket Profile), unmistakable at a glance
+   2) big soft colour glows that drift across the banner
+   3) dashboards only: the corner orb floats gently
+
+   Everything is smooth and continuous: no flashing, no sudden changes.
+   Glow strengths are kept low where text sits so it stays easy to read.
+   ========================================================= */
+.hero-banner,
+.page-head,
+.profile-head {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;          /* keeps the glow behind the text */
+}
+
+/* 2) Drifting colour glows */
+.hero-banner::before,
+.page-head::before,
+.profile-head::before {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  z-index: -1;                 /* above the banner background, below the text */
+  pointer-events: none;
+  background:
+    radial-gradient(34% 46% at 18% 38%, rgba(118, 245, 232, .22), transparent 66%),
+    radial-gradient(38% 48% at 82% 28%, rgba(59, 130, 246, .38), transparent 66%),
+    radial-gradient(42% 52% at 56% 88%, rgba(139, 92, 246, .36), transparent 66%);
+  will-change: transform;
+  animation: banner-glow 14s ease-in-out infinite alternate;
+}
+
+@keyframes banner-glow {
+  from { transform: translate3d(-9%, -5%, 0) rotate(0deg) scale(1); }
+  to   { transform: translate3d(9%, 6%, 0) rotate(6deg) scale(1.12); }
+}
+
+/* 1) Flowing gradient outline: a 2px ring whose colours travel around the banner */
+.hero-banner::after,
+.page-head::after,
+.profile-head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 2px;                /* ring thickness */
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(100deg, #76f5e8, #3b82f6, #8b5cf6, #aadcff, #76f5e8) 0 0 / 300% 100%;
+  /* Cut out the middle so only the thin ring shows */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: banner-ring 8s linear infinite;
+}
+
+@keyframes banner-ring {
+  to { background-position: 300% 0; }   /* one full palette = seamless loop */
+}
+
+/* 3) Dashboard corner orb floats */
+.hero-orb {
+  z-index: 1;
+  will-change: transform;
+  animation: orb-float 9s ease-in-out infinite alternate;
+}
+
+@keyframes orb-float {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-34px, 26px, 0) scale(1.12); }
+}
+
+/* A touch slower on phones: calmer and easier on the battery */
+@media (max-width: 560px) {
+  .hero-banner::before,
+  .page-head::before,
+  .profile-head::before { animation-duration: 22s; }
+  .hero-banner::after,
+  .page-head::after,
+  .profile-head::after { animation-duration: 12s; }
+}
+
+/* People who ask their system for less motion get a still banner
+   (the outline stays as a static gradient border). */
+@media (prefers-reduced-motion: reduce) {
+  .hero-banner::before,
+  .hero-banner::after,
+  .page-head::before,
+  .profile-head::before,
+  .page-head::after,
+  .profile-head::after,
+  .hero-orb { animation: none; }
+}
