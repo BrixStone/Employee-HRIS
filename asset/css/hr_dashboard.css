@@ -1,0 +1,2 @@
+/* Compatibility stylesheet for original HR page links. The shared HRIS shell styles live in assets/css/hris-base.css. */
+@import url("../../assets/css/hris-base.css");

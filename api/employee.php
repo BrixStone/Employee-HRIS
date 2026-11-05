@@ -2,12 +2,7 @@
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-function respond(int $status, array $data): never
-{
-    http_response_code($status);
-    echo json_encode($data, JSON_UNESCAPED_SLASHES);
-    exit;
-}
+require_once __DIR__ . '/../config/helpers.php'; // respond()
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     header('Allow: GET');
