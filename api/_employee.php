@@ -24,8 +24,16 @@ const EMPLOYEE_FIELDS = [
     'department_id', 'position_id', 'date_hired', 'employment_type', 'employment_status',
 ];
 
-/** Fields an employee may change on their own profile. */
-const EMPLOYEE_SELF_FIELDS = ['phone', 'address'];
+/**
+ * Fields an employee may change on their OWN profile.
+ * Personal details only. Everything HR/org-related is excluded and stays
+ * read-only for employees: employee_id, employment_status, department_id,
+ * position_id, date_hired, employment_type.
+ */
+const EMPLOYEE_SELF_FIELDS = [
+    'first_name', 'middle_name', 'last_name', 'suffix',
+    'date_of_birth', 'gender', 'phone', 'email', 'address',
+];
 
 function employee_clean_phone(array $input, array &$errors): ?string
 {
@@ -42,6 +50,73 @@ function employee_clean_phone(array $input, array &$errors): ?string
 function employee_clean_address(array $input, array &$errors): ?string
 {
     return api_clean_string($input, 'address', 1000, $errors);
+}
+
+/**
+ * Validate an employee editing their OWN profile. Only the personal fields in
+ * EMPLOYEE_SELF_FIELDS are accepted; any HR/org field (employee_id,
+ * employment_status, department_id, position_id, date_hired, employment_type)
+ * is rejected before this is called. Only the fields present in $input are
+ * validated and returned, so a partial update is fine.
+ *
+ * @param array $existing The employee's current DB row (for the email check).
+ * @return array{0: array<string, mixed>, 1: array<string, string>} [values, errors]
+ */
+function employee_self_input(PDO $pdo, array $input, array $existing): array
+{
+    $errors = [];
+    api_reject_unknown($input, EMPLOYEE_SELF_FIELDS, $errors);
+
+    $sent = static fn (string $field): bool => array_key_exists($field, $input);
+    $values = [];
+
+    // first_name and last_name are NOT NULL in the table: if sent, they must be non-empty.
+    if ($sent('first_name')) {
+        $values['first_name'] = api_clean_string($input, 'first_name', 100, $errors, true);
+    }
+    if ($sent('middle_name')) {
+        $values['middle_name'] = api_clean_string($input, 'middle_name', 100, $errors);
+    }
+    if ($sent('last_name')) {
+        $values['last_name'] = api_clean_string($input, 'last_name', 100, $errors, true);
+    }
+    if ($sent('suffix')) {
+        $values['suffix'] = api_clean_string($input, 'suffix', 20, $errors);
+    }
+    if ($sent('date_of_birth')) {
+        $dob = api_clean_date($input, 'date_of_birth', $errors);
+        if ($dob !== null && $dob > date('Y-m-d')) {
+            $errors['date_of_birth'] = 'Cannot be in the future';
+        }
+        $values['date_of_birth'] = $dob;
+    }
+    if ($sent('gender')) {
+        $values['gender'] = api_clean_enum($input, 'gender', EMPLOYEE_GENDERS, $errors);
+    }
+    if ($sent('phone')) {
+        $values['phone'] = employee_clean_phone($input, $errors);
+    }
+    if ($sent('address')) {
+        $values['address'] = employee_clean_address($input, $errors);
+    }
+    if ($sent('email')) {
+        $email = api_clean_string($input, 'email', 150, $errors);
+        if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $errors['email'] = 'Must be a valid email address';
+        } elseif ($email !== null
+            && strcasecmp($email, (string)($existing['email'] ?? '')) !== 0
+            && !isset($errors['email'])) {
+            // Email doubles as a login identifier, so it must stay unique.
+            $st = $pdo->prepare("SELECT 1 FROM employees WHERE LOWER(email) = LOWER(:email) AND id <> :id LIMIT 1");
+            $st->execute(['email' => $email, 'id' => (int)$existing['id']]);
+            if ($st->fetchColumn() !== false) {
+                $errors['email'] = 'Already used by another employee';
+            }
+        }
+        $values['email'] = $email;
+    }
+
+    return [$values, $errors];
 }
 
 /**
