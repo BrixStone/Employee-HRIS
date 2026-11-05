@@ -19,6 +19,11 @@ if (empty($employeeId)) {
     exit('No employee ID found in session.');
 }
 
+// Make sure the avatar column exists before we read the row, so the saved
+// profile photo is always included (it persists in the DB per account).
+require_once __DIR__ . '/../classes/Avatar.php';
+Avatar::ensureColumn($pdo);
+
 $stmt = $pdo->prepare("
     SELECT *
     FROM employees
@@ -41,176 +46,193 @@ $fullName = trim($firstName . ' ' . $lastName);
 $user = [
     'id' => $employee['id'],
     'name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
+    'full_name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
     'email' => htmlspecialchars($employee['email'] ?? '', ENT_QUOTES, 'UTF-8'),
+    // employees table stores the contact number in `phone`
     'phone_number' => htmlspecialchars(
-        $employee['phone_number'] ?? 'Not Provided',
+        $employee['phone'] ?? 'Not Provided',
         ENT_QUOTES,
         'UTF-8'
     ),
+    // employees table stores the status in `employment_status`
     'status' => htmlspecialchars(
-        $employee['status'] ?? 'Active',
+        $employee['employment_status'] ?? 'Active',
         ENT_QUOTES,
         'UTF-8'
     ),
-    'avatar' => 'https://ui-avatars.com/api/?name='
-        . urlencode($fullName)
-        . '&background=4763ff&color=fff'
+    // Uploaded picture when present, otherwise a generated placeholder.
+    'avatar' => htmlspecialchars(Avatar::url($employee), ENT_QUOTES, 'UTF-8')
 ];
+
+$isActive = strcasecmp($user['status'], 'Active') === 0;
+
+// ---------- Profile strength: how complete is this profile? ----------
+// Each item is true when that detail has been filled in.
+$strengthChecks = [
+    'Name'  => $fullName !== '',
+    'Email' => !empty($employee['email']),
+    'Phone' => !empty($employee['phone']),
+    // true only when the employee uploaded their own photo
+    'Photo' => strpos(Avatar::url($employee), '/uploads/avatars/') !== false,
+];
+
+// Count the true items and turn them into a percentage (e.g. 3 of 4 = 75%).
+$strengthDone    = count(array_filter($strengthChecks));
+$strengthPercent = (int) round($strengthDone / count($strengthChecks) * 100);
+
+// Names of the things still missing, used for the tip under the bar.
+$strengthMissing = array_keys(array_filter($strengthChecks, fn($done) => !$done));
+
+// Flash message after an avatar upload redirect.
+$avatarFlash = $_GET['avatar'] ?? '';
+$avatarMessages = [
+    'ok'       => ['ok',    'Profile photo updated.'],
+    'invalid'  => ['error', 'That file is not a supported image (use JPG, PNG, GIF or WEBP).'],
+    'toolarge' => ['error', 'That image is too large. Please choose a file under 3 MB.'],
+    'error'    => ['error', 'Could not update your photo. Please try again.'],
+];
+[$avatarFlashKind, $avatarFlashText] = $avatarMessages[$avatarFlash] ?? [null, null];
+
+// Shell configuration
+$title = 'My Profile';
+$eyebrow = 'ACCOUNT';
+$subtitle = 'Your personal and employment details';
+$pageCss = 'emp_profile';
+require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile - HRIS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        sidebar: '#0e0d13', mainbg: '#180a2b', cardbg: '#0a0514',
-                        cardborder: '#281545', accent: '#4763ff', accenthover: '#354beb', textmuted: '#8b8994'
-                    },
-                    fontFamily: { sans: ['Inter', 'sans-serif'] }
-                }
-            }
-        }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Inter', sans-serif; }</style>
-</head>
-<body class="bg-mainbg text-white h-screen overflow-hidden flex">
+<?php if ($avatarFlashText !== null): ?>
+  <div class="alert alert-<?= $avatarFlashKind === 'ok' ? 'success' : 'error' ?>"><?= htmlspecialchars($avatarFlashText) ?></div>
+<?php endif; ?>
 
-    <!-- Sidebar -->
-    <aside class="w-64 bg-sidebar flex flex-col justify-between border-r border-cardborder">
-        <div>
-            <div class="h-20 flex items-center px-6 border-b border-cardborder mb-6">
-                <div class="w-8 h-8 rounded bg-accent flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(71,99,255,0.5)]">
-                    <div class="w-3 h-3 bg-white rounded-full"></div>
-                </div>
-                <div>
-                    <h1 class="font-bold text-lg leading-tight">HRIS</h1>
-                    <p class="text-[10px] text-textmuted">Employee Portal</p>
-                </div>
-            </div>
+<section class="profile-head card">
+  <form id="profileAvatarForm" action="/employee/upload_avatar.php" method="post" enctype="multipart/form-data">
+    <button type="button" class="profile-avatar-btn" id="profileAvatarBtn" title="Change profile photo" aria-label="Change profile photo">
+      <img src="<?= $user['avatar'] ?>" alt="Profile avatar" class="profile-avatar">
+      <span class="profile-avatar-edit" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="2"/>
+          <path d="M4 8.5 5.4 6A2 2 0 0 1 7.1 5h9.8a2 2 0 0 1 1.7 1l1.4 2.5A2 2 0 0 1 21 9.6V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.6c0-.38.1-.76.3-1.1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+      </span>
+    </button>
+    <input type="file" name="avatar" id="profileAvatarInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+  </form>
+  <div class="profile-identity">
+    <h1><?= $user['name'] ?></h1>
+    <p class="muted"><?= $user['email'] ?></p>
+    <span class="pill <?= $isActive ? 'pill-active' : 'pill-inactive' ?>"><?= $user['status'] ?></span>
+  </div>
 
-            <nav class="px-4 space-y-1">
-                <a href="dashboard.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                    <span class="font-medium text-sm">Dashboard</span>
-                </a>
-                <a href="profile.php" class="flex items-center px-4 py-2.5 bg-[#1f1d2b] text-white rounded-lg group transition-colors border-l-2 border-accent">
-                    <div class="w-5 h-5 mr-3 flex items-center justify-center"><div class="w-1.5 h-1.5 rounded-full bg-accent"></div></div>
-                    <span class="font-medium text-sm text-accent">My Profile</span>
-                </a>
-                <a href="attendance.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <div class="w-5 h-5 mr-3 flex items-center justify-center"><div class="w-3 h-3 border-2 border-textmuted rounded-sm"></div></div>
-                    <span class="font-medium text-sm">Attendance</span>
-                </a>
-                <a href="file_leave.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    <span class="font-medium text-sm">Leave</span>
-                </a>
-                <a href="payslips.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                    <span class="font-medium text-sm">Payslips</span>
-                </a>
-                <a href="settings.php" class="flex items-center px-4 py-2.5 text-textmuted hover:text-white hover:bg-[#15131e] rounded-lg transition-colors">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    <span class="font-medium text-sm">Settings</span>
-                </a>
-                
-                <div class="pt-4 mt-4 border-t border-cardborder">
-                    <a href="../authentication/login.php" class="flex items-center px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-[#15131e] rounded-lg transition-colors">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                        <span class="font-medium text-sm">Log Out</span>
-                    </a>
-                </div>
-            </nav>
-        </div>
+  <!-- Profile strength meter: the bar fills up and the number counts up -->
+  <div class="profile-strength">
+    <div class="strength-top">
+      <span class="strength-title">Profile strength</span>
+      <strong class="strength-percent" id="strengthPercent" data-target="<?= $strengthPercent ?>"><?= $strengthPercent ?>%</strong>
+    </div>
 
-        <div class="p-6 border-t border-cardborder">
-            <div class="flex items-center space-x-3 overflow-hidden">
-                <img src="<?= $user['avatar'] ?>" alt="Profile" class="w-10 h-10 rounded-full border border-gray-700 flex-shrink-0">
-                <div class="truncate">
-                    <h4 class="text-sm font-semibold truncate"><?= $user['name'] ?></h4>
-                    <p class="text-xs text-textmuted truncate"><?= $user['email'] ?></p>
-                </div>
-            </div>
-        </div>
-    </aside>
+    <div class="strength-bar" role="progressbar" aria-label="Profile strength"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?= $strengthPercent ?>">
+      <!-- --fill tells the CSS how far the bar should grow -->
+      <span class="strength-fill" style="--fill: <?= $strengthPercent ?>%"></span>
+    </div>
 
-    <!-- Main Content -->
-    <main class="flex-1 flex flex-col overflow-y-auto">
-        <header class="h-20 border-b border-cardborder flex items-center justify-between px-8 bg-mainbg sticky top-0 z-10">
-            <h2 class="text-xl font-bold">My Profile</h2>
-            <div class="flex items-center space-x-6">
-                <span id="live-datetime" class="text-sm text-textmuted font-medium tracking-wide"></span>
-            </div>
-        </header>
+    <ul class="strength-list">
+      <?php foreach ($strengthChecks as $label => $done): ?>
+        <li class="<?= $done ? 'done' : 'todo' ?>"><?= $done ? '✓' : '○' ?> <?= htmlspecialchars($label) ?></li>
+      <?php endforeach; ?>
+    </ul>
 
-        <div class="p-8 max-w-[1000px] w-full mx-auto space-y-6">
-            
-            <!-- Profile Card Header with Dynamic Status from Database -->
-            <div class="bg-cardbg border border-cardborder rounded-2xl p-8 shadow-lg flex items-center space-x-6">
-                <img src="<?= $user['avatar'] ?>" alt="Profile Avatar" class="w-24 h-24 rounded-full border-2 border-accent shadow-lg">
-                <div>
-                    <h3 class="text-2xl font-bold"><?= $user['name'] ?></h3>
-                    <p class="text-textmuted text-sm mt-1"><?= $user['email'] ?></p>
-                    <span class="inline-block mt-3 bg-[#042f2e] text-[#2dd4bf] text-xs font-semibold px-3 py-1 rounded-md">
-                        <?= $user['status'] ?>
-                    </span>
-                </div>
-            </div>
+    <p class="strength-tip">
+      <?php if (empty($strengthMissing)): ?>
+        Your profile is complete. Nice work!
+      <?php else: ?>
+        Add your <?= htmlspecialchars(implode(' and ', $strengthMissing)) ?> to reach 100%.
+      <?php endif; ?>
+    </p>
+  </div>
+</section>
 
-            <!-- Profile Details Grid -->
-            <div class="bg-cardbg border border-cardborder rounded-2xl p-8 shadow-lg space-y-6">
-                <h3 class="text-lg font-bold border-b border-cardborder pb-4">Personal Information</h3>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-[#150a25] border border-cardborder rounded-xl p-4">
-                        <p class="text-xs text-textmuted mb-1">Employee ID</p>
-                        <p class="text-base font-semibold">#<?= $user['id'] ?></p>
-                    </div>
+<article class="card">
+  <div class="card-heading"><div><p class="eyebrow">DETAILS</p><h2>Personal information</h2></div></div>
+  <div class="info-grid">
+    <div class="info-cell">
+      <span class="info-label">Employee ID</span>
+      <strong class="info-value">#<?= htmlspecialchars((string)$user['id']) ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Full Name</span>
+      <strong class="info-value"><?= $user['name'] ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Email Address</span>
+      <strong class="info-value teal"><?= $user['email'] ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Phone Number</span>
+      <strong class="info-value"><?= $user['phone_number'] ?></strong>
+    </div>
+    <div class="info-cell wide">
+      <span class="info-label">Employment Status</span>
+      <strong class="info-value <?= $isActive ? 'green' : '' ?>"><?= $user['status'] ?></strong>
+    </div>
+  </div>
+</article>
 
-                    <div class="bg-[#150a25] border border-cardborder rounded-xl p-4">
-                        <p class="text-xs text-textmuted mb-1">Full Name</p>
-                        <p class="text-base font-semibold"><?= $user['name'] ?></p>
-                    </div>
+<?php
+// Feed the shared Pocket Profile modal (rendered by the footer) with this
+// page's full details so "About Me" shows ID, phone and status too.
+$pocketProfile = [
+    'id'           => $user['id'],
+    'email'        => $employee['email'] ?? '',
+    'phone'        => $employee['phone'] ?? 'Not Provided',
+    'status'       => $user['status'],
+    'avatar'       => Avatar::url($employee),
+    // Only the profile page offers the "change photo" control.
+    'allow_upload' => true,
+];
 
-                    <div class="bg-[#150a25] border border-cardborder rounded-xl p-4">
-                        <p class="text-xs text-textmuted mb-1">Email Address</p>
-                        <p class="text-base font-semibold text-[#06b6d4]"><?= $user['email'] ?></p>
-                    </div>
+// Wire the on-page profile-head avatar to the file browser + auto-submit.
+$footerExtra = <<<'HTML'
+<script>
+  (function () {
+    var input = document.getElementById('profileAvatarInput');
+    var form  = document.getElementById('profileAvatarForm');
+    if (!input || !form) return;
+    function pick(e) { if (e) e.preventDefault(); input.click(); }
+    var btn = document.getElementById('profileAvatarBtn');
+    if (btn) btn.addEventListener('click', pick);
+    input.addEventListener('change', function () {
+      if (input.files && input.files.length > 0) form.submit();
+    });
+  })();
+</script>
 
-                    <div class="bg-[#150a25] border border-cardborder rounded-xl p-4">
-                        <p class="text-xs text-textmuted mb-1">Phone Number</p>
-                        <p class="text-base font-semibold"><?= $user['phone_number'] ?></p>
-                    </div>
+<script>
+  // Count the "Profile strength" number up from 0 so it grows together with the bar.
+  (function () {
+    var el = document.getElementById('strengthPercent');
+    if (!el) return;
 
-                    <div class="bg-[#150a25] border border-cardborder rounded-xl p-4 md:col-span-2">
-                        <p class="text-xs text-textmuted mb-1">Employment Status</p>
-                        <p class="text-base font-semibold text-emerald-400"><?= $user['status'] ?></p>
-                    </div>
-                </div>
-            </div>
+    var target = parseInt(el.getAttribute('data-target'), 10) || 0;
 
-        </div>
-    </main>
+    // Nothing to count, or the visitor asked for less motion: just show the final number.
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (target === 0 || reduceMotion) { el.textContent = target + '%'; return; }
 
-    <script>
-        function updateDateTime() {
-            const now = new Date();
-            const dateOptions = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' };
-            const formattedDate = now.toLocaleDateString('en-US', dateOptions);
-            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            const formattedTime = now.toLocaleTimeString('en-US', timeOptions);
-            document.getElementById('live-datetime').textContent = `${formattedDate} | ${formattedTime}`;
-        }
-        updateDateTime();
-        setInterval(updateDateTime, 1000);
-    </script>
-</body>
-</html>
+    el.textContent = '0%';
+    var current = 0;
+
+    // Wait a moment (the bar starts after 0.3s), then add 1 at a time.
+    setTimeout(function () {
+      var timer = setInterval(function () {
+        current = current + 1;
+        el.textContent = current + '%';
+        if (current >= target) clearInterval(timer);   // stop when we reach the goal
+      }, 1300 / target);                                // whole count takes about 1.3 seconds
+    }, 300);
+  })();
+</script>
+HTML;
+require __DIR__ . '/../templates/employeeTemplates/footer.php';
+?>

@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* POSITION PAGE — uses the shared page scaffolding (.page-head, .panel). */
+.page-position .panel-body textarea{min-height:80px}

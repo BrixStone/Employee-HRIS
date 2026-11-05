@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* ADD EMPLOYEE PAGE — grouped data-entry form */
+.page-add_employee .content>form{padding:24px;border:1px solid var(--line);border-radius:16px;background:#160b25}.page-add_employee h2{margin:22px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--line)}.page-add_employee h2:first-child{margin-top:0}

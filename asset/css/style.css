@@ -1,0 +1,874 @@
+
+/* =========================================================
+   RESET
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #000;
+    font-family: Inter, Arial, sans-serif;
+}
+
+body {
+    overflow: hidden;
+}
+
+.hris-login {
+    width: 100%;
+    height: 100vh;
+    min-height: 700px;
+    position: relative;
+    overflow: hidden;
+    text-align: left;
+    font-size: 16px;
+    color: #fff;
+    font-family: Inter, Arial, sans-serif;
+}
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+.boliviainteligente-vzg-skzowiu {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.boliviainteligente-vzg-skzowiu-child {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.boliviainteligente-vzg-skzowiu-item {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(40, 40, 40, 0.31);
+}
+
+/* =========================================================
+   LOGO
+========================================================= */
+
+.logo-group {
+    position: absolute;
+    top: 24px;
+    left: 27px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    z-index: 20;
+}
+
+.logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #8b5cf6, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-wrapper-captioncalendar {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-wrapper-captioncalendar svg {
+    width: 100%;
+    height: 100%;
+}
+
+.logo-text-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+}
+
+.hris {
+    font-weight: 800;
+}
+
+.better-people-brighter {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+/* =========================================================
+   LEFT SIDE HEADING
+========================================================= */
+
+.heading-stack {
+    position: absolute;
+    top: clamp(100px, 14vh, 140px);
+    left: clamp(40px, 6vw, 85px);
+    width: min(650px, 46vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: clamp(58px, 6vw, 90px);
+    z-index: 5;
+}
+
+.heading-stack > .sign-in {
+    align-self: stretch;
+    line-height: 1.05;
+    font-weight: 800;
+}
+
+.back {
+    color: #0051ff;
+}
+
+.log-in-to {
+    max-width: 620px;
+    font-size: 24px;
+    line-height: 150%;
+    color: rgba(255, 255, 255, 0.93);
+}
+
+/* =========================================================
+   FEATURES
+========================================================= */
+
+.features-list {
+    position: absolute;
+    left: clamp(40px, 5vw, 85px);
+    bottom: clamp(200px, 13vh, 125px);
+    width: min(484px, 40vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+    z-index: 5;
+}
+
+.feature-row,
+.feature-row2,
+.feature-row3 {
+    position: relative;
+    width: 100%;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.feature-row3 {
+    position: absolute;
+    left: clamp(40px, 5vw, 85px);
+    bottom: clamp(120px, 6vh, 55px);
+    width: min(484px, 40vw);
+    z-index: 5;
+}
+
+.icon-circle,
+.icon-circle3 {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    margin: 0;
+    border-radius: 20px;
+    background-color: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-wrapper-captionbriefcase,
+.icon-wrapper-captionuser {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-wrapper-captionbriefcase svg,
+.icon-wrapper-captionuser svg {
+    width: 100%;
+    height: 100%;
+}
+
+.feature-text,
+.feature-text2,
+.feature-text3 {
+    position: static;
+    width: calc(100% - 68px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin: 0;
+}
+
+.track-your-attendance {
+    font-weight: 600;
+}
+
+.view-your-attendance {
+    color: #9ca3af;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   LOGIN CONTAINER
+========================================================= */
+
+.login-container {
+    position: absolute;
+    top: 50%;
+    right: clamp(40px, 10vw, 180px);
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    z-index: 10;
+}
+
+/* =========================================================
+   LOGIN CARD
+========================================================= */
+
+.right-signin-card {
+    width: 412px;
+    min-height: 553px;
+    border-radius: 24px;
+    background:
+        linear-gradient(rgba(30, 26, 46, 0.50),
+                        rgba(30, 26, 46, 0.50)) padding-box,
+        linear-gradient(
+            -28.59deg,
+            #aadcff,
+            rgba(106, 55, 221, 0) 41.07%,
+            rgba(138, 137, 238, 0) 57.06%,
+            #aadcff
+        ) border-box;
+    border: 3px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 22px;
+    padding: 40px;
+    position: relative;
+    isolation: isolate;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   SIGN IN HEADER
+========================================================= */
+
+.signin-header {
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    z-index: 4;
+    font-size: 40px;
+}
+
+.sign-in {
+    position: relative;
+}
+
+.enter-your-credentials {
+    font-size: 16px;
+    color: #9ca3af;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   FORM FIELDS
+========================================================= */
+
+.right-signin-card form {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.form-fields {
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    isolation: isolate;
+    gap: 26px;
+    z-index: 3;
+    color: #fff;
+}
+
+/* =========================================================
+   USERNAME / EMAIL FIELD
+========================================================= */
+
+.field-email {
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    z-index: 0;
+}
+
+.input-email-box {
+    width: 100%;
+    height: 48px;
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    z-index: 0;
+}
+
+.input-email-box:focus-within {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.youexamplecom {
+    flex: 1 1 auto;
+    width: auto;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0 28px 0 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #edf0f6;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    z-index: 2;
+}
+
+.youexamplecom::placeholder {
+    color: #c3c8d5;
+    opacity: 1;
+}
+
+.user-icon {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    z-index: 3;
+    pointer-events: none;
+}
+
+.line {
+    width: 100%;
+    height: 1px;
+    position: relative;
+    margin-top: 2px;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    z-index: 1;
+}
+
+/* =========================================================
+   PASSWORD FIELD
+========================================================= */
+
+.field-password {
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    z-index: 1;
+}
+
+.input-password-box {
+    width: 100%;
+    height: 48px;
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    z-index: 0;
+}
+
+.input-password-box:focus-within {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.enter-your-password {
+    flex: 1 1 auto;
+    width: auto;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0 60px 0 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #edf0f6;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    z-index: 2;
+}
+
+.enter-your-password::placeholder {
+    color: #c3c8d5;
+    opacity: 1;
+}
+
+.user-icon2 {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    z-index: 3;
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+/* Hide the browser's native password reveal control (the extra "black eye").
+   Edge/IE expose it via ::-ms-reveal; some Chromium builds / password managers
+   inject their own control, so suppress the common WebKit hooks too. */
+.enter-your-password::-ms-reveal,
+.enter-your-password::-ms-clear {
+    display: none;
+}
+
+.enter-your-password::-webkit-credentials-auto-fill-button,
+.enter-your-password::-webkit-strong-password-auto-fill-button,
+.enter-your-password::-webkit-contacts-auto-fill-button {
+    visibility: hidden;
+    display: none !important;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+}
+
+/* Password visibility toggle (clickable eye icon) */
+.password-toggle {
+    width: 24px;
+    height: 24px;
+    position: absolute;
+    top: 50%;
+    right: 36px;
+    transform: translateY(-50%);
+    z-index: 5;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0.75;
+    transition: opacity 0.15s ease;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    opacity: 1;
+    outline: none;
+}
+
+.password-toggle svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.password-toggle .icon-eye-off {
+    display: none;
+}
+
+.password-toggle.is-visible .icon-eye {
+    display: none;
+}
+
+.password-toggle.is-visible .icon-eye-off {
+    display: block;
+}
+
+.password {
+    width: 100%;
+    position: relative;
+    font-size: 14px;
+    font-weight: 400;
+    color: #edf0f6;
+    z-index: 4;
+    pointer-events: none;
+}
+
+.line2 {
+    width: 100%;
+    height: 1px;
+    position: relative;
+    margin-top: 2px;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    z-index: 2;
+}
+
+.email-address {
+    width: 100%;
+    position: relative;
+    font-size: 14px;
+    font-weight: 400;
+    color: #edf0f6;
+    z-index: 4;
+    pointer-events: none;
+}
+
+/* =========================================================
+   FORM OPTIONS
+========================================================= */
+
+.form-options {
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: -6px;
+    z-index: 5;
+    font-size: 13px;
+}
+
+.forgot-password {
+    position: relative;
+    font-weight: 500;
+    color: #3b82f6;
+    text-decoration: none;
+}
+
+.forgot-password:hover {
+    text-decoration: underline;
+}
+
+/* =========================================================
+   LOGIN BUTTON
+========================================================= */
+
+.action-button-group {
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 4px;
+    z-index: 5;
+}
+
+.btn-login {
+    width: 100%;
+    height: 46px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #76f5e8, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+    cursor: pointer;
+    color: #fff;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 15px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-login:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+}
+
+.login {
+    font-weight: 600;
+}
+
+/* =========================================================
+   LOGIN ERROR
+========================================================= */
+
+/* Inline validation: red outline on fields + error text under the field */
+.has-error .input-email-box,
+.has-error .input-password-box {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.has-error .line,
+.has-error .line2 {
+    background: #ef4444;
+}
+
+.field-error {
+    width: 100%;
+    margin: 6px 0 0;
+    color: #ff6b6b;
+    font-size: 12.5px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   SMALL LAPTOP
+========================================================= */
+
+@media (max-width: 1100px) {
+    .login-container {
+        right: 40px;
+    }
+
+    .right-signin-card {
+        width: 390px;
+    }
+
+    .heading-stack {
+        width: 40vw;
+        font-size: clamp(48px, 5vw, 75px);
+    }
+
+    .log-in-to {
+        font-size: 20px;
+    }
+
+    .features-list,
+    .feature-row3 {
+        width: 38vw;
+    }
+}
+
+/* =========================================================
+   SMALLER LAPTOP
+========================================================= */
+
+@media (max-width: 900px) {
+    .login-container {
+        right: 25px;
+    }
+
+    .right-signin-card {
+        width: 370px;
+    }
+
+    .heading-stack {
+        top: 110px;
+        left: 40px;
+        width: 38vw;
+        font-size: 48px;
+    }
+
+    .log-in-to {
+        font-size: 18px;
+    }
+
+    .features-list {
+        left: 40px;
+        bottom: 100px;
+        width: 38vw;
+        gap: 18px;
+    }
+
+    .feature-row3 {
+        left: 40px;
+        bottom: 35px;
+        width: 38vw;
+    }
+}
+
+/* =========================================================
+   TABLET / MOBILE
+========================================================= */
+
+@media (max-width: 760px) {
+    body {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .hris-login {
+        height: auto;
+        min-height: 100vh;
+        overflow: hidden;
+        padding-top: 100px;
+        padding-bottom: 50px;
+    }
+
+    .boliviainteligente-vzg-skzowiu {
+        position: absolute;
+        min-height: 100%;
+    }
+
+    .heading-stack {
+        position: relative;
+        top: auto;
+        left: auto;
+        width: calc(100% - 40px);
+        margin: 0 20px 35px;
+        font-size: 48px;
+    }
+
+    .features-list,
+    .feature-row3 {
+        display: none;
+    }
+
+    .login-container {
+        position: relative;
+        top: auto;
+        right: auto;
+        transform: none;
+        width: 100%;
+        padding: 0 20px;
+    }
+
+    .right-signin-card {
+        width: 100%;
+        max-width: 412px;
+    }
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 500px) {
+    .hris-login {
+        padding-top: 85px;
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .logo-group {
+        top: 20px;
+        left: 20px;
+    }
+
+    .heading-stack {
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        font-size: 40px;
+    }
+
+    .log-in-to {
+        font-size: 17px;
+    }
+
+    .login-container {
+        padding: 0;
+    }
+
+    .right-signin-card {
+        width: 100%;
+        padding: 30px;
+    }
+
+    .signin-header {
+        font-size: 34px;
+    }
+
+    .enter-your-credentials {
+        font-size: 14px;
+    }
+}
+
+/* =========================================================
+   VERY SMALL PHONE
+========================================================= */
+
+@media (max-width: 380px) {
+    .right-signin-card {
+        padding: 25px;
+    }
+
+    .signin-header {
+        font-size: 30px;
+    }
+}
+
+/* =========================================================
+   AMBIENT LOGIN ANIMATIONS
+   Calm, constant, on-theme motion:
+   1) the space background slowly "breathes" (very slight zoom/drift)
+   2) the sign-in card gently floats, like weightless in space
+   Both are slow and subtle so they never distract or strain the eyes.
+========================================================= */
+
+/* 1) Background slow zoom-breathing (~40s round trip) */
+.boliviainteligente-vzg-skzowiu-child {
+    transform-origin: center;
+    animation: bg-breathe 40s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes bg-breathe {
+    0%, 100% { transform: scale(1) translate3d(0, 0, 0); }
+    50%      { transform: scale(1.06) translate3d(0, -1%, 0); }
+}
+
+/* 2) Sign-in card gently floats up and down (~7s) */
+.right-signin-card {
+    animation: card-float 7s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes card-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+}
+
+/* Accessibility: hold still for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .boliviainteligente-vzg-skzowiu-child,
+    .right-signin-card {
+        animation: none;
+    }
+}

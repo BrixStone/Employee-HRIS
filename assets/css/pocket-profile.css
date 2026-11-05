@@ -1,0 +1,317 @@
+/* =====================================================================
+   POCKET PROFILE — the pop-up modal with the animated gradient outline.
+   Shared across all employee pages (loaded by the footer template).
+   Same teal #76f5e8 -> blue #3b82f6 gradient as the login screen.
+
+   HOW TO READ THIS FILE
+   - It is split into sections, each starting with a "SECTION:" label.
+   - Use Ctrl+F and search for a label to jump to that part.
+   - One setting per line.
+
+   CONTENTS
+   1. SECTION: OVERLAY           the dark backdrop behind the modal
+   2. SECTION: DIALOG            the pop-in box
+   3. SECTION: CARD + OUTLINE    the card and its glowing animated ring
+   4. SECTION: CLOSE BUTTON      the X button
+   5. SECTION: HEADER            avatar + name + status
+   6. SECTION: AVATAR UPLOAD     the clickable photo + camera badge
+   7. SECTION: ABOUT ME LIST     the details list
+   8. SECTION: RESPONSIVE        changes for small screens
+   ===================================================================== */
+
+
+/* =====================================================================
+   1. SECTION: OVERLAY
+   The dark, blurred backdrop. It starts hidden with display:none so it
+   can never flash during page load; the ".is-open" class shows it.
+   ===================================================================== */
+
+.pocket-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 20, .7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+
+.pocket-overlay.is-open {
+  display: flex;
+  opacity: 1;
+}
+
+
+/* =====================================================================
+   2. SECTION: DIALOG
+   The box that pops in when the modal opens.
+   ===================================================================== */
+
+.pocket-dialog {
+  width: 100%;
+  max-width: 420px;
+  transform: translateY(14px) scale(.96);
+  opacity: 0;
+  transition: transform .26s cubic-bezier(.2, .8, .25, 1), opacity .26s ease;
+}
+
+.pocket-overlay.is-open .pocket-dialog {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+
+/* =====================================================================
+   3. SECTION: CARD + OUTLINE
+   The card body and its glowing animated ring.
+   The ring uses --pocket-angle and the pocket-flow / pocket-spin
+   keyframes, which are defined once in hris-base.css.
+   ===================================================================== */
+
+.pocket-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 24px;
+  background: linear-gradient(155deg, rgba(20, 27, 56, .98), rgba(13, 18, 40, .99));
+  /* no overflow:hidden so the outline glow can spill past the card edges */
+  isolation: isolate;
+}
+
+/* The glowing gradient ring behind the card */
+.pocket-card::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: -4px;                 /* thicker, more visible outline */
+  border-radius: 24px;
+  background: conic-gradient(
+    from var(--pocket-angle),
+    #76f5e8, #3b82f6, #8b5cf6, #aadcff, #22d3ee, #76f5e8
+  );
+  filter: saturate(1.4) drop-shadow(0 0 14px rgba(118, 245, 232, .55));
+  animation: pocket-flow 3s linear infinite;
+}
+
+/* A solid layer on top of the ring so only a thin bright edge shows */
+.pocket-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(20, 27, 56, .98), rgba(13, 18, 40, .99));
+}
+
+/* Fallback for older browsers: spin the ring instead of flowing it */
+@supports not (background: conic-gradient(from var(--pocket-angle), red, blue)) {
+  .pocket-card::before {
+    animation: pocket-spin 3s linear infinite;
+  }
+}
+
+/* Reduced motion: hold the ring still */
+@media (prefers-reduced-motion: reduce) {
+  .pocket-card::before {
+    animation: none;
+  }
+}
+
+
+/* =====================================================================
+   4. SECTION: CLOSE BUTTON
+   The X button in the top-right of the card.
+   ===================================================================== */
+
+.pocket-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pocket-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, .08);
+}
+
+
+/* =====================================================================
+   5. SECTION: HEADER
+   The avatar + name + status row at the top of the modal.
+   ===================================================================== */
+
+.pocket-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-right: 34px;
+}
+
+.pocket-avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 2px solid rgba(118, 245, 232, .5);
+  flex: 0 0 58px;
+  object-fit: cover;
+  display: block;
+}
+
+.pocket-id h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+
+/* =====================================================================
+   6. SECTION: AVATAR UPLOAD
+   The clickable photo and the small camera badge (profile page only).
+   ===================================================================== */
+
+.pocket-avatar-btn {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  flex: 0 0 58px;
+  display: block;
+}
+
+.pocket-avatar-btn .pocket-avatar {
+  width: 100%;
+  height: 100%;
+}
+
+/* The small camera badge in the corner of the avatar */
+.pocket-avatar-edit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  color: #07122b;
+  border: 2px solid var(--panel);
+  box-shadow: 0 3px 8px rgba(4, 8, 22, .5);
+  transition: transform .15s ease;
+}
+
+.pocket-avatar-edit svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Badge grows slightly on hover / keyboard focus */
+.pocket-avatar-btn:hover .pocket-avatar-edit,
+.pocket-avatar-btn:focus-visible .pocket-avatar-edit {
+  transform: scale(1.12);
+}
+
+.pocket-avatar-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+
+
+/* =====================================================================
+   7. SECTION: ABOUT ME LIST
+   Mirrors the Personal Information details from the profile page.
+   ===================================================================== */
+
+.pocket-about {
+  margin-bottom: 4px;
+}
+
+.pocket-about .eyebrow {
+  margin: 0 0 10px;
+}
+
+.pocket-about-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One "label on the left, value on the right" row */
+.pocket-about-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(10, 14, 32, .45);
+}
+
+.pocket-about-list .pa-label {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.pocket-about-list .pa-value {
+  font-size: 13px;
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pocket-about-list .pa-value.teal {
+  color: var(--teal);
+}
+
+.pocket-about-list .pa-value.green {
+  color: var(--green);
+}
+
+
+/* =====================================================================
+   8. SECTION: RESPONSIVE
+   ===================================================================== */
+
+/* Small screens: stack each row's label above its value */
+@media (max-width: 480px) {
+  .pocket-about-list li {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .pocket-about-list .pa-value {
+    text-align: left;
+    white-space: normal;
+  }
+}

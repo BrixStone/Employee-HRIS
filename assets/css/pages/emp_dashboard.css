@@ -1,0 +1,347 @@
+/* =====================================================================
+   EMPLOYEE DASHBOARD — page styles (loaded on top of hris-base.css)
+
+   HOW TO READ THIS FILE
+   - It is split into sections. Each section starts with a "SECTION:" label.
+   - Use Ctrl+F and search for the label (e.g. "SECTION: HERO BANNER")
+     to jump straight to the part you want.
+   - One setting per line, so each line is easy to find and change.
+
+   CONTENTS
+   1. SECTION: HERO BANNER          the big welcome box at the top
+   2. SECTION: METRIC CARDS         the 4 number cards (hours, leave, etc.)
+   3. SECTION: PAGE LAYOUT GRID     the two-column layout
+   4. SECTION: MINI STATS           small stat boxes inside a card
+   5. SECTION: HOLIDAY LIST         the upcoming-holidays list
+   6. SECTION: QUICK ACTIONS + PAYSLIP
+   7. SECTION: RESPONSIVE           changes for small screens / phones
+   ===================================================================== */
+
+@import url("../hris-base.css");
+
+
+/* =====================================================================
+   1. SECTION: HERO BANNER
+   The big welcome box at the top of the dashboard.
+   ===================================================================== */
+
+.hero-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 30px 32px;
+  border-radius: 22px;
+  border: 1px solid rgba(118, 245, 232, .22);
+  background: linear-gradient(120deg, rgba(139, 92, 246, .30), rgba(59, 130, 246, .16) 45%, rgba(118, 245, 232, .12));
+  box-shadow: 0 20px 50px rgba(4, 8, 22, .45);
+}
+
+/* Text block inside the banner (sits above the glow) */
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 640px;
+}
+
+.hero-content h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(24px, 2.4vw, 32px);
+}
+
+.hero-accent {
+  color: var(--teal);
+}
+
+.hero-content .muted {
+  margin: 0 0 18px;
+  max-width: 540px;
+}
+
+/* The row of buttons under the greeting */
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* The soft glowing ball in the top-right corner */
+.hero-orb {
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(170, 220, 255, .55), rgba(118, 245, 232, .25) 40%, transparent 68%);
+  filter: blur(6px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+
+/* =====================================================================
+   2. SECTION: METRIC CARDS
+   The 4 number cards (weekly hours, annual/sick/personal leave).
+   Each card has a coloured strip across the top and a round icon.
+   ===================================================================== */
+
+.metric-card {
+  overflow: hidden;
+  padding: 20px;
+}
+
+/* The coloured strip across the top of every card */
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--accent-grad);
+  opacity: .9;
+}
+
+/* Top-strip colour per card type */
+.metric-card.metric-green::before {
+  background: linear-gradient(100deg, #34d399, #76f5e8);
+}
+
+.metric-card.metric-violet::before {
+  background: var(--violet-grad);
+}
+
+.metric-card.metric-blue::before {
+  background: linear-gradient(100deg, #3b82f6, #8b5cf6);
+}
+
+/* The icon + chip row at the top of a card */
+.metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+/* The round icon */
+.metric-ico {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  font-size: 18px;
+  color: #07122b;
+  background: var(--accent-grad);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, .3);
+}
+
+/* Icon colour per card type */
+.metric-green .metric-ico {
+  background: linear-gradient(100deg, #34d399, #76f5e8);
+}
+
+.metric-violet .metric-ico {
+  background: var(--violet-grad);
+  color: #fff;
+}
+
+.metric-blue .metric-ico {
+  background: linear-gradient(100deg, #3b82f6, #8b5cf6);
+  color: #fff;
+}
+
+/* The little rounded label (e.g. "This week") */
+.metric-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c7d2ff;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--line);
+}
+
+.metric-card .metric-number {
+  margin: 6px 0 6px;
+}
+
+/* The thin progress bar (track) and its filled part (span) */
+.metric-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.metric-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #34d399, #76f5e8);
+}
+
+
+/* =====================================================================
+   3. SECTION: PAGE LAYOUT GRID
+   The two-column layout: wide main column + narrow side column.
+   ===================================================================== */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 20px;
+}
+
+.main-col,
+.side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+
+/* =====================================================================
+   4. SECTION: MINI STATS
+   Small stat boxes inside a card (e.g. "Today's Log").
+   ===================================================================== */
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mini-stat {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+}
+
+.mini-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.mini-value {
+  font-size: 18px;
+}
+
+.mini-value.teal {
+  color: var(--teal);
+}
+
+/* The "progress to 40h" block under the mini stats */
+.progress-block {
+  margin-top: 18px;
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+
+/* =====================================================================
+   5. SECTION: HOLIDAY LIST
+   The upcoming Philippine holidays list.
+   ===================================================================== */
+
+.holiday-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holiday-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+}
+
+.holiday-item strong {
+  display: block;
+  font-size: 14px;
+}
+
+.holiday-item small {
+  display: block;
+  margin-top: 2px;
+}
+
+
+/* =====================================================================
+   6. SECTION: QUICK ACTIONS + PAYSLIP
+   The stacked buttons and the small payslip summary rows.
+   ===================================================================== */
+
+.quick-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.payslip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+/* The first row has no line above it */
+.payslip-row:first-of-type {
+  border-top: 0;
+}
+
+.payslip-row .teal {
+  color: var(--teal);
+  font-size: 18px;
+}
+
+
+/* =====================================================================
+   7. SECTION: RESPONSIVE
+   Changes for small screens and phones.
+   ===================================================================== */
+
+/* Tablet and down: stack the two columns, hide the glow ball */
+@media (max-width: 950px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-orb {
+    display: none;
+  }
+}
+
+/* Phones: mini stats go one per row, tighten the banner padding */
+@media (max-width: 560px) {
+  .mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-banner {
+    padding: 24px 20px;
+  }
+}

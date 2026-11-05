@@ -1,0 +1,5 @@
+/* Page-specific stylesheet. Keep this file separate from shared HRIS styles. */
+@import url("../hris-base.css");
+
+/* EMPLOYEE DEACTIVATION ROUTE — no standalone content expected */
+

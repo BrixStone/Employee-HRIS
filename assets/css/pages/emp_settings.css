@@ -1,0 +1,122 @@
+/* =====================================================================
+   EMPLOYEE SETTINGS — page styles (loaded on top of hris-base.css)
+
+   CONTENTS
+   1. SECTION: ALERTS            success / error message boxes
+   2. SECTION: SETTINGS GRID     the two-column layout
+   3. SECTION: INFO ROWS         the account info rows
+   4. SECTION: PASSWORD FORM     the change-password form
+   5. SECTION: RESPONSIVE        changes for small screens
+   ===================================================================== */
+
+@import url("../hris-base.css");
+
+
+/* =====================================================================
+   1. SECTION: ALERTS
+   ===================================================================== */
+
+.alert {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.alert-success {
+  color: #7cf2d6;
+  background: rgba(52, 211, 153, .12);
+  border: 1px solid rgba(52, 211, 153, .35);
+}
+
+.alert-error {
+  color: #ffb4b4;
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .35);
+}
+
+
+/* =====================================================================
+   2. SECTION: SETTINGS GRID
+   Two columns: account info on the left, password form on the right.
+   ===================================================================== */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+
+/* =====================================================================
+   3. SECTION: INFO ROWS
+   The "label on the left, value on the right" account rows.
+   ===================================================================== */
+
+.set-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+/* The first row has no line above it */
+.set-row:first-child {
+  border-top: 0;
+}
+
+.set-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.set-row .teal {
+  color: var(--teal);
+}
+
+
+/* =====================================================================
+   4. SECTION: PASSWORD FORM
+   ===================================================================== */
+
+.pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field small {
+  font-size: 11px;
+}
+
+.pw-actions {
+  margin-top: 4px;
+}
+
+
+/* =====================================================================
+   5. SECTION: RESPONSIVE
+   ===================================================================== */
+
+/* Narrow screens: stack the two columns */
+@media (max-width: 860px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

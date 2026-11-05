@@ -4,6 +4,42 @@
 -- MariaDB 10.4.32 compatible
 -- ==========================================================
 
+-- ---------------------------------------------------------------------
+-- employees
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS employees (
+    id                BIGINT       NOT NULL AUTO_INCREMENT,
+    employee_id       VARCHAR(20)  NOT NULL,
+    first_name        VARCHAR(100) NOT NULL,
+    middle_name       VARCHAR(100) NULL,
+    last_name         VARCHAR(100) NOT NULL,
+    suffix            VARCHAR(20)  NULL,
+    date_of_birth     DATE         NULL,
+    gender            VARCHAR(20)  NULL,
+    phone             VARCHAR(30)  NULL,
+    email             VARCHAR(150) NULL,
+    address           TEXT         NULL,
+    department_id     BIGINT       NULL,
+    position_id       BIGINT       NULL,
+    date_hired        DATE         NOT NULL,
+    employment_type   VARCHAR(50)  NOT NULL DEFAULT 'Full-time',
+    employment_status VARCHAR(30)  NOT NULL DEFAULT 'Active',
+    avatar            VARCHAR(255) NULL,                    -- web path to uploaded profile photo
+    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT employees_pkey PRIMARY KEY (id),
+    CONSTRAINT employees_employee_id_key UNIQUE (employee_id),
+    KEY idx_employees_department (department_id),
+    KEY idx_employees_position (position_id),
+    KEY idx_employees_status (employment_status),
+    KEY idx_employees_last_name (last_name),
+    CONSTRAINT fk_employee_department FOREIGN KEY (department_id)
+        REFERENCES departments (id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_employee_position FOREIGN KEY (position_id)
+        REFERENCES positions (id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT employee_status_check
+        CHECK (employment_status IN ('Active', 'Inactive', 'On Leave', 'Suspended'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- Add employee_id to attendance if it does not exist.
 ALTER TABLE attendance
     ADD COLUMN IF NOT EXISTS employee_id BIGINT(20) NULL AFTER id;
