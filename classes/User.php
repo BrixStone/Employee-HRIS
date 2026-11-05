@@ -56,6 +56,14 @@ class User
         return $st->execute(['id'=>$id]);
     }
 
+    // Set the status ('Active' / 'Inactive') of every login linked to an
+    // employee record. Returns the number of accounts matched.
+    public function setStatusForEmployee(int $employeeId, string $status): int {
+        $st = $this->pdo->prepare("UPDATE users SET status=:s, updated_at=NOW() WHERE employee_id=:emp");
+        $st->execute(['s'=>$status, 'emp'=>$employeeId]);
+        return $st->rowCount();
+    }
+
     public function resetPassword(int $id, string $newHash): bool {
         $st = $this->pdo->prepare("UPDATE users SET password=:p, updated_at=NOW() WHERE id=:id");
         return $st->execute(['p'=>$newHash, 'id'=>$id]);
