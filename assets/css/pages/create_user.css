@@ -1,0 +1,24 @@
+/* =====================================================================
+   CREATE USER — page styles (loaded on top of hris-base.css)
+   ===================================================================== */
+@import url("../hris-base.css");
+
+/* Two-up grid for paired fields (username/password, role/status). */
+.page-create_user .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.page-create_user .form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .page-create_user .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -156,101 +156,39 @@ if ($tab === 'payslips' && $selPeriodId > 0) {
     $selPeriod = $payroll->getPeriodById($selPeriodId);
     $payslips  = $payroll->getPayslipsByPeriod($selPeriodId);
 }
+
+require __DIR__ . '/../templates/hrTemplates/header.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Payroll Management</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f7f7fb;margin:0}
-    .wrap{max-width:1200px;margin:28px auto;padding:0 16px}
-    h2{margin:0 0 16px}
 
-    /* Tabs */
-    .tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid #e5e7eb}
-    .tabs a{padding:10px 18px;text-decoration:none;color:#6b7280;font-weight:600;border-radius:8px 8px 0 0;font-size:14px}
-    .tabs a.active{background:#3b82f6;color:#fff}
-    .tabs a:hover:not(.active){background:#f0f0f5}
-
-    /* Cards */
-    .card{background:#fff;border:1px solid #e6e6ef;border-radius:12px;
-          box-shadow:0 4px 12px rgba(0,0,0,.05);padding:20px;margin-bottom:20px}
-    .card h3{margin:0 0 14px;font-size:16px}
-
-    /* Grids */
-    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-    .row{margin-bottom:12px}
-
-    /* Form controls */
-    label{display:block;font-size:13px;color:#374151;margin-bottom:4px;font-weight:500}
-    input,select{width:100%;padding:9px 11px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
-    input:focus,select:focus{outline:none;border-color:#3b82f6}
-
-    /* Buttons */
-    .btn{display:inline-block;padding:9px 16px;border:0;border-radius:8px;
-         font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
-    .btn-primary{background:#3b82f6;color:#fff}
-    .btn-secondary{background:#6b7280;color:#fff}
-    .btn-green{background:#10b981;color:#fff}
-    .btn-orange{background:#f59e0b;color:#fff}
-    .btn-sm{padding:5px 10px;font-size:12px}
-
-    /* Table */
-    .tbl-wrap{overflow-x:auto}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #f0f0f0}
-    th{background:#f9fafb;font-weight:600;color:#374151}
-    tr:last-child td{border-bottom:none}
-    tr:hover td{background:#f9fafb}
-    tfoot td{border-top:2px solid #e5e7eb;background:#f3f4f6}
-    .text-right{text-align:right}
-
-    /* Alerts */
-    .alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px}
-    .alert-ok{background:#d1fae5;border:1px solid #a7f3d0;color:#065f46}
-    .alert-err{background:#fee2e2;border:1px solid #fecaca;color:#b91c1c}
-
-    /* Badges */
-    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-    .badge-draft{background:#f3f4f6;color:#374151}
-    .badge-processed{background:#dbeafe;color:#1d4ed8}
-    .badge-paid{background:#d1fae5;color:#065f46}
-    .badge-cancelled{background:#fee2e2;color:#b91c1c}
-    .badge-finalized{background:#ede9fe;color:#5b21b6}
-
-    /* Misc */
-    .muted{color:#6b7280;font-size:13px}
-    .mt{margin-top:12px}
-    .flex{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .hint{font-size:12px;color:#6b7280;margin-top:4px}
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <h2>Payroll Management</h2>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <a href="/hr/payroll.php?tab=salaries" class="<?= $tab==='salaries'?'active':'' ?>">💰 Salaries</a>
-    <a href="/hr/payroll.php?tab=periods"  class="<?= $tab==='periods' ?'active':'' ?>">📅 Periods</a>
-    <a href="/hr/payroll.php?tab=payslips" class="<?= $tab==='payslips'?'active':'' ?>">🧾 Payslips</a>
+<section class="page-head">
+  <div class="ph-text">
+    <p class="eyebrow">PAYROLL</p>
+    <h1>Payroll Management</h1>
+    <p>Set salaries, create pay periods, and generate payslips from attendance.</p>
   </div>
+  <div class="ph-actions">
+    <a class="button" href="/hr/dashboard.php">← HR Dashboard</a>
+  </div>
+</section>
 
-  <!-- Alerts -->
-  <?php if ($success): ?>
-    <div class="alert alert-ok"><?= $success ?></div>
-  <?php endif; ?>
-  <?php if ($errors): ?>
-    <div class="alert alert-err">
-      <?php foreach ($errors as $e): ?>
-        <div><?= htmlspecialchars($e) ?></div>
-      <?php endforeach; ?>
-    </div>
-  <?php endif; ?>
+<!-- Tabs -->
+<div class="tabs">
+  <a href="/hr/payroll.php?tab=salaries" class="<?= $tab==='salaries'?'active':'' ?>"><span>💰</span> Salaries</a>
+  <a href="/hr/payroll.php?tab=periods"  class="<?= $tab==='periods' ?'active':'' ?>"><span>📅</span> Periods</a>
+  <a href="/hr/payroll.php?tab=payslips" class="<?= $tab==='payslips'?'active':'' ?>"><span>🧾</span> Payslips</a>
+</div>
+
+<!-- Alerts -->
+<?php if ($success): ?>
+  <div class="alert alert-ok"><?= $success ?></div>
+<?php endif; ?>
+<?php if ($errors): ?>
+  <div class="alert alert-err">
+    <?php foreach ($errors as $e): ?>
+      <div><?= htmlspecialchars($e) ?></div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
 
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: SALARIES                                                        -->
@@ -641,8 +579,6 @@ if ($tab === 'payslips' && $selPeriodId > 0) {
     <a class="btn btn-secondary" href="/hr/dashboard.php">← Back to HR Dashboard</a>
   </div>
 
-</div><!-- /.wrap -->
-
 <script>
 function fillCutoff(half) {
     const now      = new Date();
@@ -668,6 +604,3 @@ function fillCutoff(half) {
     }
 }
 </script>
-
-</body>
-</html>

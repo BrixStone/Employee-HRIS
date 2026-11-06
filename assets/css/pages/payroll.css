@@ -1,0 +1,197 @@
+/* =====================================================================
+   PAYROLL MANAGEMENT — Moonlit page styles (loaded on top of hris-base.css)
+
+   The payroll markup uses legacy helper classes (.card, .tabs, .btn,
+   .badge, .grid-2/3, .tbl-wrap, .alert ...). This file re-skins those
+   helpers to match the Moonlit dark theme used across the HRIS.
+   ===================================================================== */
+@import url("../hris-base.css");
+
+/* ---------------------------------------------------------------------
+   TABS
+   --------------------------------------------------------------------- */
+.page-payroll .tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.page-payroll .tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  transition: background .18s, color .18s, border-color .18s;
+}
+
+.page-payroll .tabs a:hover:not(.active) {
+  background: rgba(59, 130, 246, .10);
+  color: #fff;
+}
+
+.page-payroll .tabs a.active {
+  color: #fff;
+  background: linear-gradient(100deg, rgba(139, 92, 246, .30), rgba(59, 130, 246, .16));
+  border-color: rgba(118, 245, 232, .25);
+  border-bottom-color: transparent;
+}
+
+/* ---------------------------------------------------------------------
+   CARDS  (re-skin to the Moonlit panel look)
+   --------------------------------------------------------------------- */
+.page-payroll .card {
+  background: linear-gradient(155deg, rgba(26, 35, 71, .9), rgba(16, 22, 48, .92));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(4, 8, 22, .45);
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.page-payroll .card h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------
+   FORM GRIDS + ROWS
+   --------------------------------------------------------------------- */
+.page-payroll .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.page-payroll .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.page-payroll .row { margin-bottom: 16px; }
+
+.page-payroll .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ---------------------------------------------------------------------
+   BUTTONS
+   --------------------------------------------------------------------- */
+.page-payroll .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .04);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: filter .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.page-payroll .btn:hover { filter: brightness(1.12); color: #fff; }
+
+.page-payroll .btn-primary {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #07122b;
+}
+.page-payroll .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(59, 130, 246, .35); }
+
+.page-payroll .btn-green {
+  background: linear-gradient(100deg, #34d399, #76f5e8);
+  border-color: transparent;
+  color: #07251c;
+}
+.page-payroll .btn-green:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(52, 211, 153, .3); }
+
+.page-payroll .btn-orange {
+  background: linear-gradient(100deg, #f59e0b, #fbbf24);
+  border-color: transparent;
+  color: #2a1a02;
+}
+
+.page-payroll .btn-secondary {
+  background: rgba(255, 255, 255, .05);
+  color: #c7d2ff;
+}
+
+.page-payroll .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+/* ---------------------------------------------------------------------
+   TABLES
+   --------------------------------------------------------------------- */
+.page-payroll .tbl-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.page-payroll .tbl-wrap table { margin: 0; }
+
+.page-payroll .text-right { text-align: right; }
+
+.page-payroll tfoot td {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: rgba(255, 255, 255, .03);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------
+   ALERTS
+   --------------------------------------------------------------------- */
+.page-payroll .alert {
+  padding: 13px 16px;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+}
+.page-payroll .alert-ok {
+  background: rgba(52, 211, 153, .12);
+  border-color: rgba(52, 211, 153, .4);
+  color: #c7f9e5;
+}
+.page-payroll .alert-ok a { color: #76f5e8; font-weight: 700; }
+.page-payroll .alert-err {
+  background: rgba(239, 68, 68, .14);
+  border-color: #9f314b;
+  color: #ffdbe4;
+}
+
+/* ---------------------------------------------------------------------
+   BADGES / STATUS PILLS
+   --------------------------------------------------------------------- */
+.page-payroll .badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.page-payroll .badge-draft     { color: #c7d2ff; background: rgba(255, 255, 255, .06); border-color: var(--line); }
+.page-payroll .badge-processed { color: #9ec5ff; background: rgba(59, 130, 246, .16); border-color: rgba(59, 130, 246, .4); }
+.page-payroll .badge-paid      { color: #7cf2d6; background: rgba(52, 211, 153, .14); border-color: rgba(52, 211, 153, .4); }
+.page-payroll .badge-cancelled { color: #ffb4b4; background: rgba(239, 68, 68, .14); border-color: rgba(239, 68, 68, .4); }
+.page-payroll .badge-finalized { color: #d9cdf8; background: rgba(139, 92, 246, .18); border-color: rgba(139, 92, 246, .4); }
+
+/* ---------------------------------------------------------------------
+   MISC HELPERS
+   --------------------------------------------------------------------- */
+.page-payroll .flex { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.page-payroll .mt { margin-top: 12px; }
+.page-payroll .muted { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .page-payroll .grid-2,
+  .page-payroll .grid-3 { grid-template-columns: 1fr; }
+}

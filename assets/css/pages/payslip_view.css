@@ -1,0 +1,151 @@
+/* =====================================================================
+   PAYSLIP VIEW — Moonlit screen chrome + print-friendly paper slip.
+
+   The payslip itself stays a clean white "paper" document so it prints
+   cleanly and reads like a real payslip. The surrounding chrome (action
+   bar, page background) uses the Moonlit theme to match the HRIS.
+   ===================================================================== */
+@import url("../hris-base.css");
+
+/* ---------------------------------------------------------------------
+   SCREEN ACTION BAR (hidden on print)
+   --------------------------------------------------------------------- */
+.page-payslip_view .screen-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(120deg, rgba(139, 92, 246, .18), rgba(59, 130, 246, .10));
+}
+
+.page-payslip_view .screen-bar .sb-back {
+  color: var(--moon);
+  font-weight: 600;
+  font-size: 13px;
+}
+.page-payslip_view .screen-bar .sb-back:hover { color: #fff; }
+
+.page-payslip_view .screen-bar .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .05);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.page-payslip_view .screen-bar .btn-print {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #07122b;
+}
+.page-payslip_view .screen-bar .btn-green {
+  background: linear-gradient(100deg, #34d399, #76f5e8);
+  border-color: transparent;
+  color: #07251c;
+}
+
+/* Status badge on the action bar */
+.page-payslip_view .screen-bar .badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.page-payslip_view .screen-bar .badge-draft     { color: #c7d2ff; background: rgba(255, 255, 255, .08); border-color: var(--line); }
+.page-payslip_view .screen-bar .badge-finalized { color: #d9cdf8; background: rgba(139, 92, 246, .22); border-color: rgba(139, 92, 246, .45); }
+.page-payslip_view .screen-bar .badge-paid      { color: #7cf2d6; background: rgba(52, 211, 153, .18); border-color: rgba(52, 211, 153, .45); }
+
+/* ---------------------------------------------------------------------
+   PAPER SLIP  (kept light so it prints cleanly)
+   --------------------------------------------------------------------- */
+.page-payslip_view .page-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.page-payslip_view .slip {
+  background: #fff;
+  color: #111;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  padding: 34px;
+  box-shadow: 0 18px 40px rgba(4, 8, 22, .45);
+  font-size: 13px;
+}
+
+/* Header */
+.page-payslip_view .slip-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid #1e293b; }
+.page-payslip_view .company-name { font-size: 20px; font-weight: 700; color: #1e293b; }
+.page-payslip_view .company-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.page-payslip_view .slip-title { text-align: right; }
+.page-payslip_view .slip-title h2 { font-size: 16px; font-weight: 700; color: #1e293b; }
+.page-payslip_view .slip-title p { font-size: 12px; color: #6b7280; margin-top: 2px; }
+
+/* Employee info */
+.page-payslip_view .emp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+.page-payslip_view .emp-row { display: flex; flex-direction: column; gap: 2px; }
+.page-payslip_view .emp-label { font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+.page-payslip_view .emp-value { font-size: 13px; font-weight: 600; color: #111; }
+
+/* Sections */
+.page-payslip_view .section { margin-bottom: 16px; }
+.page-payslip_view .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #374151; background: #f3f4f6; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; letter-spacing: .5px; }
+.page-payslip_view .slip-row { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 13px; }
+.page-payslip_view .slip-row:nth-child(even) { background: #f9fafb; }
+.page-payslip_view .slip-row.total { font-weight: 700; border-top: 2px solid #1e293b; margin-top: 4px; padding-top: 8px; }
+.page-payslip_view .slip-row .label { color: #374151; }
+.page-payslip_view .slip-row .amount { font-variant-numeric: tabular-nums; }
+.page-payslip_view .text-green { color: #065f46; }
+.page-payslip_view .text-red { color: #b91c1c; }
+
+/* Net pay box */
+.page-payslip_view .net-box { background: #1e293b; color: #fff; border-radius: 8px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+.page-payslip_view .net-box .net-label { font-size: 13px; opacity: .8; }
+.page-payslip_view .net-box .net-amount { font-size: 24px; font-weight: 700; }
+
+/* Attendance summary */
+.page-payslip_view .attend-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+.page-payslip_view .attend-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; text-align: center; }
+.page-payslip_view .attend-box .val { font-size: 18px; font-weight: 700; color: #1e293b; }
+.page-payslip_view .attend-box .lbl { font-size: 10px; color: #6b7280; text-transform: uppercase; margin-top: 2px; }
+
+/* In-slip status badge */
+.page-payslip_view .slip .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.page-payslip_view .slip .badge-draft { background: #f3f4f6; color: #374151; }
+.page-payslip_view .slip .badge-finalized { background: #ede9fe; color: #5b21b6; }
+.page-payslip_view .slip .badge-paid { background: #d1fae5; color: #065f46; }
+
+/* Footer / signatures */
+.page-payslip_view .slip-footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.page-payslip_view .sign-box { text-align: center; }
+.page-payslip_view .sign-line { border-top: 1px solid #374151; margin-top: 36px; padding-top: 4px; font-size: 11px; color: #6b7280; }
+
+/* ---------------------------------------------------------------------
+   PRINT — only the paper slip survives
+   --------------------------------------------------------------------- */
+@media print {
+  .sidebar,
+  .topbar,
+  .page-payslip_view .screen-bar { display: none !important; }
+
+  html, body { background: #fff !important; }
+  body { color: #111 !important; }
+
+  .main { margin-left: 0 !important; }
+  .content { padding: 0 !important; max-width: 100% !important; }
+  .page-payslip_view .page-wrap { margin: 0; max-width: 100%; }
+  .page-payslip_view .slip { box-shadow: none; border: none; padding: 16px; }
+}

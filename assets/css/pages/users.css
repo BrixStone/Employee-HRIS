@@ -1,0 +1,59 @@
+/* =====================================================================
+   USER MANAGEMENT — page styles (loaded on top of hris-base.css)
+   Mirrors the metric-card look used on the dashboards / payslips pages.
+   ===================================================================== */
+@import url("../hris-base.css");
+
+/* ---- Metric cards: coloured top strip + round icon ---- */
+.metric-card {
+  overflow: hidden;
+  padding: 20px;
+}
+
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--accent-grad);
+  opacity: .9;
+}
+
+.metric-card.metric-green::before  { background: linear-gradient(100deg, #34d399, #76f5e8); }
+.metric-card.metric-violet::before { background: var(--violet-grad); }
+.metric-card.metric-blue::before   { background: linear-gradient(100deg, #3b82f6, #8b5cf6); }
+
+.metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.metric-ico {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  font-size: 18px;
+  color: #07122b;
+  background: var(--accent-grad);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, .3);
+}
+
+.metric-green .metric-ico  { background: linear-gradient(100deg, #34d399, #76f5e8); }
+.metric-violet .metric-ico { background: var(--violet-grad); color: #fff; }
+.metric-blue .metric-ico   { background: linear-gradient(100deg, #3b82f6, #8b5cf6); color: #fff; }
+
+.metric-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c7d2ff;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--line);
+}
+
+.metric-card .metric-number { margin: 6px 0 6px; }
