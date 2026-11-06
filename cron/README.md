@@ -1,114 +1,119 @@
 # HRIS scheduled jobs (cron)
 
-This folder holds background jobs that run on a schedule, outside of any user
-request.
+Background jobs that run on a schedule, outside of any user request.
 
 ## What's here
 
 | File | Purpose |
 |------|---------|
-| `expire_pending_leaves.php` | The job: auto-reject leave requests left `Pending` too long. |
-| `hris-crontab` | Crontab lines for a Linux host or Docker container. |
-| `register-windows-task.ps1` | Registers the job in Windows Task Scheduler (runs it via `docker exec`). |
+| `expire_pending_leaves.php` | The job: remind HR about `Pending` leave every 3 days, auto-reject at 14 days. |
+| `scheduler.php` | Runs the job on a repeating interval. This is what the `hris_cron` Docker container runs. |
+| `seed_test_request.php` | Testing helper: creates a backdated Pending request so you can see the job act. |
+| `hris-crontab` | Crontab lines, only for a Linux host that has a cron daemon. |
+| `register-windows-task.ps1` | Optional: schedule the job with Windows Task Scheduler instead of Docker. |
 
-## The job: expire pending leaves
+## How it runs (Docker, the default)
 
-A leave request that HR never acts on stays `Pending` forever. This job rejects
-any request still `Pending` after a cut-off (default **14 days** from when it
-was filed).
+The `hris-cron` service in `monitoring/docker-compose.yml` runs `scheduler.php`
+in its own container, named **`hris_cron`**. It:
 
-Each rejection goes through the same `LeaveRequest::reject()` the HR page and the
-API use, so it:
+- runs the job once as soon as the container starts, then every hour,
+- starts and stops with the rest of the stack (`hris-start.ps1` / `hris-stop.ps1`),
+- restarts itself if it crashes (`restart: unless-stopped`),
+- shows **healthy** in `docker ps` while it keeps finishing runs,
+- writes everything to its log: `docker logs hris_cron`.
 
-- writes a row to the leave audit log (actor shows as **System (auto-expiry)**), and
-- fires the realtime `leave.rejected` event to the employee and to HR.
+Nothing to register on Windows. As long as Docker is running, the job runs.
 
-The job is **safe to run repeatedly**: it only ever touches rows that are still
-`Pending`, so running it twice changes nothing the second time, and a request an
-HR user approved a moment earlier is skipped.
+### Start it the first time
+
+```powershell
+cd monitoring
+docker compose up -d --build --no-deps hris-cron
+```
+
+`--no-deps` only creates the cron container and leaves MySQL, the app and the
+seeder alone. After this first time, `.\hris-start.ps1` starts it with everything
+else.
+
+### Everyday commands
+
+```powershell
+docker ps --filter name=hris_cron          # is it running and healthy?
+docker logs hris_cron                      # everything it has done
+docker logs -f hris_cron                   # follow the log live (Ctrl+C to stop)
+docker restart hris_cron                   # run the job right now, then continue hourly
+docker stop hris_cron                      # pause the scheduler
+docker start hris_cron                     # resume it
+```
+
+### Settings
+
+Set these in `monitoring/.env` (or in your shell), then run
+`docker compose up -d --no-deps hris-cron` from `monitoring/` to apply them:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `CRON_INTERVAL_SECONDS` | `3600` | Seconds between runs (10 to 86400). |
+| `CRON_REMIND_EVERY` | `3` | Remind HR every N days. `0` turns reminders off. |
+| `CRON_REJECT_DAYS` | `14` | Auto-reject a request after N days. |
+
+A wrong value (for example `abc`) makes the container stop with a clear error
+instead of being silently ignored.
+
+## The job: remind, then reject
+
+For every leave request still `Pending`, by how long ago it was filed:
+
+- **Every 3 days** (day 3, 6, 9, 12): HR gets a reminder. It is logged and
+  pushed live as a `leave.reminder` toast.
+- **At 14 days**: the request is rejected through `LeaveRequest::reject()`, the
+  same code the HR page uses. It is written to the audit log as
+  **System (auto-expiry)** and pushed live as `leave.rejected`.
+
+It is safe to run as often as you like. It only touches `Pending` rows, never
+sends the same reminder twice, and skips a request HR just approved.
 
 ### Running it by hand
 
-Run it inside the app container (it has PHP and the DB settings):
-
 ```powershell
-# Default 14-day cut-off
-docker exec hris_app php /app/cron/expire_pending_leaves.php
-
-# See what it WOULD do, without changing anything
-docker exec hris_app php /app/cron/expire_pending_leaves.php --dry-run
-
-# Custom cut-off (e.g. 30 days)
-docker exec hris_app php /app/cron/expire_pending_leaves.php --days=30
-
-# Help
+docker exec hris_app php /app/cron/expire_pending_leaves.php --dry-run   # preview, no changes
+docker exec hris_app php /app/cron/expire_pending_leaves.php             # run now
+docker exec hris_app php /app/cron/expire_pending_leaves.php --remind-every=7 --days=30
 docker exec hris_app php /app/cron/expire_pending_leaves.php --help
 ```
 
-If you have PHP installed directly on your machine, you can also run it from the
-project root (it reads the same `DB_*` settings, defaulting to a local XAMPP
-MySQL):
+Exit code is `0` on success (even when there was nothing to do) and `1` if a
+reminder or rejection failed.
+
+## Trying it with a test request
 
 ```powershell
-php cron\expire_pending_leaves.php --dry-run
+docker exec hris_app php /app/cron/seed_test_request.php --age=10   # 10 days old: gets a reminder
+docker exec hris_app php /app/cron/seed_test_request.php --age=15   # 15 days old: gets rejected
+docker exec hris_app php /app/cron/expire_pending_leaves.php        # run the job now
+docker exec hris_app php /app/cron/seed_test_request.php --clear    # remove all test requests
 ```
 
-Exit code is `0` on success (even when there was nothing to reject) and `1` if a
-rejection failed, so a scheduler can detect problems.
+To see the live toast, keep `http://localhost:8000/hr/leave_management.php` open
+(signed in as HR, badge says **Live**) while the job runs.
 
-## Scheduling it
+## Other ways to schedule it
 
-Pick the option that matches where you run HRIS.
+You only need one of these. Use Docker (above) unless you have a reason not to.
+If you use another option, stop the Docker scheduler (`docker stop hris_cron`) so
+the job is not run twice. Running twice is harmless, because the job never
+repeats a reminder, but it is wasted work.
 
-### Option A — Windows Task Scheduler (your host)
-
-Your app runs in Docker on Windows, so the simplest reliable option is a Windows
-scheduled task that calls the job inside the container.
+### Windows Task Scheduler
 
 ```powershell
-# From the project root. Creates a task that runs daily at 02:00.
-powershell -ExecutionPolicy Bypass -File cron\register-windows-task.ps1
-
-# Custom time / cut-off
-powershell -ExecutionPolicy Bypass -File cron\register-windows-task.ps1 -Time 23:30 -Days 30
+powershell -ExecutionPolicy Bypass -File cron\register-windows-task.ps1          # hourly task
+powershell -ExecutionPolicy Bypass -File cron\register-windows-task.ps1 -Remove  # delete it
 ```
 
-Manage it afterwards:
+It calls `docker exec hris_app ...`, so Docker Desktop must be running.
 
-```powershell
-# Run it immediately (good for testing)
-Start-ScheduledTask -TaskName HRIS-ExpirePendingLeaves
+### Linux crontab
 
-# Check when it last ran / will next run
-Get-ScheduledTask -TaskName HRIS-ExpirePendingLeaves | Get-ScheduledTaskInfo
-
-# Remove it
-powershell -ExecutionPolicy Bypass -File cron\register-windows-task.ps1 -Remove
-```
-
-The task runs whether or not you are logged in, but it needs Docker Desktop (and
-the `hris_app` container) to be running at that time.
-
-### Option B — Linux / Docker crontab
-
-On a Linux host or inside a long-running container, install the crontab:
-
-```bash
-crontab cron/hris-crontab        # replace the current crontab
-# or run `crontab -e` and paste the lines from cron/hris-crontab
-```
-
-The provided line runs the job daily at 02:00 and appends output to
-`/var/log/hris-cron.log`.
-
-> Note: the default `php:8.3-cli` image used by `hris_app` does not run `cron`
-> itself, so Option A (Windows Task Scheduler) is the recommended way to
-> schedule it for this project. Option B is for a Linux deployment or a
-> container that includes a cron daemon.
-
-## Changing the schedule or cut-off
-
-- **Schedule (when it runs):** edit the time in `hris-crontab`, or re-run
-  `register-windows-task.ps1` with a different `-Time`.
-- **Cut-off (how old is "too old"):** pass `--days=N` to the script, or
-  `-Days N` to the Windows setup script.
+On a Linux host with a cron daemon: `crontab cron/hris-crontab`.
