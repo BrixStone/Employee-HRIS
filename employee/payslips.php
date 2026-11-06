@@ -18,9 +18,12 @@ if (strtolower(trim($_SESSION['role'])) !== 'employee') {
 }
 
 $employeeId = $_SESSION['employee_id'] ?? null;
+var_dump('1Session employee_id:', $employeeId);
+
 if (!$employeeId) {
     exit('No employee record is linked to this user account.');
 }
+var_dump('2Session employee_id:', $employeeId);
 
 $stmt = $pdo->prepare("
     SELECT id, email, first_name, last_name
@@ -36,7 +39,7 @@ if (!$employeeData) {
 }
 
 $userEmail = $employeeData['email'] ?? '';
-$fullName = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
+$fullName  = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
 
 $user = [
     'full_name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
@@ -44,66 +47,68 @@ $user = [
     'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($fullName) . '&background=4763ff&color=fff',
 ];
 
-/*
- * This project ships no payroll/payslip table (see database/hris_mysql.sql),
- * so payslips are derived transparently from recorded attendance hours for
- * the current month. When a real payroll module is added, swap this block
- * for a query against the payroll table.
- */
-$HOURLY_RATE = 0.00; // No rate configured; keep gross at 0 until payroll exists.
-
-$periodStart = date('Y-m-01 00:00:00');
-$periodEnd   = date('Y-m-t 23:59:59');
-$periodLabel = date('M 1 - M t, Y');
-
-$monthHours = 0.0;
+/* ---------------------------------------------------------------
+ * Fetch all payslips for this employee from the real payslips table,
+ * joined with payroll_periods for label + date range.
+ * Ordered newest period first.
+ * ------------------------------------------------------------- */
+$payslips = [];
 try {
-    $hoursStmt = $pdo->prepare("
-        SELECT COALESCE(SUM(workhours), 0) AS total
-        FROM attendance
-        WHERE email = :email
-          AND time_in BETWEEN :start AND :end
+    $psStmt = $pdo->prepare("
+        SELECT
+            ps.id,
+            ps.gross_pay,
+            ps.total_deductions,
+            ps.net_pay,
+            ps.days_worked,
+            (ps.days_worked * 8) AS hours_worked,
+            ps.late_minutes,
+            ps.status,
+            pp.period_name AS period_label,
+            pp.start_date AS period_start,
+            pp.end_date   AS period_end
+        FROM payslips ps
+        JOIN payroll_periods pp ON pp.id = ps.payroll_period_id
+        WHERE ps.employee_id = :eid
+        ORDER BY pp.start_date DESC
     ");
-    $hoursStmt->execute([
-        'email' => $userEmail,
-        'start' => $periodStart,
-        'end'   => $periodEnd,
-    ]);
-    $monthHours = (float) $hoursStmt->fetchColumn();
+    $psStmt->execute([':eid' => $employeeId]);
+    $payslips = $psStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
-    error_log('Payslip hours query failed: ' . $e->getMessage());
+    error_log('Payslip list query failed: ' . $e->getMessage());
 }
 
-$gross = round($monthHours * $HOURLY_RATE, 2);
-$net = $gross; // No deductions module yet.
-$hasPayroll = $gross > 0;
+/* ---------------------------------------------------------------
+ * Metric card values — driven by the most recent payslip row.
+ * Falls back to zeroes / "Pending" when no payslip exists yet.
+ * ------------------------------------------------------------- */
+$latest      = $payslips[0] ?? null;
+$latestHours = $latest ? (float) $latest['hours_worked'] : 0.0;
+$latestGross = $latest ? (float) $latest['gross_pay']    : 0.0;
+$latestNet   = $latest ? (float) $latest['net_pay']      : 0.0;
+$latestLabel = $latest
+    ? htmlspecialchars($latest['period_label'], ENT_QUOTES, 'UTF-8')
+    : date('M Y');
+$latestStatus = $latest ? $latest['status'] : 'pending';
+$hasPayroll  = !empty($payslips);
 
-// Build a short list of recent periods (current + prior 2 months) as a history
-// scaffold. Each shows the hours actually recorded in that month.
-$periods = [];
-for ($i = 0; $i < 3; $i++) {
-    $monthTs = strtotime("first day of -{$i} month");
-    $pStart = date('Y-m-01 00:00:00', $monthTs);
-    $pEnd   = date('Y-m-t 23:59:59', $monthTs);
-    $h = 0.0;
-    try {
-        $s = $pdo->prepare("SELECT COALESCE(SUM(workhours),0) FROM attendance WHERE email = :email AND time_in BETWEEN :start AND :end");
-        $s->execute(['email' => $userEmail, 'start' => $pStart, 'end' => $pEnd]);
-        $h = (float) $s->fetchColumn();
-    } catch (Throwable $e) { /* leave at 0 */ }
-    $periods[] = [
-        'label' => date('F Y', $monthTs),
-        'range' => date('M 1 - M t, Y', $monthTs),
-        'hours' => $h,
-        'net'   => round($h * $HOURLY_RATE, 2),
-    ];
+/* ---------------------------------------------------------------
+ * Pill helper — maps DB status → CSS class + display label.
+ * ------------------------------------------------------------- */
+function payslipPill(string $status): array {
+    return match ($status) {
+        'paid'      => ['pill-active',  'Paid'],
+        'finalized' => ['pill-warning', 'Finalized'],
+        'generated' => ['pill-info',    'Generated'],
+        default     => ['pill-neutral', 'Pending'],
+    };
 }
 
 // Shell configuration
-$title = 'Payslips';
-$eyebrow = 'PAYROLL';
+$title    = 'Payslips';
+$eyebrow  = 'PAYROLL';
 $subtitle = 'Your pay periods and earnings summary';
-$pageCss = 'emp_payslips';
+$pageCss  = 'emp_payslips';
 require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
@@ -111,33 +116,35 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
   <div class="ph-text">
     <p class="eyebrow">PAYROLL</p>
     <h1>Payslips</h1>
-    <p>Earnings are derived from recorded attendance hours for each pay period.</p>
+    <p>Your computed earnings for each semi-monthly pay period.</p>
   </div>
 </section>
 
 <div class="metric-strip">
   <article class="metric-card metric-teal">
-    <div class="metric-top"><span class="metric-ico">◷</span><span class="metric-chip">This month</span></div>
-    <span class="metric-title">Hours Recorded</span>
-    <strong class="metric-number teal"><?= number_format($monthHours, 1) ?></strong>
-    <span class="metric-description"><?= htmlspecialchars($periodLabel) ?></span>
+    <div class="metric-top"><span class="metric-ico">◷</span><span class="metric-chip">Latest period</span></div>
+    <span class="metric-title">Hours Worked</span>
+    <strong class="metric-number teal"><?= number_format($latestHours, 1) ?></strong>
+    <span class="metric-description"><?= $latestLabel ?></span>
   </article>
   <article class="metric-card metric-blue">
     <div class="metric-top"><span class="metric-ico">₱</span><span class="metric-chip">Gross</span></div>
     <span class="metric-title">Gross Pay</span>
-    <strong class="metric-number blue">₱<?= number_format($gross, 2) ?></strong>
+    <strong class="metric-number blue">₱<?= number_format($latestGross, 2) ?></strong>
     <span class="metric-description">Before deductions</span>
   </article>
   <article class="metric-card metric-green">
     <div class="metric-top"><span class="metric-ico">✓</span><span class="metric-chip">Net</span></div>
     <span class="metric-title">Net Pay</span>
-    <strong class="metric-number green">₱<?= number_format($net, 2) ?></strong>
-    <span class="metric-description">Take-home estimate</span>
+    <strong class="metric-number green">₱<?= number_format($latestNet, 2) ?></strong>
+    <span class="metric-description">Take-home amount</span>
   </article>
   <article class="metric-card metric-violet">
     <div class="metric-top"><span class="metric-ico">▦</span><span class="metric-chip">Status</span></div>
-    <span class="metric-title">Payroll</span>
-    <strong class="metric-number purple" style="font-size:20px;margin-top:14px"><?= $hasPayroll ? 'Available' : 'Pending' ?></strong>
+    <span class="metric-title">Latest Payslip</span>
+    <strong class="metric-number purple" style="font-size:20px;margin-top:14px">
+      <?= ucfirst($latestStatus) ?>
+    </strong>
   </article>
 </div>
 
@@ -146,8 +153,11 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
     <div class="panel-body notice-row">
       <span class="notice-ico">ℹ</span>
       <div>
-        <strong>No payroll disbursement for this period yet.</strong>
-        <p class="muted" style="margin:4px 0 0">Once HR configures a pay rate and runs payroll, your computed earnings will appear here automatically. Attendance hours are already being tracked.</p>
+        <strong>No payslips released yet.</strong>
+        <p class="muted" style="margin:4px 0 0">
+          Once HR generates and finalises a pay period that covers your records,
+          your payslips will appear here automatically.
+        </p>
       </div>
     </div>
   </div>
@@ -155,8 +165,8 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
 
 <div class="panel table-card">
   <div class="panel-head">
-    <h2>Recent Pay Periods</h2>
-    <span class="muted"><?= count($periods) ?> period<?= count($periods) === 1 ? '' : 's' ?></span>
+    <h2>Pay History</h2>
+    <span class="muted"><?= count($payslips) ?> payslip<?= count($payslips) === 1 ? '' : 's' ?></span>
   </div>
   <table>
     <thead>
@@ -164,28 +174,42 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
         <th>Pay Period</th>
         <th>Inclusive Dates</th>
         <th>Hours</th>
+        <th>Gross Pay</th>
+        <th>Deductions</th>
         <th>Net Pay</th>
         <th>Status</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
-      <?php foreach ($periods as $i => $p): ?>
+      <?php if (empty($payslips)): ?>
         <tr>
-          <td><strong><?= htmlspecialchars($p['label']) ?></strong></td>
-          <td class="muted"><?= htmlspecialchars($p['range']) ?></td>
-          <td><?= number_format($p['hours'], 1) ?> hrs</td>
-          <td><strong class="col-net">₱<?= number_format($p['net'], 2) ?></strong></td>
-          <td>
-            <?php if ($p['net'] > 0): ?>
-              <span class="pill pill-active">Paid</span>
-            <?php elseif ($i === 0): ?>
-              <span class="pill pill-neutral">Current</span>
-            <?php else: ?>
-              <span class="pill pill-neutral">No payroll</span>
-            <?php endif; ?>
+          <td colspan="8" style="text-align:center;padding:32px;" class="muted">
+            No payslip records found.
           </td>
         </tr>
-      <?php endforeach; ?>
+      <?php else: ?>
+        <?php foreach ($payslips as $ps):
+            [$pillClass, $pillLabel] = payslipPill($ps['status']);
+            $dateRange = date('M j', strtotime($ps['period_start']))
+                       . ' – '
+                       . date('M j, Y', strtotime($ps['period_end']));
+        ?>
+          <tr>
+            <td><strong><?= htmlspecialchars($ps['period_label'], ENT_QUOTES, 'UTF-8') ?></strong></td>
+            <td class="muted"><?= htmlspecialchars($dateRange) ?></td>
+            <td><?= number_format((float) $ps['hours_worked'], 1) ?> hrs</td>
+            <td>₱<?= number_format((float) $ps['gross_pay'], 2) ?></td>
+            <td class="muted">– ₱<?= number_format((float) $ps['total_deductions'], 2) ?></td>
+            <td><strong class="col-net">₱<?= number_format((float) $ps['net_pay'], 2) ?></strong></td>
+            <td><span class="pill <?= $pillClass ?>"><?= $pillLabel ?></span></td>
+            <td>
+              <a href="/employee/payslip_view.php?id=<?= (int) $ps['id'] ?>"
+                 class="btn btn-sm btn-outline">View</a>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </tbody>
   </table>
 </div>

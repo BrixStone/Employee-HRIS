@@ -18,8 +18,6 @@ if (strtolower(trim($_SESSION['role'])) !== 'employee') {
     exit('Access denied: Employee account required.');
 }
 
-require_once __DIR__ . '/../config/database.php';
-
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;
 
@@ -44,94 +42,140 @@ if (!$employeeData) {
 
 $userEmail = $employeeData['email'];
 $firstName = $employeeData['first_name'] ?? '';
-$lastName = $employeeData['last_name'] ?? '';
-$fullName = trim($firstName . ' ' . $lastName);
+$lastName  = $employeeData['last_name'] ?? '';
+$fullName  = trim($firstName . ' ' . $lastName);
 
 $user = [
     'first_name' => htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'),
-    'last_name' => htmlspecialchars($lastName, ENT_QUOTES, 'UTF-8'),
-    'full_name' => htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8'),
-    'email' => htmlspecialchars($userEmail ?? '', ENT_QUOTES, 'UTF-8'),
-    'role' => 'Employee',
-    'avatar' => 'https://ui-avatars.com/api/?name='
-        . urlencode($fullName)
-        . '&background=4763ff&color=fff'
+    'last_name'  => htmlspecialchars($lastName,  ENT_QUOTES, 'UTF-8'),
+    'full_name'  => htmlspecialchars($fullName,  ENT_QUOTES, 'UTF-8'),
+    'email'      => htmlspecialchars($userEmail ?? '', ENT_QUOTES, 'UTF-8'),
+    'role'       => 'Employee',
+    'avatar'     => 'https://ui-avatars.com/api/?name='
+                    . urlencode($fullName)
+                    . '&background=4763ff&color=fff'
 ];
 
 // Fetch Real-Time Attendance & Calculate Total Weekly Hours
-$stmtAtt =$pdo->prepare("SELECT time_in, time_out FROM attendance WHERE email = :email ORDER BY time_in DESC LIMIT 1");
-$stmtAtt->execute(['email' =>$userEmail]);
-$attendanceData =$stmtAtt->fetch();
+$stmtAtt = $pdo->prepare("SELECT time_in, time_out FROM attendance WHERE email = :email ORDER BY time_in DESC LIMIT 1");
+$stmtAtt->execute(['email' => $userEmail]);
+$attendanceData = $stmtAtt->fetch();
 
-$stmtWeekly =$pdo->prepare("SELECT SUM(workhours) as total_hours FROM attendance WHERE email = :email");
-$stmtWeekly->execute(['email' => $userEmail]);$weeklyTotalResult = $stmtWeekly->fetch();$totalWeeklyHours = $weeklyTotalResult['total_hours'] ? (float)$weeklyTotalResult['total_hours'] : 0;
+$stmtWeekly = $pdo->prepare("SELECT SUM(workhours) as total_hours FROM attendance WHERE email = :email");
+$stmtWeekly->execute(['email' => $userEmail]);
+$weeklyTotalResult = $stmtWeekly->fetch();
+$totalWeeklyHours  = $weeklyTotalResult['total_hours'] ? (float) $weeklyTotalResult['total_hours'] : 0;
 
-$todayLogText = 'No logs yet';
+$todayLogText    = 'No logs yet';
 $progressPercent = min(100, round(($totalWeeklyHours / 40) * 100));
 
-if ($attendanceData) {$timeIn = new DateTime($attendanceData['time_in']);$timeOutText = 'Current';
+if ($attendanceData) {
+    $timeIn      = new DateTime($attendanceData['time_in']);
+    $timeOutText = 'Current';
     if (!empty($attendanceData['time_out'])) {
-        $timeOut = new DateTime($attendanceData['time_out']);
-        $timeOutText =$timeOut->format('h:i A');
+        $timeOut     = new DateTime($attendanceData['time_out']);
+        $timeOutText = $timeOut->format('h:i A');
     }
-    $todayLogText = $timeIn->format('h:i A') . ' - ' .$timeOutText;
+    $todayLogText = $timeIn->format('h:i A') . ' - ' . $timeOutText;
 }
 
 // Fetch Real-Time Leave Balances from the 'leave' table
-$stmtLeave =$pdo->prepare("SELECT annual_leave, sick_leave, personal_leave FROM `leave` WHERE email = :email LIMIT 1");
-$stmtLeave->execute(['email' =>$userEmail]);
-$leaveData =$stmtLeave->fetch();
+$stmtLeave = $pdo->prepare("SELECT annual_leave, sick_leave, personal_leave FROM `leave` WHERE email = :email LIMIT 1");
+$stmtLeave->execute(['email' => $userEmail]);
+$leaveData = $stmtLeave->fetch();
 
 $timeOffBalances = [
-    'annual' => $leaveData ? $leaveData['annual_leave'] : 0,
-    'sick' => $leaveData ? $leaveData['sick_leave'] : 0,
-    'personal' => $leaveData ? $leaveData['personal_leave'] : 0
+    'annual'   => $leaveData ? $leaveData['annual_leave']   : 0,
+    'sick'     => $leaveData ? $leaveData['sick_leave']     : 0,
+    'personal' => $leaveData ? $leaveData['personal_leave'] : 0,
 ];
 
 // Dynamic Philippine Holidays for the current year
-$currentYear = date('Y');$phHolidays = [
-    ['name' => 'New Year\'s Day', 'date' => "January 1, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'Araw ng Kagitingan', 'date' => "April 9, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'Labor Day', 'date' => "May 1, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'Independence Day', 'date' => "June 12, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'National Heroes Day', 'date' => "August 31, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'All Saints\' Day', 'date' => "November 1, {$currentYear}", 'type' => 'Special Non-Working'],
-    ['name' => 'Bonifacio Day', 'date' => "November 30, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'Christmas Day', 'date' => "December 25, {$currentYear}", 'type' => 'Regular Holiday'],
-    ['name' => 'Rizal Day', 'date' => "December 30, {$currentYear}", 'type' => 'Regular Holiday']
+$currentYear = date('Y');
+$phHolidays  = [
+    ['name' => 'New Year\'s Day',       'date' => "January 1, {$currentYear}",   'type' => 'Regular Holiday'],
+    ['name' => 'Araw ng Kagitingan',    'date' => "April 9, {$currentYear}",     'type' => 'Regular Holiday'],
+    ['name' => 'Labor Day',             'date' => "May 1, {$currentYear}",       'type' => 'Regular Holiday'],
+    ['name' => 'Independence Day',      'date' => "June 12, {$currentYear}",     'type' => 'Regular Holiday'],
+    ['name' => 'National Heroes Day',   'date' => "August 31, {$currentYear}",   'type' => 'Regular Holiday'],
+    ['name' => 'All Saints\' Day',      'date' => "November 1, {$currentYear}",  'type' => 'Special Non-Working'],
+    ['name' => 'Bonifacio Day',         'date' => "November 30, {$currentYear}", 'type' => 'Regular Holiday'],
+    ['name' => 'Christmas Day',         'date' => "December 25, {$currentYear}", 'type' => 'Regular Holiday'],
+    ['name' => 'Rizal Day',             'date' => "December 30, {$currentYear}", 'type' => 'Regular Holiday'],
 ];
 
-$todayObj = new DateTime();$upcomingHolidays = [];
-foreach ($phHolidays as$hol) {
-    $holDate = DateTime::createFromFormat('F j, Y',$hol['date']);
-    if ($holDate &&$holDate >= $todayObj) {$upcomingHolidays[] = [
+$todayObj        = new DateTime();
+$upcomingHolidays = [];
+foreach ($phHolidays as $hol) {
+    $holDate = DateTime::createFromFormat('F j, Y', $hol['date']);
+    if ($holDate && $holDate >= $todayObj) {
+        $upcomingHolidays[] = [
             'name' => $hol['name'],
             'date' => $holDate->format('l, M j, Y'),
-            'type' => $hol['type']
+            'type' => $hol['type'],
         ];
     }
-    if (count($upcomingHolidays) >= 3) break; 
+    if (count($upcomingHolidays) >= 3) break;
 }
 
 if (empty($upcomingHolidays)) {
-    $upcomingHolidays[] = ['name' => 'New Year\'s Day', 'date' => 'January 1, ' . ($currentYear + 1), 'type' => 'Regular Holiday'];
+    $upcomingHolidays[] = [
+        'name' => 'New Year\'s Day',
+        'date' => 'January 1, ' . ($currentYear + 1),
+        'type' => 'Regular Holiday',
+    ];
 }
 
-// Properly Defined Pay Period String for the Current Month
-$payPeriodString = date('M 1 - M t, Y');
+/* ---------------------------------------------------------------
+ * Most recent payslip for this employee
+ * Joins payroll_periods so we can show the period label + dates.
+ * ------------------------------------------------------------- */
+$recentPayslip = null;
+try {
+    $psStmt = $pdo->prepare("
+        SELECT
+            ps.id,
+            ps.gross_pay,
+            ps.total_deductions,
+            ps.net_pay,
+            ps.status,
+            pp.period_name AS period_label,
+            pp.start_date AS period_start,
+            pp.end_date   AS period_end
+        FROM payslips ps
+        JOIN payroll_periods pp ON pp.id = ps.payroll_period_id
+        WHERE ps.employee_id = :eid
+        ORDER BY pp.start_date DESC
+        LIMIT 1
+    ");
+    $psStmt->execute([':eid' => $employeeId]);
+    $recentPayslip = $psStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+    error_log('Dashboard payslip query failed: ' . $e->getMessage());
+}
+
+// Pill helper (same as payslips.php)
+function dashPayslipPill(string $status): array {
+    return match ($status) {
+        'paid'      => ['pill-active',  'Paid'],
+        'finalized' => ['pill-warning', 'Finalized'],
+        'generated' => ['pill-info',    'Generated'],
+        default     => ['pill-neutral', 'Pending'],
+    };
+}
 
 // Shell configuration
-$title = 'Employee Dashboard';
-$eyebrow = 'OVERVIEW';
-$subtitle = 'Your attendance, leave, and pay at a glance';
-$pageCss = 'emp_dashboard';
-$realtime = true;
+$title           = 'Employee Dashboard';
+$eyebrow         = 'OVERVIEW';
+$subtitle        = 'Your attendance, leave, and pay at a glance';
+$pageCss         = 'emp_dashboard';
+$realtime        = true;
 $realtimeRefresh = 'prompt';
 require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
 <?php
-  $hour = (int) date('G');
+  $hour     = (int) date('G');
   $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 ?>
 <section class="hero-banner">
@@ -227,12 +271,71 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
       </div>
     </article>
 
+    <!-- ── PAYSLIP CARD ─────────────────────────────────────── -->
     <article class="card">
-      <div class="card-heading"><div><p class="eyebrow">PAYROLL</p><h2>Recent payslip</h2></div></div>
-      <div class="payslip-row"><span class="muted">Pay Period</span><strong><?= htmlspecialchars($payPeriodString) ?></strong></div>
-      <div class="payslip-row"><span class="muted">Net Pay</span><strong class="teal">$0.00</strong></div>
-      <p class="muted" style="margin:14px 0 0;font-size:12px">No active payroll disbursement for this period yet.</p>
+      <div class="card-heading">
+        <div><p class="eyebrow">PAYROLL</p><h2>Recent payslip</h2></div>
+      </div>
+
+      <?php if ($recentPayslip): ?>
+        <?php
+          [$pillClass, $pillLabel] = dashPayslipPill($recentPayslip['status']);
+          $dateRange = date('M j', strtotime($recentPayslip['period_start']))
+                     . ' – '
+                     . date('M j, Y', strtotime($recentPayslip['period_end']));
+        ?>
+        <div class="payslip-row">
+          <span class="muted">Pay Period</span>
+          <strong><?= htmlspecialchars($recentPayslip['period_label'], ENT_QUOTES, 'UTF-8') ?></strong>
+        </div>
+        <div class="payslip-row">
+          <span class="muted">Dates</span>
+          <span><?= htmlspecialchars($dateRange) ?></span>
+        </div>
+        <div class="payslip-row">
+          <span class="muted">Gross Pay</span>
+          <span>₱<?= number_format((float) $recentPayslip['gross_pay'], 2) ?></span>
+        </div>
+        <div class="payslip-row">
+          <span class="muted">Deductions</span>
+          <span class="muted">– ₱<?= number_format((float) $recentPayslip['total_deductions'], 2) ?></span>
+        </div>
+        <div class="payslip-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:10px">
+          <span class="muted">Net Pay</span>
+          <strong class="teal" style="font-size:16px">
+            ₱<?= number_format((float) $recentPayslip['net_pay'], 2) ?>
+          </strong>
+        </div>
+        <div class="payslip-row" style="margin-top:8px">
+          <span class="muted">Status</span>
+          <span class="pill <?= $pillClass ?>"><?= $pillLabel ?></span>
+        </div>
+        <div class="quick-stack" style="margin-top:14px">
+          <a class="primary-button"
+             href="/employee/payslip_view.php?id=<?= (int) $recentPayslip['id'] ?>"
+             style="width:100%;text-align:center">
+            View Payslip
+          </a>
+          <a class="button" href="/employee/payslips.php" style="width:100%;text-align:center">
+            All Payslips
+          </a>
+        </div>
+
+      <?php else: ?>
+        <p class="muted" style="margin:6px 0 4px">No payslip released yet.</p>
+        <p class="muted" style="font-size:12px">
+          Once HR generates a pay period that covers your records,
+          your most recent payslip will appear here.
+        </p>
+        <div class="quick-stack" style="margin-top:14px">
+          <a class="button" href="/employee/payslips.php" style="width:100%;text-align:center">
+            View All Payslips
+          </a>
+        </div>
+      <?php endif; ?>
     </article>
+    <!-- ── END PAYSLIP CARD ──────────────────────────────────── -->
+
   </aside>
 </div>
 
