@@ -1,4 +1,10 @@
 <?php
+
+function sort_key_value(array $employee, string $key): mixed
+{
+    return $employee[$key] ?? null;
+}
+
 function bubble_sort_employees(array &$arr, string $key, string $dir = 'asc'): void {
     $n = count($arr);
 
