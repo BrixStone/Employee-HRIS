@@ -1,0 +1,28 @@
+name: Restrict Main PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-source:
+    name: Validate PR Source Branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" != "develop" ] || [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::Only the develop branch from the original repository can create PRs targeting main."
+            exit 1
+          fi
+
+          echo "Valid source branch."
