@@ -138,6 +138,51 @@ services:
         aliases:
           - hris-exporter
 
+  # ----------------------------------------------------------
+  # Scheduled jobs (replaces cron / Windows Task Scheduler)
+  #
+  # Runs cron/expire_pending_leaves.php on start and then every
+  # CRON_INTERVAL_SECONDS: reminds HR about Pending leave and
+  # auto-rejects it at CRON_REJECT_DAYS. Logs: docker logs hris_cron
+  # ----------------------------------------------------------
+  hris-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hris_cron
+    restart: unless-stopped
+    init: true                  # so `docker stop` ends the loop immediately
+    volumes:
+      - ../:/app:ro
+    working_dir: /app
+    command: ["php", "/app/cron/scheduler.php"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: hris
+      DB_USER: hris_app
+      DB_PASS: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      CRON_INTERVAL_SECONDS: "${CRON_INTERVAL_SECONDS:-3600}"
+      CRON_REJECT_DAYS: "${CRON_REJECT_DAYS:-14}"
+      CRON_REMIND_EVERY: "${CRON_REMIND_EVERY:-3}"
+    healthcheck:
+      # Healthy while the scheduler keeps finishing runs (within 2 intervals).
+      test:
+        - CMD
+        - php
+        - -r
+        - "exit((time()-(int)@filemtime('/tmp/hris_cron_heartbeat'))<(2*(int)(getenv('CRON_INTERVAL_SECONDS')?:3600)+300)?0:1);"
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - hris_net              # reach hris-realtime to push live notifications
+
 volumes:
   mysql_data:
 
