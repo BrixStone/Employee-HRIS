@@ -111,6 +111,42 @@ $validStatuses = ['Pending', 'Approved', 'Rejected', 'Cancelled', 'All'];
 if (!in_array($status, $validStatuses, true)) $status = 'Pending';
 $requests = $lr->getForHR($status === 'All' ? null : $status);
 
+$leaveHistoryStacks = []; // keyed by leave_request_id
+
+try {
+  $logStmt = $pdo->query("
+        SELECT
+            lrl.leave_request_id,
+            lrl.old_status,
+            lrl.new_status,
+            lrl.changed_at,
+            u.username AS changed_by
+        FROM leave_request_logs lrl
+        LEFT JOIN users u ON u.id = lrl.changed_by
+        ORDER BY lrl.leave_request_id ASC,
+                 lrl.changed_at       ASC
+    ");
+  $logs = $logStmt->fetchAll(PDO::FETCH_ASSOC);
+
+  foreach ($logs as $log) {
+    $rid = $log['leave_request_id'];
+
+    if (!isset($leaveHistoryStacks[$rid])) {
+      $leaveHistoryStacks[$rid] = new Stack();
+    }
+
+    // Push each status change onto the stack
+    $leaveHistoryStacks[$rid]->push([
+      'old_status' => $log['old_status'],
+      'new_status' => $log['new_status'],
+      'changed_at' => $log['changed_at'],
+      'changed_by' => $log['changed_by'],
+    ]);
+  }
+} catch (Throwable $e) {
+  error_log('Leave stack build failed: ' . $e->getMessage());
+}
+
 require __DIR__ . '/../templates/hrTemplates/header.php';
 ?>
 
@@ -277,21 +313,54 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <th>Dates</th>
         <th>Days</th>
         <th>Status</th>
+        <th>History</th>
         <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       <?php if (empty($requests)): ?>
         <tr>
-          <td colspan="6">No requests.</td>
+          <td colspan="7">No requests.</td>
         </tr>
         <?php else: foreach ($requests as $r): ?>
+          <?php
+          // ── DSA: Stack — status history for this request ──
+          $stack   = $leaveHistoryStacks[$r['id']] ?? new Stack();
+          $latest  = $stack->peek();
+          $history = $stack->toArrayReversed();
+          $trail   = $stack->size();
+          ?>
           <tr>
             <td><?= h($r['employee_no']) ?> — <?= h(fullName($r)) ?></td>
             <td><?= h($r['leave_name']) ?></td>
             <td><?= h($r['start_date']) ?> → <?= h($r['end_date']) ?></td>
             <td><?= h($r['number_of_days']) ?></td>
             <td><?= h($r['status']) ?></td>
+
+            <!-- ── Stack: Status History column ── -->
+            <td>
+              <?php if ($trail > 0): ?>
+                <details>
+                  <summary><?= $trail ?> change<?= $trail === 1 ? '' : 's' ?></summary>
+                  <ul style="margin:6px 0 0;padding-left:16px;font-size:12px">
+                    <?php foreach ($history as $h_entry): ?>
+                      <li>
+                        <span class="pill pill-neutral"><?= htmlspecialchars($h_entry['old_status']) ?></span>
+                        →
+                        <span class="pill pill-active"><?= htmlspecialchars($h_entry['new_status']) ?></span>
+                        <span class="muted">
+                          by <?= htmlspecialchars($h_entry['changed_by'] ?? 'system') ?>
+                          on <?= date('M j, Y g:i A', strtotime($h_entry['changed_at'])) ?>
+                        </span>
+                      </li>
+                    <?php endforeach; ?>
+                  </ul>
+                </details>
+              <?php else: ?>
+                <span class="muted">No history</span>
+              <?php endif; ?>
+            </td>
+
             <td>
               <?php if ($r['status'] === 'Pending'): ?>
                 <form method="POST" style="display:inline" onsubmit="return confirm('Approve this request?');">
