@@ -1,25 +1,22 @@
 <?php
-    function linear_search_employees(array $rows, string $q): array {
-        $q = trim($q);
+/**
+ * Linear Search — HRIS
+ * Wraps Searching::linearSearch()
+ * DSA: O(n)
+ */
 
-        if ($q === '') return $rows;
+require_once __DIR__ . '/../classes/DSA/Searching.php';
 
-        $out = [];
-        $qL = strtolower($q);
-
-        foreach ($rows as $e) {
-            $hay = strtolower(
-                ($e['employee_id'] ?? ''). ' ' .
-                emp_full_name($e) . ' ' .
-                ($e['email'] ?? '')
-            );
-
-            if (stripos($hay, $qL) !== false) {
-                $out[] = $e;
-            }
-        }
-        return $out;
-    }
-
-    
-?>
+function linear_search_employees(array $rows, string $q): array
+{
+    return Searching::linearSearch($rows, $q, [
+        'employee_id',
+        'first_name',
+        'last_name',
+        'middle_name',
+        'name',
+        'email',
+        'department_name',
+        'position_title',
+    ]);
+}
