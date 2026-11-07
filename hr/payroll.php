@@ -5,6 +5,7 @@ require_role(['admin', 'hr']);
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Payroll.php';
 require_once __DIR__ . '/../classes/DSA/LinkedList.php';
+require_once __DIR__ . '/../algorithms/quick_sort.php';
 
 $payroll = new Payroll($pdo);
 
@@ -153,19 +154,27 @@ if ($tab === 'salaries') {
 }
 
 if ($tab === 'periods' || $tab === 'payslips') {
-  $periods = $payroll->getAllPeriods();
+    $periods = $payroll->getAllPeriods();
 
-  $periodList = new LinkedList();
-  foreach ($periods as $period) {
-    $periodList->append($period); // O(1) per node
-  }
-  $latestPeriod = $periodList->tail(); // most recent
-  $oldestPeriod = $periodList->head(); // first ever
+    // ── DSA: Linked List — payroll periods chain ──────────────
+    $periodList = new LinkedList();
+    foreach ($periods as $period) {
+        $periodList->append($period); // O(1) per node
+    }
+    $latestPeriod = $periodList->tail(); // most recent
+    $oldestPeriod = $periodList->head(); // first ever
 }
 
 if ($tab === 'payslips' && $selPeriodId > 0) {
-  $selPeriod = $payroll->getPeriodById($selPeriodId);
-  $payslips  = $payroll->getPayslipsByPeriod($selPeriodId);
+    $selPeriod = $payroll->getPeriodById($selPeriodId);
+    $payslips  = $payroll->getPayslipsByPeriod($selPeriodId);
+
+    // ── DSA: Quick Sort — sort payslips by employee last name ──
+    // O(n log n) average — median-of-three pivot
+    // Displays payslip list alphabetically by employee surname.
+    if (!empty($payslips)) {
+        $payslips = quick_sort_employees($payslips, 'last_name', 'asc');
+    }
 }
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
