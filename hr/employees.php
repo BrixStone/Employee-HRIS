@@ -4,17 +4,37 @@ require __DIR__ . '/../classes/Employee.php';
 require __DIR__ . '/../classes/DSA/Searching.php';
 require __DIR__ . '/../classes/DSA/Sorting.php';
 require __DIR__ . '/../classes/DSA/BinarySearchTree.php';
-
+require __DIR__ . '/../classes/DSA/HashTable.php';
 $employeeModel = new Employee($pdo);
 $employees     = $employeeModel->getAll();
 
-$employeeBST = new BinarySearchTree();
-foreach ($employees as $emp) {
-  $key = strtoupper(trim($emp['employee_id'] ?? ''));
-  if ($key !== '') {
-    $employeeBST->insert($key, $emp);
+// ── DSA: Hash Table — department and position cache ──────────
+// Hash department_id → department name  O(1) lookup
+// Hash position_id   → position title   O(1) lookup
+// Avoids repeated DB queries or array scans per employee row.
+
+$departmentCache = new HashTable(32);
+$positionCache   = new HashTable(32);
+
+try {
+  // Load all departments into hash table once
+  $deptRows = $pdo->query("SELECT id, name FROM departments")
+    ->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($deptRows as $d) {
+    $departmentCache->put((string)$d['id'], $d['name']);
   }
+
+  // Load all positions into hash table once
+  $posRows = $pdo->query("SELECT id, title FROM positions")
+    ->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($posRows as $p) {
+    $positionCache->put((string)$p['id'], $p['title']);
+  }
+} catch (Throwable $e) {
+  error_log('Hash table cache build failed: ' . $e->getMessage());
 }
+
+
 
 $q      = trim($_GET['q'] ?? '');
 $rawSort = $_GET['sort_by'] ?? '';
@@ -48,6 +68,14 @@ foreach ($employees as &$emp) {
   $emp['name'] = emp_full_name($emp);
 }
 unset($emp);
+
+$employeeBST = new BinarySearchTree();
+foreach ($employees as $emp) {
+  $key = strtoupper(trim($emp['employee_id'] ?? ''));
+  if ($key !== '') {
+    $employeeBST->insert($key, $emp);
+  }
+}
 
 if ($q !== '') {
 
@@ -201,19 +229,43 @@ $inactiveShown = $totalShown - $activeShown;
       <?php else: ?>
         <?php foreach ($employees as $employee): ?>
           <?php
+          // Hash Table: O(1) average lookup
+          $deptName = $departmentCache->get(
+            (string)($employee['department_id'] ?? '')
+          ) ?? ($employee['department_name'] ?? '—');
+
+          $posTitle = $positionCache->get(
+            (string)($employee['position_id'] ?? '')
+          ) ?? ($employee['position_title'] ?? '—');
+
           $fullName = htmlspecialchars(
             emp_full_name($employee),
             ENT_QUOTES,
             'UTF-8'
           );
-          $isActive = strcasecmp((string)($employee['employment_status'] ?? ''), 'Active') === 0;
-          $pillClass = $isActive ? 'pill-active' : (($employee['employment_status'] ?? '') !== '' ? 'pill-inactive' : 'pill-neutral');
+
+          $isActive = strcasecmp(
+            (string)($employee['employment_status'] ?? ''),
+            'Active'
+          ) === 0;
+
+          $pillClass = $isActive
+            ? 'pill-active'
+            : (($employee['employment_status'] ?? '') !== ''
+              ? 'pill-inactive'
+              : 'pill-neutral');
           ?>
           <tr>
             <td><strong><?= htmlspecialchars($employee['employee_id']) ?></strong></td>
+
             <td><?= $fullName ?></td>
-            <td><?= htmlspecialchars($employee['department_name'] ?? 'N/A') ?></td>
-            <td><?= htmlspecialchars($employee['position_title'] ?? 'N/A') ?></td>
+
+            <!-- Hash Table: Department lookup -->
+            <td><?= htmlspecialchars($deptName, ENT_QUOTES, 'UTF-8') ?></td>
+
+            <!-- Hash Table: Position lookup -->
+            <td><?= htmlspecialchars($posTitle, ENT_QUOTES, 'UTF-8') ?></td>
+
             <td><?= htmlspecialchars($employee['date_hired']) ?></td>
             <td><span class="pill <?= $pillClass ?>"><?= htmlspecialchars($employee['employment_status'] ?: 'Unknown') ?></span></td>
             <td>
