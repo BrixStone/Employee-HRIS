@@ -3,3 +3,6 @@ config/supabase.php
 .env
 terraform.tfvars
 node_modules/
+*.tfstate
+*.tfstate.*
+.terraform/
