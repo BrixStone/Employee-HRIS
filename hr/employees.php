@@ -1,22 +1,19 @@
 <?php
-
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
-require __DIR__ . '/../algorithms/linear_search.php';
-require __DIR__ . '/../algorithms/bubble_sort.php';
+require __DIR__ . '/../classes/DSA/Searching.php';
+require __DIR__ . '/../classes/DSA/Sorting.php';
 
 $employeeModel = new Employee($pdo);
-$employees = $employeeModel->getAll();
+$employees     = $employeeModel->getAll();
 
-$q = trim($_GET['q'] ?? '');
-
-$rawSort = $_GET['sort_by']?? '';
-
-$dir = ($_GET['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
+$q      = trim($_GET['q'] ?? '');
+$rawSort = $_GET['sort_by'] ?? '';
+$dir    = ($_GET['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
 
 $sortKeyMap = [
-    '' => '',
-    'name' => 'name',
+    ''                  => '',
+    'name'              => 'name',
     'department_name'   => 'department_name',
     'position_title'    => 'position_title',
     'date_hired'        => 'date_hired',
@@ -24,47 +21,53 @@ $sortKeyMap = [
     'employee_id'       => 'employee_id',
 ];
 
-$sortBy = $sortKeyMap[$rawSort] ?? '';
-
+$sortBy  = $sortKeyMap[$rawSort] ?? '';
 $allowed = array_values($sortKeyMap);
-
 if (!in_array($sortBy, $allowed, true)) {
     $sortBy = '';
 }
 
 function emp_full_name(array $e): string {
     $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
-    $s = !empty($e['suffix']) ? ' ' . $e['suffix'] : '';
-    return trim(
-        ($e['first_name'] ?? '') . ' ' . $m.($e['last_name'] ?? '').$s);
+    $s = !empty($e['suffix'])      ? ' ' . $e['suffix']      : '';
+    return trim(($e['first_name'] ?? '') . ' ' . $m . ($e['last_name'] ?? '') . $s);
 }
 
-function sort_key_value(array $e, string $key) {
-    if ($key === 'name') {
-        return strtolower(emp_full_name($e));
-    }
-    $v = $e[$key] ?? '';
-    return is_string($v) ? strtolower($v) : $v;
+// Add computed 'name' key so Sorting and Searching can target it directly
+foreach ($employees as &$emp) {
+    $emp['name'] = emp_full_name($emp);
+}
+unset($emp);
+
+// ── DSA: Linear Search ───────────────────────────────────────────
+// Searches first_name, last_name, full name, email, employee_id
+// Using Searching::linearSearch() — O(n)
+if ($q !== '') {
+    $employees = Searching::linearSearch($employees, $q, [
+        'name',
+        'first_name',
+        'last_name',
+        'email',
+        'employee_id',
+        'department_name',
+        'position_title',
+    ]);
 }
 
-
-
-function contains_i(?string $haystack, string $needle): bool {
-    if ($haystack === null) return false;
-
-    return stripos($haystack, $needle) !== false;
-}
-
-$employees = linear_search_employees($employees, $q);
-
+// ── DSA: Bubble Sort ─────────────────────────────────────────────
+// Sorts by the chosen column using Sorting::bubbleSort() — O(n²)
+// Falls back to sorting by name ascending when no sort key chosen
 if ($sortBy !== '') {
-    bubble_sort_employees($employees, $sortBy, $dir);
+    $employees = Sorting::bubbleSort($employees, $sortBy, $dir);
+} else {
+    $employees = Sorting::bubbleSort($employees, 'name', 'asc');
 }
+
 require __DIR__ . '/../templates/hrTemplates/header.php';
 
-// Lightweight counts for the stat strip (based on the loaded result set).
-$totalShown = count($employees);
-$activeShown = 0;
+// Lightweight counts for the stat strip (based on the filtered result set)
+$totalShown    = count($employees);
+$activeShown   = 0;
 foreach ($employees as $__e) {
     if (strcasecmp((string)($__e['employment_status'] ?? ''), 'Active') === 0) {
         $activeShown++;
