@@ -3,64 +3,91 @@ require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
 require __DIR__ . '/../classes/DSA/Searching.php';
 require __DIR__ . '/../classes/DSA/Sorting.php';
+require __DIR__ . '/../classes/DSA/BinarySearchTree.php';
 
 $employeeModel = new Employee($pdo);
 $employees     = $employeeModel->getAll();
+
+$employeeBST = new BinarySearchTree();
+foreach ($employees as $emp) {
+  $key = strtoupper(trim($emp['employee_id'] ?? ''));
+  if ($key !== '') {
+    $employeeBST->insert($key, $emp);
+  }
+}
 
 $q      = trim($_GET['q'] ?? '');
 $rawSort = $_GET['sort_by'] ?? '';
 $dir    = ($_GET['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
 
 $sortKeyMap = [
-    ''                  => '',
-    'name'              => 'name',
-    'department_name'   => 'department_name',
-    'position_title'    => 'position_title',
-    'date_hired'        => 'date_hired',
-    'employment_status' => 'employment_status',
-    'employee_id'       => 'employee_id',
+  ''                  => '',
+  'name'              => 'name',
+  'department_name'   => 'department_name',
+  'position_title'    => 'position_title',
+  'date_hired'        => 'date_hired',
+  'employment_status' => 'employment_status',
+  'employee_id'       => 'employee_id',
 ];
 
 $sortBy  = $sortKeyMap[$rawSort] ?? '';
 $allowed = array_values($sortKeyMap);
 if (!in_array($sortBy, $allowed, true)) {
-    $sortBy = '';
+  $sortBy = '';
 }
 
-function emp_full_name(array $e): string {
-    $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
-    $s = !empty($e['suffix'])      ? ' ' . $e['suffix']      : '';
-    return trim(($e['first_name'] ?? '') . ' ' . $m . ($e['last_name'] ?? '') . $s);
+function emp_full_name(array $e): string
+{
+  $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
+  $s = !empty($e['suffix'])      ? ' ' . $e['suffix']      : '';
+  return trim(($e['first_name'] ?? '') . ' ' . $m . ($e['last_name'] ?? '') . $s);
 }
 
 // Add computed 'name' key so Sorting and Searching can target it directly
 foreach ($employees as &$emp) {
-    $emp['name'] = emp_full_name($emp);
+  $emp['name'] = emp_full_name($emp);
 }
 unset($emp);
 
-// ── DSA: Linear Search ───────────────────────────────────────────
-// Searches first_name, last_name, full name, email, employee_id
-// Using Searching::linearSearch() — O(n)
 if ($q !== '') {
+
+  $isIdSearch = preg_match('/^EMP-\d+$/i', $q);
+
+  if ($isIdSearch) {
+
+    // BST Search — O(log n) average
+    $found = $employeeBST->search(strtoupper($q));
+
+    if ($found) {
+      // Add computed full name to BST result
+      $found['name'] = emp_full_name($found);
+
+      $employees = [$found];
+    } else {
+      $employees = [];
+    }
+  } else {
+
+    // Linear Search — O(n)
     $employees = Searching::linearSearch($employees, $q, [
-        'name',
-        'first_name',
-        'last_name',
-        'email',
-        'employee_id',
-        'department_name',
-        'position_title',
+      'name',
+      'first_name',
+      'last_name',
+      'email',
+      'employee_id',
+      'department_name',
+      'position_title',
     ]);
+  }
 }
 
 // ── DSA: Bubble Sort ─────────────────────────────────────────────
 // Sorts by the chosen column using Sorting::bubbleSort() — O(n²)
 // Falls back to sorting by name ascending when no sort key chosen
 if ($sortBy !== '') {
-    $employees = Sorting::bubbleSort($employees, $sortBy, $dir);
+  $employees = Sorting::bubbleSort($employees, $sortBy, $dir);
 } else {
-    $employees = Sorting::bubbleSort($employees, 'name', 'asc');
+  $employees = Sorting::bubbleSort($employees, 'name', 'asc');
 }
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
@@ -69,9 +96,9 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 $totalShown    = count($employees);
 $activeShown   = 0;
 foreach ($employees as $__e) {
-    if (strcasecmp((string)($__e['employment_status'] ?? ''), 'Active') === 0) {
-        $activeShown++;
-    }
+  if (strcasecmp((string)($__e['employment_status'] ?? ''), 'Active') === 0) {
+    $activeShown++;
+  }
 }
 $inactiveShown = $totalShown - $activeShown;
 ?>
@@ -106,7 +133,7 @@ $inactiveShown = $totalShown - $activeShown;
   <article class="metric-card metric-violet">
     <div class="metric-top"><span class="metric-ico">⇅</span><span class="metric-chip"><?= $sortBy !== '' ? strtoupper($dir) : 'None' ?></span></div>
     <span class="metric-title">Sorting</span>
-    <strong class="metric-number purple" style="font-size:20px;margin-top:14px"><?= $sortBy !== '' ? ucfirst(str_replace('_',' ',$sortBy)) : 'Unsorted' ?></strong>
+    <strong class="metric-number purple" style="font-size:20px;margin-top:14px"><?= $sortBy !== '' ? ucfirst(str_replace('_', ' ', $sortBy)) : 'Unsorted' ?></strong>
   </article>
 </div>
 
@@ -120,19 +147,19 @@ $inactiveShown = $totalShown - $activeShown;
       <div class="field">
         <label for="sort_by">Sort by</label>
         <select name="sort_by" id="sort_by">
-          <option value=""                  <?= $rawSort === ''                ? 'selected' : '' ?>>No sorting</option>
-          <option value="name"              <?= $rawSort === 'name'            ? 'selected' : '' ?>>Name</option>
-          <option value="department_name"   <?= $rawSort === 'department_name' ? 'selected' : '' ?>>Department</option>
-          <option value="position_title"    <?= $rawSort === 'position_title'  ? 'selected' : '' ?>>Position</option>
-          <option value="date_hired"        <?= $rawSort === 'date_hired'      ? 'selected' : '' ?>>Date Hired</option>
+          <option value="" <?= $rawSort === ''                ? 'selected' : '' ?>>No sorting</option>
+          <option value="name" <?= $rawSort === 'name'            ? 'selected' : '' ?>>Name</option>
+          <option value="department_name" <?= $rawSort === 'department_name' ? 'selected' : '' ?>>Department</option>
+          <option value="position_title" <?= $rawSort === 'position_title'  ? 'selected' : '' ?>>Position</option>
+          <option value="date_hired" <?= $rawSort === 'date_hired'      ? 'selected' : '' ?>>Date Hired</option>
           <option value="employment_status" <?= $rawSort === 'employment_status' ? 'selected' : '' ?>>Status</option>
-          <option value="employee_id"       <?= $rawSort === 'employee_id'     ? 'selected' : '' ?>>Employee ID</option>
+          <option value="employee_id" <?= $rawSort === 'employee_id'     ? 'selected' : '' ?>>Employee ID</option>
         </select>
       </div>
       <div class="field">
         <label for="dir">Direction</label>
         <select name="dir" id="dir">
-          <option value="asc"  <?= $dir === 'asc'  ? 'selected' : '' ?>>Ascending</option>
+          <option value="asc" <?= $dir === 'asc'  ? 'selected' : '' ?>>Ascending</option>
           <option value="desc" <?= $dir === 'desc' ? 'selected' : '' ?>>Descending</option>
         </select>
       </div>
@@ -174,14 +201,13 @@ $inactiveShown = $totalShown - $activeShown;
       <?php else: ?>
         <?php foreach ($employees as $employee): ?>
           <?php
-            $fullName = htmlspecialchars(
-              $employee['first_name'] . ' ' .
-              ($employee['middle_name'] ? $employee['middle_name'] . ' ' : '') .
-              $employee['last_name'] .
-              ($employee['suffix'] ? ' ' . $employee['suffix'] : '')
-            );
-            $isActive = strcasecmp((string)($employee['employment_status'] ?? ''), 'Active') === 0;
-            $pillClass = $isActive ? 'pill-active' : (($employee['employment_status'] ?? '') !== '' ? 'pill-inactive' : 'pill-neutral');
+          $fullName = htmlspecialchars(
+            emp_full_name($employee),
+            ENT_QUOTES,
+            'UTF-8'
+          );
+          $isActive = strcasecmp((string)($employee['employment_status'] ?? ''), 'Active') === 0;
+          $pillClass = $isActive ? 'pill-active' : (($employee['employment_status'] ?? '') !== '' ? 'pill-inactive' : 'pill-neutral');
           ?>
           <tr>
             <td><strong><?= htmlspecialchars($employee['employee_id']) ?></strong></td>
