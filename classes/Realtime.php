@@ -71,14 +71,47 @@ final class Realtime
 
     public static function tokenForSession(array $session): ?string
     {
-        $channels = self::channelsForSession($session);
+        return self::tokenForClaims(
+            (int)($session['user_id'] ?? 0),
+            strtolower((string)($session['role'] ?? '')),
+            self::channelsForSession($session)
+        );
+    }
+
+    /**
+     * Issue a token from a DB-verified account (preferred over
+     * tokenForSession, which trusts the PHP session as-is).
+     *
+     * $account must come from a fresh database read and contain:
+     *   'user_id' => int, 'role' => string, 'employee_id' => ?int
+     * Returns null if the account's role has no realtime channel.
+     */
+    public static function tokenForAccount(array $account): ?string
+    {
+        $role = strtolower(trim((string)($account['role'] ?? '')));
+        $employeeId = $account['employee_id'] ?? null;
+
+        // Same rule as channelsForSession(), but driven by verified DB values.
+        $channels = [];
+        if ($role === 'employee' && !empty($employeeId)) {
+            $channels = ['employee:' . (int)$employeeId];
+        } elseif ($role === 'hr' || $role === 'admin') {
+            $channels = ['hr'];
+        }
+
+        return self::tokenForClaims((int)($account['user_id'] ?? 0), $role, $channels);
+    }
+
+    /** Sign a token for the given user id, role and channels. */
+    private static function tokenForClaims(int $userId, string $role, array $channels): ?string
+    {
         if (!$channels || !self::enabled()) {
             return null;
         }
         $claims = [
-            'uid'  => (int)($session['user_id'] ?? 0),
-            'role' => strtolower((string)$session['role']),
-            'ch'   => $channels,
+            'uid'  => $userId,
+            'role' => $role,
+            'ch'   => array_values($channels),
             'iat'  => time(),
             'exp'  => time() + self::TOKEN_TTL_SECONDS,
         ];

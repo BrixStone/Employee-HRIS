@@ -188,6 +188,16 @@ class Employee
         return $stmt->execute(['id' => $id]);
     }
 
+    public function activate(int $id): bool {
+        $sql = "
+                UPDATE employees
+                SET employment_status = 'Active', updated_at = NOW()
+                WHERE id = :id
+                ";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute(['id' => $id]);
+    }
+
     public function generateEmployeeId(): string {
         $sql = "
             SELECT employee_id

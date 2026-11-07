@@ -4,9 +4,76 @@ require_once __DIR__ . '/LeaveAuditLog.php';
 
 class LeaveRequest
 {
+    public const STATUSES = ['Pending', 'Approved', 'Rejected', 'Cancelled'];
+
+    // LEFT JOINs keep requests whose leave type or employee row is gone.
+    private const SELECT_WITH_NAMES = "
+        SELECT lr.id, lr.employee_id, e.employee_id AS employee_no,
+               e.first_name, e.middle_name, e.last_name,
+               lr.leave_type_id, COALESCE(lt.leave_name, 'Custom / Other') AS leave_name,
+               lr.start_date, lr.end_date, lr.number_of_days, lr.reason, lr.status,
+               lr.approved_by, lr.approved_at, lr.created_at
+        FROM leave_requests AS lr
+        LEFT JOIN employees AS e ON e.id = lr.employee_id
+        LEFT JOIN leave_types AS lt ON lt.id = lr.leave_type_id
+    ";
+
     private PDO $pdo;
 
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
+
+    public function findById(int $id): ?array {
+        $st = $this->pdo->prepare(self::SELECT_WITH_NAMES . " WHERE lr.id = :id LIMIT 1");
+        $st->execute(['id' => $id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Newest first, optionally filtered by status and/or employee (employees.id). */
+    public function search(?string $status = null, ?int $employeeId = null): array {
+        $where = [];
+        $params = [];
+        if ($status !== null) {
+            $where[] = 'lr.status = :st';
+            $params['st'] = $status;
+        }
+        if ($employeeId !== null) {
+            $where[] = 'lr.employee_id = :emp';
+            $params['emp'] = $employeeId;
+        }
+        $sql = self::SELECT_WITH_NAMES
+             . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
+             . ' ORDER BY lr.created_at DESC, lr.id DESC';
+        $st = $this->pdo->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * The owner withdraws a Pending request. Returns false when the request
+     * is not theirs or is no longer Pending.
+     */
+    public function cancel(int $requestId, int $employeeId, array $actor = []): bool {
+        $st = $this->pdo->prepare("
+            UPDATE leave_requests
+            SET status = 'Cancelled'
+            WHERE id = :id AND employee_id = :emp AND status = 'Pending'
+        ");
+        $st->execute(['id' => $requestId, 'emp' => $employeeId]);
+        if ($st->rowCount() === 0) {
+            return false;
+        }
+
+        $this->audit()->log(
+            $requestId,
+            $employeeId,
+            LeaveAuditLog::ACTION_CANCELLED,
+            'Pending',
+            'Cancelled',
+            $actor + ['id' => $employeeId, 'role' => 'employee']
+        );
+        return true;
+    }
 
     public function create(array $data): bool {
         $sql = "INSERT INTO leave_requests
@@ -143,6 +210,50 @@ class LeaveRequest
             $actor + ['id' => $hrUserId, 'role' => 'hr']
         );
         return true;
+    }
+
+    /**
+     * Record a reminder that this request is still waiting for HR, and push a
+     * realtime "leave.reminder" event to the employee and HR. The request's
+     * status is unchanged (it stays Pending). Returns false if the request is
+     * not found or no longer Pending.
+     *
+     * @param array $actor Who/what sent the reminder (usually the scheduler).
+     */
+    public function remind(int $requestId, array $actor = [], ?string $remarks = null): bool {
+        $st = $this->pdo->prepare("SELECT employee_id, status FROM leave_requests WHERE id = :id LIMIT 1");
+        $st->execute(['id' => $requestId]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row || $row['status'] !== 'Pending') {
+            return false; // nothing to remind about
+        }
+
+        // old == new (Pending) because a reminder does not change the status.
+        return $this->audit()->log(
+            $requestId,
+            (int)$row['employee_id'],
+            LeaveAuditLog::ACTION_REMINDER,
+            'Pending',
+            'Pending',
+            $actor + ['role' => 'system'],
+            $remarks
+        );
+    }
+
+    /** How many reminders have already been logged for this request. */
+    public function countReminders(int $requestId): int {
+        try {
+            $st = $this->pdo->prepare("
+                SELECT COUNT(*) FROM leave_request_logs
+                WHERE leave_request_id = :id AND action = :action
+            ");
+            $st->execute(['id' => $requestId, 'action' => LeaveAuditLog::ACTION_REMINDER]);
+            return (int)$st->fetchColumn();
+        } catch (PDOException $e) {
+            // Audit table may not exist yet on a fresh install; treat as none.
+            return 0;
+        }
     }
 
     private function audit(): LeaveAuditLog {

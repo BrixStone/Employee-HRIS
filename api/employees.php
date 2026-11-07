@@ -1,37 +1,47 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
+/**
+ * GET  /api/employees.php   List employees (search + sort)   HR / admin
+ * POST /api/employees.php   Create an employee (JSON body)     HR / admin
+ */
+require_once __DIR__ . '/_api.php';
 
-require_once __DIR__ . '/../config/helpers.php'; // respond()
-
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
-    header('Allow: GET');
-    respond(405, [
-        'success' => false,
-        'message' => 'Method not allowed'
-    ]);
-}
-
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
-$role = $_SESSION['role'] ?? null;
-
-if (!in_array($role, ['admin', 'hr'], true)) {
-    respond($role === null ? 401 : 403, [
-        'success' => false,
-        'message' => $role === null
-            ? 'Authentication required'
-            : 'Insufficient permissions'
-    ]);
-}
+$method  = api_methods(['GET', 'POST']);
+$session = api_require_role(['admin', 'hr']);
 
 try {
     require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../classes/Employee.php';
 
+    api_require_account($pdo, $session);
     $model = new Employee($pdo);
+
+    if ($method === 'POST') {
+        require_once __DIR__ . '/_employee.php';
+
+        [$data, $errors] = employee_input($pdo, api_json_body());
+        if ($errors) {
+            api_error(422, 'Validation failed', ['errors' => $errors]);
+        }
+
+        try {
+            $model->create($data);
+        } catch (PDOException $e) {
+            // Two creates at the same moment can generate the same EMP-###.
+            if (api_is_duplicate_key($e)) {
+                api_error(409, 'Could not assign a unique employee ID. Please retry.');
+            }
+            throw $e;
+        }
+
+        $id = (int)$pdo->lastInsertId();
+        header('Location: /api/employee.php?id=' . $id);
+        respond(201, [
+            'success' => true,
+            'message' => 'Employee created',
+            'data' => $model->findById($id)
+        ]);
+    }
+
     $employees = $model->getAll();
 
     $query = trim($_GET['q'] ?? '');

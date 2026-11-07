@@ -1,0 +1,18 @@
+# HRIS scheduled jobs (Linux / Docker crontab)
+# =============================================
+# Install into a container or Linux host with:
+#     crontab cron/hris-crontab
+# or append these lines to an existing crontab with `crontab -e`.
+#
+# Columns:  minute  hour  day-of-month  month  day-of-week  command
+#
+# The job connects to MySQL using the same env vars as the app
+# (DB_HOST, DB_NAME, DB_USER, DB_PASS). In the Docker stack those are set
+# on the hris-app container, so run it there (see cron/README.md).
+
+# Remind HR about Pending leave (every 3 days) and auto-reject at 14 days.
+# Runs every hour so a reminder goes out promptly once a 3-day mark passes
+# and a request is rejected soon after it hits the cut-off. The job is
+# idempotent: it never repeats a reminder or re-rejects, so hourly is safe.
+# Output (and errors) go to a log file.
+0 * * * * php /app/cron/expire_pending_leaves.php >> /var/log/hris-cron.log 2>&1

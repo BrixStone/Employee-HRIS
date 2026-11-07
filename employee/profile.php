@@ -154,29 +154,130 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
 </section>
 
 <article class="card">
-  <div class="card-heading"><div><p class="eyebrow">DETAILS</p><h2>Personal information</h2></div></div>
-  <div class="info-grid">
+  <div class="card-heading" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div><p class="eyebrow">DETAILS</p><h2>Personal information</h2></div>
+    <button type="button" id="editProfileBtn" class="primary-button">Edit profile</button>
+  </div>
+
+  <!-- Inline flash for save results (shown by JS) -->
+  <div id="profileFlash" class="alert" style="display:none;margin-bottom:14px"></div>
+
+  <!-- VIEW MODE -->
+  <div id="profileView" class="info-grid">
     <div class="info-cell">
       <span class="info-label">Employee ID</span>
-      <strong class="info-value">#<?= htmlspecialchars((string)$user['id']) ?></strong>
+      <strong class="info-value" data-view="employee_code"><?= htmlspecialchars((string)($employee['employee_id'] ?? ('#' . $user['id']))) ?></strong>
     </div>
     <div class="info-cell">
       <span class="info-label">Full Name</span>
-      <strong class="info-value"><?= $user['name'] ?></strong>
+      <strong class="info-value" data-view="full_name"><?= $user['name'] ?></strong>
     </div>
     <div class="info-cell">
       <span class="info-label">Email Address</span>
-      <strong class="info-value teal"><?= $user['email'] ?></strong>
+      <strong class="info-value teal" data-view="email"><?= $user['email'] ?></strong>
     </div>
     <div class="info-cell">
       <span class="info-label">Phone Number</span>
-      <strong class="info-value"><?= $user['phone_number'] ?></strong>
+      <strong class="info-value" data-view="phone"><?= $user['phone_number'] ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Gender</span>
+      <strong class="info-value" data-view="gender"><?= htmlspecialchars($employee['gender'] ?? 'Not Provided') ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Date of Birth</span>
+      <strong class="info-value" data-view="date_of_birth"><?= htmlspecialchars($employee['date_of_birth'] ?? 'Not Provided') ?></strong>
+    </div>
+    <div class="info-cell wide">
+      <span class="info-label">Address</span>
+      <strong class="info-value" data-view="address"><?= htmlspecialchars($employee['address'] ?? 'Not Provided') ?></strong>
     </div>
     <div class="info-cell wide">
       <span class="info-label">Employment Status</span>
       <strong class="info-value <?= $isActive ? 'green' : '' ?>"><?= $user['status'] ?></strong>
     </div>
   </div>
+
+  <!-- EDIT MODE (hidden until "Edit profile" is clicked) -->
+  <form id="profileForm" class="info-grid" style="display:none" novalidate>
+    <!-- Locked: shown read-only so the employee can see them but not change them -->
+    <div class="info-cell">
+      <label class="info-label" for="f_employee_code">Employee ID <span class="muted">(locked)</span></label>
+      <input id="f_employee_code" class="form-input" type="text"
+             value="<?= htmlspecialchars((string)($employee['employee_id'] ?? '')) ?>" disabled>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_status">Employment Status <span class="muted">(locked)</span></label>
+      <input id="f_status" class="form-input" type="text"
+             value="<?= $user['status'] ?>" disabled>
+    </div>
+
+    <!-- Editable personal fields -->
+    <div class="info-cell">
+      <label class="info-label" for="f_first_name">First Name</label>
+      <input id="f_first_name" name="first_name" class="form-input" type="text" maxlength="100"
+             value="<?= htmlspecialchars($employee['first_name'] ?? '') ?>" required>
+      <small class="field-error" data-err="first_name"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_middle_name">Middle Name</label>
+      <input id="f_middle_name" name="middle_name" class="form-input" type="text" maxlength="100"
+             value="<?= htmlspecialchars($employee['middle_name'] ?? '') ?>">
+      <small class="field-error" data-err="middle_name"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_last_name">Last Name</label>
+      <input id="f_last_name" name="last_name" class="form-input" type="text" maxlength="100"
+             value="<?= htmlspecialchars($employee['last_name'] ?? '') ?>" required>
+      <small class="field-error" data-err="last_name"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_suffix">Suffix</label>
+      <input id="f_suffix" name="suffix" class="form-input" type="text" maxlength="20"
+             value="<?= htmlspecialchars($employee['suffix'] ?? '') ?>" placeholder="Jr., Sr., III">
+      <small class="field-error" data-err="suffix"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_email">Email Address</label>
+      <input id="f_email" name="email" class="form-input" type="email" maxlength="150"
+             value="<?= htmlspecialchars($employee['email'] ?? '') ?>">
+      <small class="field-error" data-err="email"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_phone">Phone Number</label>
+      <input id="f_phone" name="phone" class="form-input" type="text" maxlength="30"
+             value="<?= htmlspecialchars($employee['phone'] ?? '') ?>">
+      <small class="field-error" data-err="phone"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_gender">Gender</label>
+      <select id="f_gender" name="gender" class="form-input">
+        <?php $g = $employee['gender'] ?? ''; ?>
+        <option value="" <?= $g === '' ? 'selected' : '' ?>>Not set</option>
+        <?php foreach (['Male', 'Female', 'Other'] as $opt): ?>
+          <option value="<?= $opt ?>" <?= strcasecmp($g, $opt) === 0 ? 'selected' : '' ?>><?= $opt ?></option>
+        <?php endforeach; ?>
+      </select>
+      <small class="field-error" data-err="gender"></small>
+    </div>
+    <div class="info-cell">
+      <label class="info-label" for="f_dob">Date of Birth</label>
+      <input id="f_dob" name="date_of_birth" class="form-input" type="date" max="<?= date('Y-m-d') ?>"
+             value="<?= htmlspecialchars($employee['date_of_birth'] ?? '') ?>">
+      <small class="field-error" data-err="date_of_birth"></small>
+    </div>
+    <div class="info-cell wide">
+      <label class="info-label" for="f_address">Address</label>
+      <input id="f_address" name="address" class="form-input" type="text" maxlength="1000"
+             value="<?= htmlspecialchars($employee['address'] ?? '') ?>">
+      <small class="field-error" data-err="address"></small>
+    </div>
+
+    <div class="info-cell wide" style="display:flex;gap:10px;margin-top:6px">
+      <button type="submit" id="saveProfileBtn" class="primary-button">Save changes</button>
+      <button type="button" id="cancelProfileBtn" class="ghost-button">Cancel</button>
+    </div>
+  </form>
 </article>
 
 <?php
@@ -194,6 +295,18 @@ $pocketProfile = [
 
 // Wire the on-page profile-head avatar to the file browser + auto-submit.
 $footerExtra = <<<'HTML'
+<style>
+  .form-input{width:100%;box-sizing:border-box;background:#0a0e20;color:#fff;border:1px solid var(--cardborder,#281545);
+    border-radius:10px;padding:9px 12px;font-size:14px;font-family:inherit;margin-top:4px}
+  .form-input:focus{outline:none;border-color:#4763ff}
+  .form-input:disabled{opacity:.6;cursor:not-allowed;background:#070a16}
+  .field-error{display:block;color:#f87a8f;font-size:12px;margin-top:4px;min-height:0}
+  .ghost-button{background:transparent;color:#c9c7d1;border:1px solid var(--cardborder,#281545);
+    border-radius:10px;padding:9px 16px;font-size:14px;cursor:pointer;font-family:inherit}
+  .ghost-button:hover{border-color:#4763ff}
+  #profileFlash.alert-success{display:block;background:#06281f;border:1px solid #10b981;color:#6ee7b7;padding:10px 14px;border-radius:10px}
+  #profileFlash.alert-error{display:block;background:#2a0b12;border:1px solid #f43f5e;color:#fda4af;padding:10px 14px;border-radius:10px}
+</style>
 <script>
   (function () {
     var input = document.getElementById('profileAvatarInput');
@@ -204,6 +317,91 @@ $footerExtra = <<<'HTML'
     if (btn) btn.addEventListener('click', pick);
     input.addEventListener('change', function () {
       if (input.files && input.files.length > 0) form.submit();
+    });
+  })();
+</script>
+
+<script>
+  // ---- Edit profile: toggle view/edit and PATCH /api/me/profile.php ----
+  // Employee ID and Employment Status are shown disabled and never submitted,
+  // so an employee can see them but cannot change them. The server enforces
+  // the same rule, so this is UI convenience, not the security boundary.
+  (function () {
+    var editBtn   = document.getElementById('editProfileBtn');
+    var cancelBtn = document.getElementById('cancelProfileBtn');
+    var viewEl    = document.getElementById('profileView');
+    var formEl    = document.getElementById('profileForm');
+    var flash     = document.getElementById('profileFlash');
+    var saveBtn   = document.getElementById('saveProfileBtn');
+    if (!editBtn || !formEl || !viewEl) return;
+
+    // The only fields an employee may change (must match EMPLOYEE_SELF_FIELDS).
+    var EDITABLE = ['first_name','middle_name','last_name','suffix','date_of_birth','gender','phone','email','address'];
+
+    function show(edit) {
+      formEl.style.display = edit ? '' : 'none';
+      viewEl.style.display = edit ? 'none' : '';
+      editBtn.style.display = edit ? 'none' : '';
+      if (!edit) clearErrors();
+    }
+    function clearErrors() {
+      formEl.querySelectorAll('.field-error').forEach(function (e) { e.textContent = ''; });
+      flash.style.display = 'none';
+      flash.className = 'alert';
+    }
+    function setFlash(kind, msg) {
+      flash.textContent = msg;
+      flash.className = 'alert alert-' + kind;
+      flash.style.display = 'block';
+    }
+
+    editBtn.addEventListener('click', function () { show(true); });
+    cancelBtn.addEventListener('click', function () { show(false); });
+
+    formEl.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearErrors();
+
+      // Collect only the editable fields. Never send employee_id/status.
+      var payload = {};
+      EDITABLE.forEach(function (name) {
+        var el = formEl.querySelector('[name="' + name + '"]');
+        if (el) payload[name] = el.value.trim();
+      });
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      fetch('/api/me/profile.php', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) { return res.json().then(function (body) { return { status: res.status, body: body }; }); })
+        .then(function (r) {
+          if (r.status === 200 && r.body.success) {
+            setFlash('success', 'Profile updated. Refreshing...');
+            setTimeout(function () { window.location.reload(); }, 700);
+            return;
+          }
+          if (r.status === 422 && r.body.errors) {
+            Object.keys(r.body.errors).forEach(function (field) {
+              var slot = formEl.querySelector('[data-err="' + field + '"]');
+              if (slot) slot.textContent = r.body.errors[field];
+            });
+            setFlash('error', 'Please fix the highlighted fields.');
+          } else {
+            setFlash('error', r.body.message || 'Could not save your changes.');
+          }
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save changes';
+        })
+        .catch(function () {
+          setFlash('error', 'Network error. Please try again.');
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save changes';
+        });
     });
   })();
 </script>
