@@ -11,6 +11,7 @@ require __DIR__ . '/../classes/LeaveType.php';
 require __DIR__ . '/../classes/LeaveBalance.php';
 require __DIR__ . '/../classes/LeaveRequest.php';
 require_once __DIR__ . '/../classes/DSA/Stack.php';
+require_once __DIR__ . '/../classes/DSA/Queue.php';
 
 
 $lt = new LeaveType($pdo);
@@ -145,6 +146,36 @@ try {
   }
 } catch (Throwable $e) {
   error_log('Leave stack build failed: ' . $e->getMessage());
+}
+
+$pendingQueue = new Queue();
+
+try {
+  $queueStmt = $pdo->query("
+        SELECT
+            lr.id,
+            lr.employee_id,
+            lr.leave_type_id,
+            lr.start_date,
+            lr.end_date,
+            lr.number_of_days,
+            lr.status,
+            lr.created_at,
+            e.first_name,
+            e.last_name
+        FROM leave_requests lr
+        JOIN employees e ON e.id = lr.employee_id
+        WHERE lr.status = 'Pending'
+        ORDER BY lr.created_at ASC
+    ");
+
+  $pendingRows = $queueStmt->fetchAll(PDO::FETCH_ASSOC);
+
+  foreach ($pendingRows as $row) {
+    $pendingQueue->enqueue($row); // oldest filed = front of queue
+  }
+} catch (Throwable $e) {
+  error_log('Leave queue build failed: ' . $e->getMessage());
 }
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
@@ -304,7 +335,60 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
     </select>
     <button type="submit">Filter</button>
   </form>
-
+  <!-- ── Queue: Pending Requests Panel ───────────────── -->
+  <?php if (!$pendingQueue->isEmpty()): ?>
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-head">
+        <h2>⏳ Pending Approval Queue</h2>
+        <span class="muted">
+          <?= $pendingQueue->size() ?> request<?= $pendingQueue->size() === 1 ? '' : 's' ?> waiting — oldest first (FIFO)
+        </span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Filed</th>
+            <th>Employee</th>
+            <th>Dates</th>
+            <th>Days</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php
+          $position = 1;
+          // toArray() gives front→back order (oldest first)
+          foreach ($pendingQueue->toArray() as $qItem):
+          ?>
+            <tr <?= $position === 1 ? 'style="background:#f0fdf4"' : '' ?>>
+              <td>
+                <?php if ($position === 1): ?>
+                  <span class="pill pill-active">Next</span>
+                <?php else: ?>
+                  <span class="muted">#<?= $position ?></span>
+                <?php endif; ?>
+              </td>
+              <td class="muted">
+                <?= date('M j, Y g:i A', strtotime($qItem['created_at'])) ?>
+              </td>
+              <td>
+                <strong>
+                  <?= htmlspecialchars($qItem['first_name'] . ' ' . $qItem['last_name']) ?>
+                </strong>
+              </td>
+              <td>
+                <?= htmlspecialchars($qItem['start_date']) ?>
+                →
+                <?= htmlspecialchars($qItem['end_date']) ?>
+              </td>
+              <td><?= (float)$qItem['number_of_days'] ?> days</td>
+            </tr>
+            <?php $position++; ?>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
   <table border="1" cellpadding="6" cellspacing="0">
     <thead>
       <tr>
