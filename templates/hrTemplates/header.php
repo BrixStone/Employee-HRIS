@@ -7,7 +7,8 @@ $pageTitles = [
  'add_employee' => 'Add Employee', 'edit_employee' => 'Edit Employee',
  'view_employee' => 'Employee Profile', 'department' => 'Department Management',
  'position' => 'Position Management', 'leave_management' => 'Leave Management',
- 'report' => 'Reports & Audits'
+ 'report' => 'Reports & Audits',
+ 'payroll' => 'Payroll Management', 'payslip_view' => 'Payslip'
 ];
 $pageTitle = $pageTitles[$currentPage] ?? 'Human Resources';
 $cssPage = preg_replace('/[^a-z0-9_-]/', '', $currentPage);
@@ -37,6 +38,7 @@ $cssPage = preg_replace('/[^a-z0-9_-]/', '', $currentPage);
     <a class="nav-item <?= $currentPage === 'leave_management' ? 'active' : '' ?>" href="/hr/leave_management.php"><span class="nav-icon">◷</span><span>Leave Management</span></a>
     <a class="nav-item <?= $currentPage === 'department' ? 'active' : '' ?>" href="/hr/department.php"><span class="nav-icon">▤</span><span>Departments</span></a>
     <a class="nav-item <?= $currentPage === 'position' ? 'active' : '' ?>" href="/hr/position.php"><span class="nav-icon">▣</span><span>Positions</span></a>
+    <a class="nav-item <?= in_array($currentPage, ['payroll','payslip_view'], true) ? 'active' : '' ?>" href="/hr/payroll.php"><span class="nav-icon">₱</span><span>Payroll</span></a>
     <a class="nav-item <?= $currentPage === 'report' ? 'active' : '' ?>" href="/hr/report.php"><span class="nav-icon">▥</span><span>Reports &amp; Audits</span></a>
   </nav>
   <div class="sidebar-footer">
