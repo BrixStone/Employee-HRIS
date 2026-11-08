@@ -167,7 +167,7 @@ try {
 }
 
 // Apply bubble sort
-$headcount = merge_sort_numeric($headcount, $sortBy, $dir);
+$headcount = bubble_sort_rows($headcount, $sortBy, $dir);
 
 // ─── CSV Export ──────────────────────────────────────────────────────────────
 if ($REPORT_ALLOW_EXPORT && $export === 'headcount_csv') {
