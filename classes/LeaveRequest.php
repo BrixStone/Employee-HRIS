@@ -50,6 +50,30 @@ class LeaveRequest
     }
 
     /**
+     * Requests belonging to any of the given employees (employees.id list),
+     * newest first. Used for a manager's team. Empty list => no requests.
+     *
+     * @param int[] $employeeIds
+     */
+    public function searchForEmployees(array $employeeIds, ?string $status = null): array {
+        $employeeIds = array_values(array_unique(array_map('intval', $employeeIds)));
+        if (!$employeeIds) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($employeeIds), '?'));
+        $params = $employeeIds;
+        $sql = self::SELECT_WITH_NAMES . " WHERE lr.employee_id IN ({$in})";
+        if ($status !== null) {
+            $sql .= ' AND lr.status = ?';
+            $params[] = $status;
+        }
+        $sql .= ' ORDER BY lr.created_at DESC, lr.id DESC';
+        $st = $this->pdo->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * The owner withdraws a Pending request. Returns false when the request
      * is not theirs or is no longer Pending.
      */

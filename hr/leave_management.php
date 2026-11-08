@@ -3,7 +3,7 @@
 
 require_once __DIR__ . '/../authentication/guard.php';
 // Only signed-in HR/admin accounts may manage leave types, balances and approvals
-require_role(['hr', 'admin']);
+require_access('leave_requests', 'edit', 'all');
 
 require __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()

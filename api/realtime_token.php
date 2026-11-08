@@ -63,11 +63,15 @@ try {
         realtime_fail(401, 'Your account role has changed. Please sign in again.');
     }
 
-    // Build the token from the VERIFIED role/employee_id, not the session.
+    // Build the token from the VERIFIED role/employee_id, not the session, and
+    // choose the channels from the permission matrix: HR/admin hear everything,
+    // a manager hears their own team, an employee hears only themselves.
+    $employeeId = $account['employee_id'] !== null ? (int)$account['employee_id'] : null;
     $token = Realtime::tokenForAccount([
         'user_id'     => (int)$account['user_id'],
         'role'        => $account['role'],
-        'employee_id' => $account['employee_id'] !== null ? (int)$account['employee_id'] : null,
+        'employee_id' => $employeeId,
+        'channels'    => Realtime::channelsForAccount($pdo, (string)$account['role'], $employeeId),
     ]);
 
     if ($token === null) {

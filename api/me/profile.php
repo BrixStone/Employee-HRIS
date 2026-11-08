@@ -49,6 +49,7 @@ try {
     require_once __DIR__ . '/../../classes/Avatar.php';
 
     $account = api_require_employee($pdo, $session);
+    api_require_permission($pdo, $account, 'employee_records', $method === 'PATCH' ? 'edit' : 'view', ['own']);
     $employeeId = $account['employee_id'];
     $model = new Employee($pdo);
 

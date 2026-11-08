@@ -17,9 +17,13 @@
  *   2. config/realtime.json, written by `terraform apply` in terraform/
  * Without a secret, realtime is disabled and the app works as before.
  */
+require_once __DIR__ . '/Rbac.php';
+
 final class Realtime
 {
     private const TOKEN_TTL_SECONDS = 300;
+    /** A manager's token lists one channel per team member; keep it small. */
+    private const MAX_TEAM_CHANNELS = 100;
     private const PUBLISH_TIMEOUT_SECONDS = 1.0;
 
     private static ?array $config = null;
@@ -79,6 +83,38 @@ final class Realtime
     }
 
     /**
+     * The channels a role may hear, taken from the permission matrix
+     * (leave_requests scope) instead of from the role's name:
+     *   all  (admin, hr)  -> "hr"                      every leave event
+     *   team (manager)    -> "employee:<id>" per report their team's events only
+     *   own  (employee)   -> "employee:<own id>"       their own events only
+     *   none              -> no channel
+     * A manager's list is capped so the token stays small.
+     *
+     * @return string[]
+     */
+    public static function channelsForAccount(PDO $pdo, string $role, ?int $employeeId): array
+    {
+        if (!Rbac::can($pdo, $role, 'leave_requests', 'view')) {
+            return [];
+        }
+        switch (Rbac::scope($pdo, $role, 'leave_requests')) {
+            case 'all':
+                return ['hr'];
+            case 'team':
+                $channels = [];
+                foreach (array_slice(Rbac::teamEmployeeIds($pdo, $employeeId), 0, self::MAX_TEAM_CHANNELS) as $id) {
+                    $channels[] = 'employee:' . $id;
+                }
+                return $channels;
+            case 'own':
+                return $employeeId ? ['employee:' . $employeeId] : [];
+            default:
+                return [];
+        }
+    }
+
+    /**
      * Issue a token from a DB-verified account (preferred over
      * tokenForSession, which trusts the PHP session as-is).
      *
@@ -91,12 +127,22 @@ final class Realtime
         $role = strtolower(trim((string)($account['role'] ?? '')));
         $employeeId = $account['employee_id'] ?? null;
 
-        // Same rule as channelsForSession(), but driven by verified DB values.
-        $channels = [];
-        if ($role === 'employee' && !empty($employeeId)) {
-            $channels = ['employee:' . (int)$employeeId];
-        } elseif ($role === 'hr' || $role === 'admin') {
-            $channels = ['hr'];
+        // Preferred: the caller passes the channels it worked out from the
+        // permission matrix (see channelsForAccount()). Only well-formed
+        // channel names are accepted; the server rejects anything else anyway.
+        if (isset($account['channels']) && is_array($account['channels'])) {
+            $channels = array_values(array_filter(
+                $account['channels'],
+                static fn ($c): bool => is_string($c) && preg_match('/^(hr|employee:\d{1,18})$/', $c) === 1
+            ));
+        } else {
+            // Fallback (no channel list given): same rule as channelsForSession().
+            $channels = [];
+            if ($role === 'employee' && !empty($employeeId)) {
+                $channels = ['employee:' . (int)$employeeId];
+            } elseif ($role === 'hr' || $role === 'admin') {
+                $channels = ['hr'];
+            }
         }
 
         return self::tokenForClaims((int)($account['user_id'] ?? 0), $role, $channels);

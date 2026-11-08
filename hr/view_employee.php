@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('employee_records', 'view', 'all');
+
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
 

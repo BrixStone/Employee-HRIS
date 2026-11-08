@@ -10,14 +10,13 @@ require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 date_default_timezone_set('Asia/Manila');
 
 // 1. Check login session (same rules as file_leave.php)
-if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
+// Logged in, account still active, employee portal, allowed by the permission matrix
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('leave_requests', 'view', 'own', ['employee']);
+
+if (empty($_SESSION['employee_id'])) {
     header("Location: ../authentication/login.php");
     exit();
-}
-
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
 }
 
 $message = '';
@@ -193,6 +192,7 @@ $historyService = new LeaveHistoryService($pdo);
 if (
     ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     && ($_POST['action'] ?? '') === 'cancel_request'
+    && Rbac::can($pdo, $_SESSION['role'] ?? '', 'leave_requests', 'submit')
 ) {
     $cancelId = (int)($_POST['request_id'] ?? 0);
     if ($cancelId > 0) {

@@ -1,7 +1,7 @@
 <?php
 // hr/payslip_view.php
 require_once __DIR__ . '/../authentication/guard.php';
-require_role(['admin', 'hr']);
+require_access('payslips', 'view', 'all');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Payroll.php';
 

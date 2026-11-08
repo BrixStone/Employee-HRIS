@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('dashboard', 'view', null, ['admin', 'hr']);
 $title = 'Dashboard';
 $employeeCount = $activeEmployeeCount = $departmentCount = $positionCount = null;
 // Dashboard-only read queries. Fail gracefully if the project's database file/schema

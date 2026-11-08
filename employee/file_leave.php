@@ -9,14 +9,13 @@ require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
 
-if (empty($_SESSION['user_id']) || empty($_SESSION['employee_id'])) {
+// Logged in, account still active, employee portal, allowed to file leave
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('leave_requests', 'submit', 'own', ['employee']);
+
+if (empty($_SESSION['employee_id'])) {
     header('Location: ../authentication/login.php');
     exit;
-}
-
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
 }
 
 $userId = (int) $_SESSION['user_id'];

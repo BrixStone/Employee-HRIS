@@ -15,6 +15,7 @@ try {
     require_once __DIR__ . '/../../classes/Avatar.php';
 
     $account = api_require_employee($pdo, $session);
+    api_require_permission($pdo, $account, 'employee_records', 'edit', ['own']);
     $employeeId = $account['employee_id'];
 
     $file = $_FILES['avatar'] ?? null;

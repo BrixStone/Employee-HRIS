@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('employee_records', 'edit', 'all');
+
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
 require __DIR__ . '/../classes/Department.php';
@@ -32,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'address' => trim($_POST['address'] ?? ''),
         'department_id' => $_POST['department_id'] ?? '',
         'position_id' => $_POST['position_id'] ?? '',
+        'manager_id' => ($_POST['manager_id'] ?? '') !== '' ? (int)$_POST['manager_id'] : null,
         'date_hired' => $_POST['date_hired'] ?? '',
         'employment_type' => $_POST['employment_type'] ?? 'Full-time',
         'employment_status' => $_POST['employment_status'] ?? 'Active'
@@ -43,6 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data['date_hired'] === ''
     ) {
         $error = 'Please fill in all required fields.';
+    } elseif ($data['manager_id'] !== null && !$employeeModel->isManagerCandidate($data['manager_id'], null)) {
+        $error = 'Please choose a valid manager (an employee with an active manager account).';
     } else {
         try {
             $employeeModel->create($data);
@@ -196,6 +202,19 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 
     </select>
 </div>
+
+
+    <div>
+        <label for="manager_id">Reports to (Manager)</label>
+        <select id="manager_id" name="manager_id">
+            <option value="">No manager</option>
+            <?php foreach ($employeeModel->getManagerOptions() as $m): ?>
+                <option value="<?= htmlspecialchars((string)$m['id']) ?>">
+                    <?= htmlspecialchars($m['employee_id'] . ' - ' . $m['first_name'] . ' ' . $m['last_name']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
 
 
     <div>
