@@ -5,73 +5,132 @@ require_access('employee_records', 'view', 'all');
 
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
-require __DIR__ . '/../algorithms/linear_search.php';
-require __DIR__ . '/../algorithms/bubble_sort.php';
-
+require __DIR__ . '/../classes/DSA/Searching.php';
+require __DIR__ . '/../classes/DSA/Sorting.php';
+require __DIR__ . '/../classes/DSA/BinarySearchTree.php';
+require __DIR__ . '/../classes/DSA/HashTable.php';
 $employeeModel = new Employee($pdo);
-$employees = $employeeModel->getAll();
+$employees     = $employeeModel->getAll();
 
-$q = trim($_GET['q'] ?? '');
+// ── DSA: Hash Table — department and position cache ──────────
+// Hash department_id → department name  O(1) lookup
+// Hash position_id   → position title   O(1) lookup
+// Avoids repeated DB queries or array scans per employee row.
 
-$rawSort = $_GET['sort_by']?? '';
+$departmentCache = new HashTable(32);
+$positionCache   = new HashTable(32);
 
-$dir = ($_GET['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
+try {
+  // Load all departments into hash table once
+  $deptRows = $pdo->query("SELECT id, name FROM departments")
+    ->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($deptRows as $d) {
+    $departmentCache->put((string)$d['id'], $d['name']);
+  }
+
+  // Load all positions into hash table once
+  $posRows = $pdo->query("SELECT id, title FROM positions")
+    ->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($posRows as $p) {
+    $positionCache->put((string)$p['id'], $p['title']);
+  }
+} catch (Throwable $e) {
+  error_log('Hash table cache build failed: ' . $e->getMessage());
+}
+
+
+
+$q      = trim($_GET['q'] ?? '');
+$rawSort = $_GET['sort_by'] ?? '';
+$dir    = ($_GET['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
 
 $sortKeyMap = [
-    '' => '',
-    'name' => 'name',
-    'department_name'   => 'department_name',
-    'position_title'    => 'position_title',
-    'date_hired'        => 'date_hired',
-    'employment_status' => 'employment_status',
-    'employee_id'       => 'employee_id',
+  ''                  => '',
+  'name'              => 'name',
+  'department_name'   => 'department_name',
+  'position_title'    => 'position_title',
+  'date_hired'        => 'date_hired',
+  'employment_status' => 'employment_status',
+  'employee_id'       => 'employee_id',
 ];
 
-$sortBy = $sortKeyMap[$rawSort] ?? '';
-
+$sortBy  = $sortKeyMap[$rawSort] ?? '';
 $allowed = array_values($sortKeyMap);
-
 if (!in_array($sortBy, $allowed, true)) {
-    $sortBy = '';
+  $sortBy = '';
 }
 
-function emp_full_name(array $e): string {
-    $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
-    $s = !empty($e['suffix']) ? ' ' . $e['suffix'] : '';
-    return trim(
-        ($e['first_name'] ?? '') . ' ' . $m.($e['last_name'] ?? '').$s);
+function emp_full_name(array $e): string
+{
+  $m = !empty($e['middle_name']) ? $e['middle_name'] . ' ' : '';
+  $s = !empty($e['suffix'])      ? ' ' . $e['suffix']      : '';
+  return trim(($e['first_name'] ?? '') . ' ' . $m . ($e['last_name'] ?? '') . $s);
 }
 
-function sort_key_value(array $e, string $key) {
-    if ($key === 'name') {
-        return strtolower(emp_full_name($e));
+// Add computed 'name' key so Sorting and Searching can target it directly
+foreach ($employees as &$emp) {
+  $emp['name'] = emp_full_name($emp);
+}
+unset($emp);
+
+$employeeBST = new BinarySearchTree();
+foreach ($employees as $emp) {
+  $key = strtoupper(trim($emp['employee_id'] ?? ''));
+  if ($key !== '') {
+    $employeeBST->insert($key, $emp);
+  }
+}
+
+if ($q !== '') {
+
+  $isIdSearch = preg_match('/^EMP-\d+$/i', $q);
+
+  if ($isIdSearch) {
+
+    // BST Search — O(log n) average
+    $found = $employeeBST->search(strtoupper($q));
+
+    if ($found) {
+      // Add computed full name to BST result
+      $found['name'] = emp_full_name($found);
+
+      $employees = [$found];
+    } else {
+      $employees = [];
     }
-    $v = $e[$key] ?? '';
-    return is_string($v) ? strtolower($v) : $v;
+  } else {
+
+    // Linear Search — O(n)
+    $employees = Searching::linearSearch($employees, $q, [
+      'name',
+      'first_name',
+      'last_name',
+      'email',
+      'employee_id',
+      'department_name',
+      'position_title',
+    ]);
+  }
 }
 
-
-
-function contains_i(?string $haystack, string $needle): bool {
-    if ($haystack === null) return false;
-
-    return stripos($haystack, $needle) !== false;
-}
-
-$employees = linear_search_employees($employees, $q);
-
+// ── DSA: Bubble Sort ─────────────────────────────────────────────
+// Sorts by the chosen column using Sorting::bubbleSort() — O(n²)
+// Falls back to sorting by name ascending when no sort key chosen
 if ($sortBy !== '') {
-    bubble_sort_employees($employees, $sortBy, $dir);
+  $employees = Sorting::bubbleSort($employees, $sortBy, $dir);
+} else {
+  $employees = Sorting::bubbleSort($employees, 'name', 'asc');
 }
+
 require __DIR__ . '/../templates/hrTemplates/header.php';
 
-// Lightweight counts for the stat strip (based on the loaded result set).
-$totalShown = count($employees);
-$activeShown = 0;
+// Lightweight counts for the stat strip (based on the filtered result set)
+$totalShown    = count($employees);
+$activeShown   = 0;
 foreach ($employees as $__e) {
-    if (strcasecmp((string)($__e['employment_status'] ?? ''), 'Active') === 0) {
-        $activeShown++;
-    }
+  if (strcasecmp((string)($__e['employment_status'] ?? ''), 'Active') === 0) {
+    $activeShown++;
+  }
 }
 $inactiveShown = $totalShown - $activeShown;
 ?>
@@ -106,7 +165,7 @@ $inactiveShown = $totalShown - $activeShown;
   <article class="metric-card metric-violet">
     <div class="metric-top"><span class="metric-ico">⇅</span><span class="metric-chip"><?= $sortBy !== '' ? strtoupper($dir) : 'None' ?></span></div>
     <span class="metric-title">Sorting</span>
-    <strong class="metric-number purple" style="font-size:20px;margin-top:14px"><?= $sortBy !== '' ? ucfirst(str_replace('_',' ',$sortBy)) : 'Unsorted' ?></strong>
+    <strong class="metric-number purple" style="font-size:20px;margin-top:14px"><?= $sortBy !== '' ? ucfirst(str_replace('_', ' ', $sortBy)) : 'Unsorted' ?></strong>
   </article>
 </div>
 
@@ -120,19 +179,19 @@ $inactiveShown = $totalShown - $activeShown;
       <div class="field">
         <label for="sort_by">Sort by</label>
         <select name="sort_by" id="sort_by">
-          <option value=""                  <?= $rawSort === ''                ? 'selected' : '' ?>>No sorting</option>
-          <option value="name"              <?= $rawSort === 'name'            ? 'selected' : '' ?>>Name</option>
-          <option value="department_name"   <?= $rawSort === 'department_name' ? 'selected' : '' ?>>Department</option>
-          <option value="position_title"    <?= $rawSort === 'position_title'  ? 'selected' : '' ?>>Position</option>
-          <option value="date_hired"        <?= $rawSort === 'date_hired'      ? 'selected' : '' ?>>Date Hired</option>
+          <option value="" <?= $rawSort === ''                ? 'selected' : '' ?>>No sorting</option>
+          <option value="name" <?= $rawSort === 'name'            ? 'selected' : '' ?>>Name</option>
+          <option value="department_name" <?= $rawSort === 'department_name' ? 'selected' : '' ?>>Department</option>
+          <option value="position_title" <?= $rawSort === 'position_title'  ? 'selected' : '' ?>>Position</option>
+          <option value="date_hired" <?= $rawSort === 'date_hired'      ? 'selected' : '' ?>>Date Hired</option>
           <option value="employment_status" <?= $rawSort === 'employment_status' ? 'selected' : '' ?>>Status</option>
-          <option value="employee_id"       <?= $rawSort === 'employee_id'     ? 'selected' : '' ?>>Employee ID</option>
+          <option value="employee_id" <?= $rawSort === 'employee_id'     ? 'selected' : '' ?>>Employee ID</option>
         </select>
       </div>
       <div class="field">
         <label for="dir">Direction</label>
         <select name="dir" id="dir">
-          <option value="asc"  <?= $dir === 'asc'  ? 'selected' : '' ?>>Ascending</option>
+          <option value="asc" <?= $dir === 'asc'  ? 'selected' : '' ?>>Ascending</option>
           <option value="desc" <?= $dir === 'desc' ? 'selected' : '' ?>>Descending</option>
         </select>
       </div>
@@ -174,20 +233,43 @@ $inactiveShown = $totalShown - $activeShown;
       <?php else: ?>
         <?php foreach ($employees as $employee): ?>
           <?php
-            $fullName = htmlspecialchars(
-              $employee['first_name'] . ' ' .
-              ($employee['middle_name'] ? $employee['middle_name'] . ' ' : '') .
-              $employee['last_name'] .
-              ($employee['suffix'] ? ' ' . $employee['suffix'] : '')
-            );
-            $isActive = strcasecmp((string)($employee['employment_status'] ?? ''), 'Active') === 0;
-            $pillClass = $isActive ? 'pill-active' : (($employee['employment_status'] ?? '') !== '' ? 'pill-inactive' : 'pill-neutral');
+          // Hash Table: O(1) average lookup
+          $deptName = $departmentCache->get(
+            (string)($employee['department_id'] ?? '')
+          ) ?? ($employee['department_name'] ?? '—');
+
+          $posTitle = $positionCache->get(
+            (string)($employee['position_id'] ?? '')
+          ) ?? ($employee['position_title'] ?? '—');
+
+          $fullName = htmlspecialchars(
+            emp_full_name($employee),
+            ENT_QUOTES,
+            'UTF-8'
+          );
+
+          $isActive = strcasecmp(
+            (string)($employee['employment_status'] ?? ''),
+            'Active'
+          ) === 0;
+
+          $pillClass = $isActive
+            ? 'pill-active'
+            : (($employee['employment_status'] ?? '') !== ''
+              ? 'pill-inactive'
+              : 'pill-neutral');
           ?>
           <tr>
             <td><strong><?= htmlspecialchars($employee['employee_id']) ?></strong></td>
+
             <td><?= $fullName ?></td>
-            <td><?= htmlspecialchars($employee['department_name'] ?? 'N/A') ?></td>
-            <td><?= htmlspecialchars($employee['position_title'] ?? 'N/A') ?></td>
+
+            <!-- Hash Table: Department lookup -->
+            <td><?= htmlspecialchars($deptName, ENT_QUOTES, 'UTF-8') ?></td>
+
+            <!-- Hash Table: Position lookup -->
+            <td><?= htmlspecialchars($posTitle, ENT_QUOTES, 'UTF-8') ?></td>
+
             <td><?= htmlspecialchars($employee['date_hired']) ?></td>
             <td><span class="pill <?= $pillClass ?>"><?= htmlspecialchars($employee['employment_status'] ?: 'Unknown') ?></span></td>
             <td>

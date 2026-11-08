@@ -27,6 +27,7 @@ $pageTitles = [
  'view_employee' => 'Employee Profile', 'department' => 'Department Management',
  'position' => 'Position Management', 'leave_management' => 'Leave Management',
  'report' => 'Reports & Audits',
+ 'payroll' => 'Payroll Management', 'payslip_view' => 'Payslip',
  'users' => 'User Management', 'create_user' => 'Create User', 'permissions' => 'System Settings',
  'team' => 'My Team', 'leave_requests' => 'Team Leave Requests', 'attendance' => 'Team Attendance'
 ];
@@ -40,6 +41,7 @@ $navItems = [
  ['/hr/leave_management.php', 'Leave Management', '◷', ['leave_management'], $isHrSide && $navCan('leave_requests', 'edit', 'all')],
  ['/hr/department.php', 'Departments', '▤', ['department'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
  ['/hr/position.php', 'Positions', '▣', ['position'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
+ ['/hr/payroll.php', 'Payroll', '₱', ['payroll','payslip_view'], $isHrSide && $navCan('payslips', 'edit', 'all')],
  ['/hr/report.php', 'Reports &amp; Audits', '▥', ['report'], $isHrSide && $navCan('employee_records', 'view', 'all')],
  ['/admin/users.php', 'User Management', '☺', ['users','create_user'], $isHrSide && $navCan('user_management', 'view', 'all')],
  ['/admin/permissions.php', 'System Settings', '⚙', ['permissions'], $isHrSide && $navCan('system_settings', 'view', 'all')],

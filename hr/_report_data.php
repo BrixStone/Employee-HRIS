@@ -30,6 +30,10 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 
 $REPORT_ALLOW_EXPORT = $REPORT_ALLOW_EXPORT ?? true;
 
+// merge_sort_numeric(), used below to sort the headcount, is defined here.
+// (Without this include the Reports page and the dashboard report section crash.)
+require_once __DIR__ . '/../algorithms/merge_sort.php';
+
 // ─── Bubble Sort (DSA) ───────────────────────────────────────────────────────
 if (!function_exists('bubble_sort_rows')) {
     function bubble_sort_rows(array $rows, string $key, string $dir = 'asc'): array {
@@ -172,7 +176,7 @@ try {
 }
 
 // Apply bubble sort
-$headcount = bubble_sort_rows($headcount, $sortBy, $dir);
+$headcount = merge_sort_numeric($headcount, $sortBy, $dir);
 
 // ─── CSV Export ──────────────────────────────────────────────────────────────
 if ($REPORT_ALLOW_EXPORT && $export === 'headcount_csv') {

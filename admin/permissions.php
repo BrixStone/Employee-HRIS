@@ -18,8 +18,8 @@ $levelText = [
     'none'         => 'No access',
 ];
 
-$cssPageOverride = 'department';
-require __DIR__ . '/../templates/hrTemplates/header.php';
+$cssPageOverride = 'users';
+require __DIR__ . '/../templates/adminTemplates/header.php';
 ?>
 <section class="page-head">
   <div class="ph-text">
