@@ -6,17 +6,9 @@ require_once __DIR__ . '/../config/database.php';
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-// Check whether the user is logged in
-if (empty($_SESSION['user_id']) || empty($_SESSION['role'])) {
-    header('Location: /authentication/login.php');
-    exit;
-}
-
-// Allow employee accounts only
-if (strtolower(trim($_SESSION['role'])) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
-}
+// Logged in, account still active, employee portal, allowed by the permission matrix
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('dashboard', 'view', null, ['employee']);
 
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;

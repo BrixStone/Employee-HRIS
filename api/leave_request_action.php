@@ -1,7 +1,8 @@
 <?php
 /**
- * POST /api/leave_request_action.php                             HR / admin
+ * POST /api/leave_request_action.php                             HR / admin / manager
  * Body: {"id": 42, "action": "approve"}   (or "reject")
+ * A manager can only review requests from their own team.
  *
  * Approving deducts the days from the employee's leave balance. Both actions
  * are written to the leave audit log, which pushes a realtime event
@@ -10,7 +11,7 @@
 require_once __DIR__ . '/_api.php';
 
 api_methods(['POST']);
-$session = api_require_role(['admin', 'hr']);
+$session = api_require_role(); // any signed-in role; the permission matrix decides
 
 try {
     require_once __DIR__ . '/../config/database.php';
@@ -18,6 +19,7 @@ try {
     require_once __DIR__ . '/../classes/LeaveBalance.php';
 
     $account = api_require_account($pdo, $session);
+    $scope = api_require_permission($pdo, $account, 'leave_requests', 'approve', ['all', 'team']);
     $input = api_json_body();
 
     $errors = [];
@@ -30,6 +32,12 @@ try {
 
     $model = new LeaveRequest($pdo);
     $request = $model->findById($id);
+    // A manager reviewing someone outside their team gets the same answer as
+    // for a request that does not exist.
+    if ($request !== null && $scope === 'team'
+        && !Rbac::isTeamMember($pdo, $account['employee_id'], (int)$request['employee_id'])) {
+        $request = null;
+    }
     if ($request === null) {
         api_error(404, 'Leave request not found');
     }

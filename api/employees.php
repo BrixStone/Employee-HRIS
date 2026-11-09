@@ -6,13 +6,20 @@
 require_once __DIR__ . '/_api.php';
 
 $method  = api_methods(['GET', 'POST']);
-$session = api_require_role(['admin', 'hr']);
+$session = api_require_role(); // any signed-in role; the permission matrix decides
 
 try {
     require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../classes/Employee.php';
 
-    api_require_account($pdo, $session);
+    $account = api_require_account($pdo, $session);
+    // Everyone's records (HR/admin) or just the manager's team to read; only
+    // everyone's records to create.
+    $scope = api_require_permission(
+        $pdo, $account, 'employee_records',
+        $method === 'POST' ? 'edit' : 'view',
+        $method === 'POST' ? ['all'] : ['all', 'team']
+    );
     $model = new Employee($pdo);
 
     if ($method === 'POST') {
@@ -43,6 +50,14 @@ try {
     }
 
     $employees = $model->getAll();
+
+    if ($scope === 'team') {
+        $team = Rbac::teamEmployeeIds($pdo, $account['employee_id']);
+        $employees = array_values(array_filter(
+            $employees,
+            static fn (array $e): bool => in_array((int)$e['id'], $team, true)
+        ));
+    }
 
     $query = trim($_GET['q'] ?? '');
 

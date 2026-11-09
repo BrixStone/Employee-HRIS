@@ -1,4 +1,3 @@
-
 <?php
 /**
  * HRIS SAMPLE DATA SEEDER
@@ -9,6 +8,13 @@
  * Run:
  * C:\xampp\php\php.exe database\seed_sample_data.php
  */
+
+// Command line only. This script resets the sample accounts' passwords (hr,
+// admin, ...), so it must never be runnable from a web request.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
 
 date_default_timezone_set('Asia/Manila');
 
@@ -903,3 +909,8 @@ try {
 
     exit(1);
 }
+
+// RBAC tables (role_permissions and employees.manager_id).
+// Safe to run on every start: existing permission rows are kept, so changes
+// made in phpMyAdmin survive a restart. See database/migrate_rbac.php.
+require_once __DIR__ . '/migrate_rbac.php';

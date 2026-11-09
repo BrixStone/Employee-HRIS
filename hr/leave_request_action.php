@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../authentication/guard.php';
 // Only signed-in HR/admin accounts may approve or reject leave
-require_role(['hr', 'admin']);
+require_access('leave_requests', 'approve', 'all');
 
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/LeaveRequest.php';

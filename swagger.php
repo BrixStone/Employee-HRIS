@@ -82,7 +82,7 @@ header('Content-Type: text/html; charset=utf-8');
                 openapi: '3.0.3',
                 info: {
                     title: 'Employee HRIS API',
-                    version: '1.1.0',
+                    version: '1.2.0',
                     description: [
                         'Employee Human Resource Information System API.',
                         '',
@@ -93,8 +93,14 @@ header('Content-Type: text/html; charset=utf-8');
                         '',
                         '| Role | Access |',
                         '|---|---|',
-                        '| `hr`, `admin` | Full access. Employees: list, view, create, update, deactivate and reactivate. Leave: list every request, approve, reject. |',
-                        '| `employee` | Limited to their own data. Profile: view, and update phone, address, photo and password. Leave: list, file and cancel their own requests. |',
+                        '| `admin` | Full access to everything below, on everyone\'s data. |',
+                        '| `hr` | Manage everyone\'s data. Employees: list, view, create, update, deactivate and reactivate. Leave: list every request, approve, reject. |',
+                        '| `manager` | **Their own team only** (employees whose `manager_id` is the manager). Employees: list and view the team (read only). Leave: list the team\'s requests, approve or reject them. Anyone outside the team looks like it does not exist (404). |',
+                        '| `employee` | Limited to their own data. Profile: view, and update personal details, photo and password (never the employee ID, status or job details). Leave: list, file and cancel their own requests. |',
+                        '',
+                        'These rules are not hard-coded: they come from the permission matrix in the database table `role_permissions` ' +
+                        '(see **System Settings** at [/admin/permissions.php](/admin/permissions.php), admin only). ' +
+                        'Changing a row in phpMyAdmin changes what the API allows, immediately.',
                         '',
                         '**Realtime:** leave actions publish WebSocket events through `realtime/server.js`: ' +
                         '`leave.filed`, `leave.cancelled`, `leave.approved` and `leave.rejected`. ' +
@@ -110,11 +116,11 @@ header('Content-Type: text/html; charset=utf-8');
                 }],
                 tags: [{
                         name: 'HR & Admin: Employees',
-                        description: 'Full employee management. Requires an `hr` or `admin` session.'
+                        description: 'Full employee management for `hr` and `admin`. A `manager` can read their own team only (writes return 403).'
                     },
                     {
                         name: 'HR & Admin: Leave requests',
-                        description: 'Every employee\'s leave requests. Requires an `hr` or `admin` session.'
+                        description: 'Leave requests. `hr` and `admin` see and review everyone\'s; a `manager` sees and reviews their own team\'s only.'
                     },
                     {
                         name: 'Employee: My profile',
@@ -140,7 +146,7 @@ header('Content-Type: text/html; charset=utf-8');
                         get: {
                             tags: ['HR & Admin: Employees'],
                             summary: 'List employees',
-                            description: 'Requires an authenticated admin or HR session.',
+                            description: '`hr` and `admin` get everyone. A `manager` gets only their own team. An `employee` gets 403.',
                             parameters: [{
                                     name: 'q',
                                     in: 'query',
@@ -222,6 +228,7 @@ header('Content-Type: text/html; charset=utf-8');
                         get: {
                             tags: ['HR & Admin: Employees'],
                             summary: 'Get employee by database ID',
+                            description: '`hr` and `admin` can open any employee. A `manager` can open only someone on their team; anyone else returns 404, the same as an id that does not exist.',
                             parameters: [idParam],
                             responses: {
                                 '200': ok('Employee retrieved successfully', schema('Employee')),
@@ -236,6 +243,7 @@ header('Content-Type: text/html; charset=utf-8');
                             tags: ['HR & Admin: Employees'],
                             summary: 'Update an employee',
                             description: 'Send only the fields to change. Send `null` to clear an optional field. ' +
+                                '`manager_id` sets who the employee reports to: it must be an employee with an **active manager account**, and not the employee themselves. ' +
                                 'This edits the employee record only. To also disable or enable their login, use `POST /api/employee_status.php`.',
                             parameters: [idParam],
                             requestBody: jsonBody('EmployeeUpdate', {
@@ -283,8 +291,8 @@ header('Content-Type: text/html; charset=utf-8');
                     '/api/leave_requests.php': {
                         get: {
                             tags: ['HR & Admin: Leave requests'],
-                            summary: 'List all leave requests',
-                            description: 'Newest first.',
+                            summary: 'List leave requests',
+                            description: 'Newest first. `hr` and `admin` get every request. A `manager` gets only their team\'s requests (asking for an `employee_id` outside the team returns an empty list).',
                             parameters: [leaveStatusParam, {
                                 name: 'employee_id',
                                 in: 'query',
@@ -305,7 +313,8 @@ header('Content-Type: text/html; charset=utf-8');
                             tags: ['HR & Admin: Leave requests'],
                             summary: 'Approve or reject a leave request',
                             description: 'Only Pending requests can be reviewed. Approving deducts the days from the employee\'s leave balance ' +
-                                'and fails with 422 when the balance is too low. Publishes `leave.approved` or `leave.rejected` in realtime.',
+                                'and fails with 422 when the balance is too low. Publishes `leave.approved` or `leave.rejected` in realtime. ' +
+                                'A `manager` can review only requests from their own team; any other request returns 404.',
                             requestBody: jsonBody('LeaveReview', { id: 1, action: 'approve' }),
                             responses: {
                                 '200': ok('Request reviewed', schema('LeaveRequest'), {
@@ -501,7 +510,8 @@ header('Content-Type: text/html; charset=utf-8');
                             tags: ['Realtime & shared'],
                             summary: 'Get a realtime WebSocket token',
                             description: 'Short-lived (5 minute) token for `ws://<host>:8090/ws?token=...`. ' +
-                                'Employees can only subscribe to their own channel `employee:<id>`; HR and admin get `hr` (all requests).',
+                                'The channels come from the permission matrix: `hr` and `admin` get `hr` (every request), a `manager` gets one `employee:<id>` channel per person on their team, ' +
+                                'and an `employee` gets only their own `employee:<id>`. A deactivated account or a role that has no leave access gets 401 or 403.',
                             responses: {
                                 '200': {
                                     description: 'Token issued',
@@ -575,6 +585,7 @@ header('Content-Type: text/html; charset=utf-8');
                                 address: nullableString('Pulpogan 1, Consolacion, Cebu'),
                                 department_id: { type: 'integer', nullable: true, example: 2 },
                                 position_id: { type: 'integer', nullable: true, example: 2 },
+                                manager_id: { type: 'integer', nullable: true, example: null, description: 'employees.id of the manager this person reports to' },
                                 department_name: nullableString('Information Technology'),
                                 position_title: nullableString('Software Developer'),
                                 date_hired: { type: 'string', format: 'date', example: '2024-01-15' },
@@ -598,6 +609,7 @@ header('Content-Type: text/html; charset=utf-8');
                                 address: { type: 'string', maxLength: 1000, nullable: true },
                                 department_id: { type: 'integer', minimum: 1, nullable: true },
                                 position_id: { type: 'integer', minimum: 1, nullable: true },
+                                manager_id: { type: 'integer', minimum: 1, nullable: true, description: 'Must be an employee with an active manager account' },
                                 date_hired: { type: 'string', format: 'date' },
                                 employment_type: { type: 'string', enum: ['Full-time', 'Part-time', 'Contract', 'Intern'], default: 'Full-time' },
                                 employment_status: { type: 'string', enum: ['Active', 'Inactive', 'On Leave', 'Suspended'], default: 'Active' }
@@ -621,6 +633,7 @@ header('Content-Type: text/html; charset=utf-8');
                                 address: { type: 'string', maxLength: 1000, nullable: true },
                                 department_id: { type: 'integer', minimum: 1, nullable: true },
                                 position_id: { type: 'integer', minimum: 1, nullable: true },
+                                manager_id: { type: 'integer', minimum: 1, nullable: true, description: 'Must be an employee with an active manager account, and not the employee themselves' },
                                 date_hired: { type: 'string', format: 'date' },
                                 employment_type: { type: 'string', enum: ['Full-time', 'Part-time', 'Contract', 'Intern'] },
                                 employment_status: { type: 'string', enum: ['Active', 'Inactive', 'On Leave', 'Suspended'] }

@@ -21,7 +21,7 @@ const EMPLOYEE_STATUSES = ['Active', 'Inactive', 'On Leave', 'Suspended'];
 const EMPLOYEE_FIELDS = [
     'employee_id', 'first_name', 'middle_name', 'last_name', 'suffix',
     'date_of_birth', 'gender', 'phone', 'email', 'address',
-    'department_id', 'position_id', 'date_hired', 'employment_type', 'employment_status',
+    'department_id', 'position_id', 'manager_id', 'date_hired', 'employment_type', 'employment_status',
 ];
 
 /**
@@ -151,6 +151,7 @@ function employee_input(PDO $pdo, array $input, ?array $existing = null): array
         'address'           => employee_clean_address($input, $errors),
         'department_id'     => api_clean_id($input, 'department_id', $errors),
         'position_id'       => api_clean_id($input, 'position_id', $errors),
+        'manager_id'        => api_clean_id($input, 'manager_id', $errors),
         'date_hired'        => api_clean_date($input, 'date_hired', $errors, $isCreate || $sent('date_hired')),
         'employment_type'   => api_clean_enum($input, 'employment_type', EMPLOYEE_TYPES, $errors, $sent('employment_type')) ?? 'Full-time',
         'employment_status' => api_clean_enum($input, 'employment_status', EMPLOYEE_STATUSES, $errors, $sent('employment_status')) ?? 'Active',
@@ -178,6 +179,27 @@ function employee_input(PDO $pdo, array $input, ?array $existing = null): array
             $st->execute(['id' => $values[$field]]);
             if ($st->fetchColumn() === false) {
                 $errors[$field] = 'No ' . rtrim($table, 's') . ' with this id';
+            }
+        }
+    }
+
+    // The manager must have an active manager account (or already be this
+    // person's manager, so an unchanged value always saves) and cannot be the
+    // employee themselves.
+    if (!empty($values['manager_id']) && !isset($errors['manager_id'])) {
+        $currentManager = (int)($existing['manager_id'] ?? 0);
+
+        if ($selfId > 0 && $values['manager_id'] === $selfId) {
+            $errors['manager_id'] = 'An employee cannot be their own manager';
+        } elseif ($values['manager_id'] !== $currentManager) {
+            $st = $pdo->prepare("
+                SELECT 1 FROM users
+                WHERE employee_id = :m AND LOWER(role) = 'manager' AND status = 'Active'
+                LIMIT 1
+            ");
+            $st->execute(['m' => $values['manager_id']]);
+            if ($st->fetchColumn() === false) {
+                $errors['manager_id'] = 'Must be an employee with an active manager account';
             }
         }
     }

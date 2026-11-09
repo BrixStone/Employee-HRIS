@@ -6,7 +6,7 @@
 require_once __DIR__ . '/_api.php';
 
 $method  = api_methods(['GET', 'PATCH']);
-$session = api_require_role(['admin', 'hr']);
+$session = api_require_role(); // any signed-in role; the permission matrix decides
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
@@ -21,9 +21,21 @@ try {
     require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../classes/Employee.php';
 
-    api_require_account($pdo, $session);
+    $account = api_require_account($pdo, $session);
+    $scope = api_require_permission(
+        $pdo, $account, 'employee_records',
+        $method === 'PATCH' ? 'edit' : 'view',
+        $method === 'PATCH' ? ['all'] : ['all', 'team']
+    );
     $model = new Employee($pdo);
     $employee = $model->findById($id);
+
+    // A manager asking for someone outside their team gets the same answer as
+    // for a record that does not exist, so ids cannot be probed.
+    if ($employee !== null && $scope === 'team'
+        && !Rbac::isTeamMember($pdo, $account['employee_id'], (int)$employee['id'])) {
+        $employee = null;
+    }
 
     if ($employee === null) {
         respond(404, [

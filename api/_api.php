@@ -22,6 +22,7 @@ if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
 }
 
 require_once __DIR__ . '/../config/helpers.php'; // respond()
+require_once __DIR__ . '/../classes/Rbac.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -152,6 +153,25 @@ function api_require_employee(PDO $pdo, array $session): array
         api_error(403, 'No employee record is linked to this account');
     }
     return $account;
+}
+
+/**
+ * Check the permission matrix (table role_permissions) for this account.
+ * Stops with 403 when $ability is not granted on $module, or when the role's
+ * scope is not one of $scopes. Returns the scope ('all' | 'team' | 'own') so the
+ * caller can narrow the data it returns (a manager only sees their team).
+ *
+ * @param string[]|null $scopes
+ */
+function api_require_permission(PDO $pdo, array $account, string $module, string $ability, ?array $scopes = null): string
+{
+    $scope = Rbac::scope($pdo, $account['role'], $module);
+
+    if (!Rbac::can($pdo, $account['role'], $module, $ability)
+        || ($scopes !== null && !in_array($scope, $scopes, true))) {
+        api_error(403, 'Insufficient permissions');
+    }
+    return $scope;
 }
 
 /** Decode a JSON object request body. */

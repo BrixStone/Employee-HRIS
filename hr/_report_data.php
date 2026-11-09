@@ -1,4 +1,9 @@
 <?php
+// Include-only: requesting this file by URL gives a 404.
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    http_response_code(404);
+    exit;
+}
 /**
  * Shared Reports data layer.
  *
@@ -24,6 +29,10 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 }
 
 $REPORT_ALLOW_EXPORT = $REPORT_ALLOW_EXPORT ?? true;
+
+// merge_sort_numeric(), used below to sort the headcount, is defined here.
+// (Without this include the Reports page and the dashboard report section crash.)
+require_once __DIR__ . '/../algorithms/merge_sort.php';
 
 // ─── Bubble Sort (DSA) ───────────────────────────────────────────────────────
 if (!function_exists('bubble_sort_rows')) {

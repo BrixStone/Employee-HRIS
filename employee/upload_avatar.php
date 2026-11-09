@@ -4,15 +4,9 @@ session_start();
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Avatar.php';
 
-// Auth: employees only
-if (empty($_SESSION['user_id']) || empty($_SESSION['role'])) {
-    header('Location: /authentication/login.php');
-    exit;
-}
-if (strtolower(trim($_SESSION['role'])) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
-}
+// Logged in, account still active, employee portal, allowed to edit their own record
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('employee_records', 'edit', 'own', ['employee']);
 
 $employeeId = $_SESSION['employee_id'] ?? null;
 if (!$employeeId) {

@@ -19,6 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !empty($_SESSION['role'])) {
             header('Location: /hr/dashboard.php');
             exit;
 
+        case 'manager':
+            header('Location: /manager/dashboard.php');
+            exit;
+
         case 'employee':
             header('Location: /employee/dashboard.php');
             exit;
@@ -94,6 +98,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     case 'payroll':
                         $destination = '/hr/dashboard.php';
+                        break;
+
+                    case 'manager':
+                        $destination = '/manager/dashboard.php';
                         break;
 
                     case 'employee':

@@ -4,15 +4,10 @@ require_once __DIR__ . '/../config/database.php';
 
 date_default_timezone_set('Asia/Manila');
 
-if (empty($_SESSION['user_id'])) {
-    header('Location: ../authentication/login.php');
-    exit;
-}
-
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied.');
-}
+// Logged in, account still active, employee portal, allowed by the permission matrix
+require_once __DIR__ . '/../authentication/guard.php';
+// Clocking in/out (POST) is an edit of their own attendance; just looking is a view.
+require_access('attendance', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' ? 'edit' : 'view', 'own', ['employee']);
 
 // Use the employee ID saved during login, not the user ID.
 $employeeId = $_SESSION['employee_id'] ?? null;
