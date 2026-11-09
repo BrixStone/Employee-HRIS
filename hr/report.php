@@ -1,7 +1,7 @@
 <?php
 // hr/report.php
 require_once __DIR__ . '/../authentication/guard.php';
-require_role(['admin', 'hr']);
+require_access('employee_records', 'view', 'all');
 require_once __DIR__ . '/../config/database.php';
 
 // Compute all report figures (and handle the ?export=headcount_csv download).

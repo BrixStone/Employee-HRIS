@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('employee_records', 'edit', 'all');
+
 require __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/helpers.php'; // h()
 require __DIR__ . '/../classes/Employee.php';
@@ -75,6 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'position_id'        => ($_POST['position_id'] ?? '') !== ''
             ? (int)$_POST['position_id']
             : null,
+            'manager_id'        => ($_POST['manager_id'] ?? '') !== ''
+            ? (int)$_POST['manager_id']
+            : null,
             'date_hired'        => $_POST['date_hired'] ?? '',
             'employment_type'   => $_POST['employment_type'] ?? 'Full-time',
             'employment_status' => $_POST['employment_status'] ?? 'Active',
@@ -87,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $data['date_hired'] === '') {
                 $error = 'Please fill in all required fields (Employee ID, First Name, Last Name, Date Hired).';
 
+                } elseif ($data['manager_id'] !== null
+                    && !$employeeModel->isManagerCandidate($data['manager_id'], $id, isset($emp['manager_id']) ? (int)$emp['manager_id'] : null)) {
+                    $error = 'Please choose a valid manager (an active manager account, and not the employee themselves).';
                 } else {
                     try {
                         $employeeModel->update($id,$data);
@@ -227,6 +236,19 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
       <?php foreach ($positions as $p): ?>
         <option value="<?= h($p['id']) ?>" <?= sel($emp['position_id'] ?? '', $p['id']) ?>>
           <?= h($p['title']) ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+
+  <div>
+    <label>Reports to (Manager) : </label>
+    <select name="manager_id">
+      <option value="">No manager</option>
+      <?php foreach ($employeeModel->getManagerOptions(isset($emp['manager_id']) ? (int)$emp['manager_id'] : null) as $m): ?>
+        <?php if ((int)$m['id'] === (int)$emp['id']) { continue; } ?>
+        <option value="<?= h($m['id']) ?>" <?= sel($emp['manager_id'] ?? '', $m['id']) ?>>
+          <?= h($m['employee_id'] . ' - ' . $m['first_name'] . ' ' . $m['last_name']) ?>
         </option>
       <?php endforeach; ?>
     </select>

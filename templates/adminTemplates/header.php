@@ -7,13 +7,29 @@
 // This file only renders navigation and styles; each admin page keeps its own
 // request handling and database logic.
 $currentPage = basename($_SERVER['PHP_SELF'] ?? 'users.php', '.php');
+require_once __DIR__ . '/../../classes/Rbac.php';
+$navRole = Rbac::normalizeRole($_SESSION['role'] ?? '');
+$navPdo  = (isset($pdo) && $pdo instanceof PDO) ? $pdo : null;
+// Does this role hold $ability on $module, over everyone's data?
+$navCan = static function (string $module, string $ability) use ($navPdo, $navRole): bool {
+    return $navPdo !== null
+        && Rbac::can($navPdo, $navRole, $module, $ability)
+        && Rbac::scope($navPdo, $navRole, $module) === 'all';
+};
+// [link, label, icon, pages that highlight it, visible to this role?]
+$navItems = [
+    ['/admin/users.php', 'User Management', "\u{25C9}", ['users'], $navCan('user_management', 'view')],
+    ['/admin/create_user.php', 'Create User', "\u{FF0B}", ['create_user'], $navCan('user_management', 'edit')],
+    ['/admin/permissions.php', 'System Settings', "\u{2699}", ['permissions'], $navCan('system_settings', 'view')],
+];
 
 $pageTitles = [
     'users'       => 'User Management',
     'create_user' => 'Create User',
+    'permissions' => 'System Settings',
 ];
 $pageTitle = $pageTitles[$currentPage] ?? 'Administration';
-$cssPage = preg_replace('/[^a-z0-9_-]/', '', $currentPage);
+$cssPage = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,9 +50,12 @@ $cssPage = preg_replace('/[^a-z0-9_-]/', '', $currentPage);
     <span class="logo-mark">A</span><span class="logo-text"><strong>HRIS</strong><small>System Admin</small></span>
   </a>
   <nav class="nav-list" aria-label="Main navigation">
-    <a class="nav-item <?= $currentPage === 'users' ? 'active' : '' ?>" href="/admin/users.php"><span class="nav-icon">◉</span><span>User Management</span></a>
-    <a class="nav-item <?= $currentPage === 'create_user' ? 'active' : '' ?>" href="/admin/create_user.php"><span class="nav-icon">＋</span><span>Create User</span></a>
-  </nav>
+<?php foreach ($navItems as [$href, $label, $icon, $pages, $visible]): ?>
+<?php if ($visible): ?>
+    <a class="nav-item <?= in_array($currentPage, $pages, true) ? 'active' : '' ?>" href="<?= $href ?>"><span class="nav-icon"><?= $icon ?></span><span><?= $label ?></span></a>
+<?php endif; ?>
+<?php endforeach; ?>
+</nav>
   <div class="sidebar-footer">
     <div class="footer-line"></div>
     <div class="admin-profile"><span class="avatar">AD</span><span class="admin-info"><strong>System Administrator</strong><span>Admin Console</span></span></div>

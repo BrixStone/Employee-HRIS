@@ -25,6 +25,7 @@ try {
     require_once __DIR__ . '/../../config/database.php';
 
     $account = api_require_employee($pdo, $session);
+    api_require_permission($pdo, $account, 'leave_requests', $method === 'POST' ? 'submit' : 'view', ['own']);
     $employeeId = $account['employee_id'];
     $model = new LeaveRequest($pdo);
 

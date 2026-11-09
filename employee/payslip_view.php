@@ -7,14 +7,9 @@ header('Pragma: no-cache');
 
 date_default_timezone_set('Asia/Manila');
 
-if (empty($_SESSION['user_id']) || empty($_SESSION['role'])) {
-    header('Location: /authentication/login.php');
-    exit;
-}
-if (strtolower(trim($_SESSION['role'])) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
-}
+// Logged in, account still active, employee portal, allowed by the permission matrix
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('payslips', 'view', 'own', ['employee']);
 
 $employeeId = $_SESSION['employee_id'] ?? null;
 if (!$employeeId) {

@@ -1,4 +1,9 @@
 <?php
+// Include-only: requesting this file by URL gives a 404.
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    http_response_code(404);
+    exit;
+}
 /**
  * Shared Reports presentation.
  *

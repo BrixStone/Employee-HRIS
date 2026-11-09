@@ -10,7 +10,7 @@
 require_once __DIR__ . '/_api.php';
 
 api_methods(['POST']);
-$session = api_require_role(['admin', 'hr']);
+$session = api_require_role(); // any signed-in role; the permission matrix decides
 
 try {
     require_once __DIR__ . '/../config/database.php';
@@ -18,6 +18,7 @@ try {
     require_once __DIR__ . '/../classes/User.php';
 
     $account = api_require_account($pdo, $session);
+    api_require_permission($pdo, $account, 'employee_records', 'edit', ['all']);
     $input = api_json_body();
 
     $errors = [];

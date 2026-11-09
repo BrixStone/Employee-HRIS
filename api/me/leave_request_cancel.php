@@ -17,6 +17,7 @@ try {
     require_once __DIR__ . '/../../classes/LeaveRequest.php';
 
     $account = api_require_employee($pdo, $session);
+    api_require_permission($pdo, $account, 'leave_requests', 'submit', ['own']);
     $employeeId = $account['employee_id'];
     $input = api_json_body();
 

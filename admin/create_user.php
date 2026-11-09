@@ -1,11 +1,13 @@
 <?php
+// admin/create_user.php: create a login account with any role.
 require_once __DIR__ . '/../authentication/guard.php';
-require_role(['admin']);
+$account = require_access('user_management', 'edit', 'all');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/User.php';
 
 $userModel = new User($pdo);
+$roles = Rbac::ROLES;
 
 $employees = $userModel->getEmployeesWithoutUsers();
 
@@ -13,16 +15,23 @@ $errors = [];
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $role = 'employee';
+  csrf_check($account['role']);
+
+  $role = Rbac::normalizeRole($_POST['role'] ?? '');
   $username = trim($_POST['username'] ?? '');
-  $password = $_POST['password'] ?? '';
+  $password = (string)($_POST['password'] ?? '');
   $status = ($_POST['status'] ?? 'Active') === 'Inactive' ? 'Inactive' : 'Active';
-  $employee_id = isset($_POST['employee_id']) && $_POST['employee_id'] !== ''
+  $employee_id = ctype_digit((string)($_POST['employee_id'] ?? '')) && (int)$_POST['employee_id'] > 0
     ? (int)$_POST['employee_id']
     : null;
 
-  if ($employee_id === null || $employee_id <= 0) {
-    $errors[] = 'Please select an employee to link this account.';
+  if (!in_array($role, $roles, true)) {
+    $errors[] = 'Please choose a role.';
+  }
+
+  // Employees and managers are people on the payroll, so they need an employee record.
+  if (in_array($role, ['employee', 'manager'], true) && $employee_id === null) {
+    $errors[] = "The {$role} role needs a linked employee. Please select one.";
   }
 
   if ($username === '' || strlen($username) < 3) {
@@ -31,6 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($password === '' || strlen($password) < 8) {
     $errors[] = 'Password must be at least 8 characters.';
+  }
+
+  if ($employee_id !== null && !$errors) {
+    $chk = $pdo->prepare('SELECT 1 FROM employees WHERE id = :id AND id NOT IN (SELECT employee_id FROM users WHERE employee_id IS NOT NULL) LIMIT 1');
+    $chk->execute([':id' => $employee_id]);
+    if (!$chk->fetchColumn()) {
+      $errors[] = 'That employee does not exist or already has an account.';
+    }
   }
 
   if (!$errors) {
@@ -56,15 +73,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'status' => $status,
       ]);
 
-      $success = 'Employee user created successfully.';
+      $success = "Created {$role} account \"{$username}\".";
       $employees = $userModel->getEmployeesWithoutUsers();
       $_POST = [];
     } catch (Throwable $e) {
-      $errors[] = 'Could not create user. If this employee already has an account, pick someone else.';
+      error_log('create_user failed: ' . $e->getMessage());
+      $errors[] = 'Could not create the user. Please try again.';
     }
   }
 }
-
 require __DIR__ . '/../templates/adminTemplates/header.php';
 ?>
 
@@ -99,12 +116,12 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
   </div>
   <div class="panel-body">
     <form method="post" autocomplete="off">
-      <input type="hidden" name="role" value="employee">
+      <?= csrf_field() ?>
 
       <div>
         <label for="employee_id">Employee</label>
-        <select id="employee_id" name="employee_id" required>
-          <option value="">-- Select employee --</option>
+        <select id="employee_id" name="employee_id">
+          <option value="">-- None --</option>
 
           <?php foreach ($employees as $emp):
             $id = (int)$emp['id'];
@@ -124,7 +141,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
         </select>
 
         <div class="muted" style="margin-top:6px">
-          Only employees without an existing login are shown.
+          Only employees without an existing login are shown. Required for employee and manager accounts.
         </div>
       </div>
 
@@ -153,8 +170,14 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
 
       <div class="form-grid">
         <div>
-          <label>Role</label>
-          <input value="Employee" disabled>
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            <?php foreach ($roles as $r): ?>
+              <option value="<?= htmlspecialchars($r) ?>" <?= (($_POST['role'] ?? 'employee') === $r) ? 'selected' : '' ?>>
+                <?= htmlspecialchars(ucfirst($r)) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
         </div>
 
         <div>

@@ -1,7 +1,7 @@
 <?php
 // hr/payroll.php
 require_once __DIR__ . '/../authentication/guard.php';
-require_role(['admin', 'hr']);
+require_access('payslips', 'edit', 'all');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Payroll.php';
 require_once __DIR__ . '/../classes/DSA/LinkedList.php';

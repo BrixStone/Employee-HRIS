@@ -3,15 +3,9 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 
-if (empty($_SESSION['user_id'])) {
-    header('Location: ../authentication/login.php');
-    exit;
-}
-
-if (strtolower(trim($_SESSION['role'] ?? '')) !== 'employee') {
-    http_response_code(403);
-    exit('Access denied: Employee account required.');
-}
+// Logged in, account still active, employee portal, allowed by the permission matrix
+require_once __DIR__ . '/../authentication/guard.php';
+require_access('employee_records', 'view', 'own', ['employee']);
 
 $employeeId = $_SESSION['employee_id'] ?? null;
 
