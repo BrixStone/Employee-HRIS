@@ -2,7 +2,15 @@
     "name": "administrator/employee-hris",
     "autoload": {
         "psr-4": {
-            "Administrator\\EmployeeHris\\": "src/"
+            "Administrator\\EmployeeHris\\": "src/",
+            "App\\Domain\\": "classes/Domain/",
+            "App\\Application\\": "classes/Application/",
+            "App\\Infrastructure\\": "classes/Infrastructure/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
         }
     },
     "authors": [
