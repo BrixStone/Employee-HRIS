@@ -360,7 +360,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
           // toArray() gives front→back order (oldest first)
           foreach ($pendingQueue->toArray() as $qItem):
           ?>
-            <tr <?= $position === 1 ? 'style="background:#f0fdf4"' : '' ?>>
+            <tr <?= $position === 1 ?  : '' ?>>
               <td>
                 <?php if ($position === 1): ?>
                   <span class="pill pill-active">Next</span>
