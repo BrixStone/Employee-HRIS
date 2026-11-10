@@ -16,7 +16,6 @@ $employeeId = $_SESSION['employee_id'] ?? null;
 if (!$employeeId) {
     exit('No employee record is linked to this user account.');
 }
-var_dump('2Session employee_id:', $employeeId);
 
 $stmt = $pdo->prepare("
     SELECT id, email, first_name, last_name
