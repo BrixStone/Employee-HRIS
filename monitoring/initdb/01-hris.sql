@@ -126,20 +126,40 @@ CREATE TABLE IF NOT EXISTS employees (
 -- 4. USERS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
-    id          BIGINT       NOT NULL AUTO_INCREMENT,
-    employee_id BIGINT       DEFAULT NULL,
-    username    VARCHAR(100) NOT NULL,
-    password    VARCHAR(255) NOT NULL,
-    role        VARCHAR(30)  NOT NULL DEFAULT 'employee',
-    status      VARCHAR(20)  NOT NULL DEFAULT 'Active',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    employee_id     BIGINT       DEFAULT NULL,
+    username        VARCHAR(100) NOT NULL,
+    password        VARCHAR(255) NOT NULL,
+    role            VARCHAR(30)  NOT NULL DEFAULT 'employee',
+    status          VARCHAR(20)  NOT NULL DEFAULT 'Active',
+    setup_completed TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY users_username_key (username),
     KEY idx_users_employee (employee_id),
     CONSTRAINT fk_user_employee
         FOREIGN KEY (employee_id) REFERENCES employees (id)
         ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_setup_tokens (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL,
+    token_hash CHAR(64)     NOT NULL,
+    expires_at DATETIME     NOT NULL,
+    used_at    DATETIME     DEFAULT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_setup_token_hash (token_hash),
+    KEY idx_setup_token_user (user_id),
+    KEY idx_setup_token_expiry (expires_at),
+
+    CONSTRAINT fk_setup_token_user
+        FOREIGN KEY (user_id) REFERENCES users (id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Passwords below are PHP password_hash() $2y$ hashes for 'password123'

@@ -11,7 +11,9 @@ $roles    = Rbac::ROLES;
 $statuses = ['Active', 'Inactive'];
 $message  = '';
 $error    = '';
-
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (!$canEdit) {
         guard_forbidden($account['role']);
