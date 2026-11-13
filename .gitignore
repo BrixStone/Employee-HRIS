@@ -1,6 +1,10 @@
+.env
+.env.*
+!.env.example
+
 config/supabase.php
 /vendor/
-.env
+monitoring/.env
 terraform.tfvars
 node_modules/
 *.tfstate
