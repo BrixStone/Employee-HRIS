@@ -139,7 +139,7 @@ class User
         try {
             // Invalidate previous unused invitations.
             $st = $this->pdo->prepare(
-                "UPDATE user_setup_tokens
+                "UPDATE password_setup_tokens
                  SET used_at = NOW()
                  WHERE user_id = :id
                  AND used_at IS NULL"
@@ -147,11 +147,10 @@ class User
 
             $st->execute(['id' => $userId]);
 
-            // Create a new invitation valid for 24 hours.
             $st = $this->pdo->prepare(
-                "INSERT INTO user_setup_tokens
+                "INSERT INTO password_setup_tokens
                  (user_id, token_hash, expires_at)
-                 VALUES (:id, :hash, DATE_ADD(NOW(), INTERVAL 24 HOUR))"
+                 VALUES (:id, :hash, DATE_ADD(NOW(), INTERVAL 10 MINUTE))"
             );
 
             $st->execute([
@@ -171,6 +170,27 @@ class User
         }
     }
 
+
+    public function deleteExpiredPendingAccounts(): int
+    {
+        $sql = "
+        DELETE u
+        FROM users u
+        INNER JOIN password_setup_tokens t
+            ON t.user_id = u.id
+        WHERE u.setup_completed = 0
+          AND u.status = 'Active'
+          AND t.used_at IS NULL
+          AND t.expires_at <= NOW()
+    ";
+
+        $st = $this->pdo->prepare($sql);
+        $st->execute();
+
+        return $st->rowCount();
+    }
+
+
     // Find a valid invitation.
     public function findValidSetupToken(string $token): ?array
     {
@@ -181,7 +201,7 @@ class User
                 t.id AS token_id,
                 t.user_id,
                 u.username
-             FROM user_setup_tokens t
+             FROM password_setup_tokens t
              INNER JOIN users u ON u.id = t.user_id
              WHERE t.token_hash = :hash
              AND t.used_at IS NULL
@@ -206,7 +226,7 @@ class User
 
             $st = $this->pdo->prepare(
                 "SELECT id
-                 FROM user_setup_tokens
+                 FROM password_setup_tokens
                  WHERE id = :token_id
                  AND user_id = :user_id
                  AND used_at IS NULL
@@ -244,7 +264,7 @@ class User
             }
 
             $st = $this->pdo->prepare(
-                "UPDATE user_setup_tokens
+                "UPDATE password_setup_tokens
                  SET used_at = NOW()
                  WHERE id = :id"
             );
