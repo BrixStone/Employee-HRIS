@@ -6,7 +6,16 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Payroll.php';
 require_once __DIR__ . '/../classes/DSA/LinkedList.php';
 
-$payroll = new Payroll($pdo);
+// DDD — Application layer wired to real MySQL repository
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use App\Application\Payroll\GeneratePayslipCommand;
+use App\Application\Payroll\GeneratePayslipHandler;
+use App\Infrastructure\Persistence\PdoPayslipRepository;
+
+$payroll    = new Payroll($pdo);
+$psRepo     = new PdoPayslipRepository($pdo);
+$psHandler  = new GeneratePayslipHandler($psRepo);
 
 // ─── Active tab ──────────────────────────────────────────────────────────────
 $tab = $_GET['tab'] ?? 'salaries';
@@ -69,29 +78,118 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tab = 'periods';
   }
 
-  // ── Generate Payslips ────────────────────────────────────────────────────
+  // ── Generate Payslips (DDD — GeneratePayslipHandler) ─────────────────────
   elseif ($form === 'generate_payslips') {
     $periodId = (int)($_POST['period_id'] ?? 0);
     if ($periodId <= 0) {
       $errors[] = 'Invalid period.';
     } else {
-      $salaries  = $payroll->getAllSalaries();
-      $generated = 0;
-      $skipped   = 0;
-      foreach ($salaries as $s) {
-        $data = $payroll->generatePayslip($periodId, (int)$s['employee_id']);
-        if (isset($data['error'])) {
-          $skipped++;
-          continue;
+      // Load period dates
+      $periodRow = $pdo->prepare("
+          SELECT start_date, end_date FROM payroll_periods WHERE id = ?
+      ");
+      $periodRow->execute([$periodId]);
+      $period = $periodRow->fetch(PDO::FETCH_ASSOC);
+
+      if (!$period) {
+        $errors[] = 'Period not found.';
+      } else {
+        // Load deduction rates from DB
+        // Load deduction rates from DB
+        $rates    = [];
+        $rateRows = $pdo->query("SELECT name, type, rate FROM deduction_rates WHERE is_active = 1")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rateRows as $r) $rates[strtolower($r['name'])] = $r;
+
+        // SSS — Percentage of basic salary
+        $sssRate  = isset($rates['sss'])
+          ? (float)$rates['sss']['rate'] / 100
+          : 0.045;
+
+        // PhilHealth — Percentage of basic salary
+        $philRate = isset($rates['philhealth'])
+          ? (float)$rates['philhealth']['rate'] / 100
+          : 0.025;
+
+        // Pag-IBIG — Fixed amount
+        $pagFixed = isset($rates['pag-ibig'])
+          ? (float)$rates['pag-ibig']['rate']
+          : 100.0;
+
+        $salaries  = $payroll->getAllSalaries();
+        $generated = 0;
+        $skipped   = 0;
+
+        foreach ($salaries as $s) {
+          $empId = (int) $s['employee_id'];
+          if (!$empId || (float)$s['basic_salary'] <= 0) {
+            $skipped++;
+            continue;
+          }
+
+          // Check if employee has ANY attendance in this period
+          // If zero records — they did not work this cut-off, skip payslip generation
+          $attCountStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM attendance
+        WHERE employee_id = :eid
+          AND DATE(time_in) BETWEEN :start AND :end
+    ");
+          $attCountStmt->execute([
+            ':eid'   => $empId,
+            ':start' => $period['start_date'],
+            ':end'   => $period['end_date'],
+          ]);
+          $attCount = (int) $attCountStmt->fetchColumn();
+
+          if ($attCount === 0) {
+            $skipped++;
+            continue; // No attendance this cut-off — do not generate payslip
+          }
+
+          // Fetch late minutes per attendance day in this period
+          $lateStmt = $pdo->prepare("
+        SELECT
+            GREATEST(0, TIMESTAMPDIFF(MINUTE,
+                CONCAT(DATE(time_in), ' 08:00:00'), time_in
+            )) AS late_minutes
+        FROM attendance
+        WHERE employee_id = :eid
+          AND DATE(time_in) BETWEEN :start AND :end
+          AND TIMESTAMPDIFF(MINUTE, CONCAT(DATE(time_in), ' 08:00:00'), time_in) > 0
+    ");
+          $lateStmt->execute([
+            ':eid'   => $empId,
+            ':start' => $period['start_date'],
+            ':end'   => $period['end_date'],
+          ]);
+          $lateRecords = $lateStmt->fetchAll(PDO::FETCH_ASSOC);
+
+          $command = new GeneratePayslipCommand(
+            employeeId: $empId,
+            basicSalary: (float) $s['basic_salary'],
+            allowance: (float) ($s['allowance'] ?? 0),
+            periodStart: $period['start_date'],
+            periodEnd: $period['end_date'],
+            lateRecords: $lateRecords,
+            sssRate: $sssRate,
+            philRate: $philRate,
+            pagIbigFixed: $pagFixed,
+            payrollPeriodId: $periodId,
+          );
+
+          try {
+            $psHandler->handle($command);
+            $generated++;
+          } catch (Throwable $e) {
+            $skipped++;
+          }
         }
-        $payroll->savePayslip($data);
-        $generated++;
+
+        $msg = "Generated {$generated} payslip(s) via DDD handler.";
+        if ($skipped > 0) $msg .= " Skipped {$skipped}.";
+        header('Location: /hr/payroll.php?tab=payslips&period_id=' . $periodId
+          . '&success=' . urlencode($msg));
+        exit;
       }
-      $msg = "Generated {$generated} payslip(s).";
-      if ($skipped > 0) $msg .= " Skipped {$skipped} (no salary set).";
-      header('Location: /hr/payroll.php?tab=payslips&period_id=' . $periodId
-        . '&success=' . urlencode($msg));
-      exit;
     }
     $tab = 'payslips';
   }
@@ -153,20 +251,20 @@ if ($tab === 'salaries') {
 }
 
 if ($tab === 'periods' || $tab === 'payslips') {
-    $periods = $payroll->getAllPeriods();
+  $periods = $payroll->getAllPeriods();
 
-    // ── DSA: Linked List — payroll periods chain ──────────────
-    $periodList = new LinkedList();
-    foreach ($periods as $period) {
-        $periodList->append($period); // O(1) per node
-    }
-    $latestPeriod = $periodList->tail(); // most recent
-    $oldestPeriod = $periodList->head(); // first ever
+  // ── DSA: Linked List — payroll periods chain ──────────────
+  $periodList = new LinkedList();
+  foreach ($periods as $period) {
+    $periodList->append($period); // O(1) per node
+  }
+  $latestPeriod = $periodList->tail(); // most recent
+  $oldestPeriod = $periodList->head(); // first ever
 }
 
 if ($tab === 'payslips' && $selPeriodId > 0) {
-    $selPeriod = $payroll->getPeriodById($selPeriodId);
-    $payslips  = $payroll->getPayslipsByPeriod($selPeriodId);
+  $selPeriod = $payroll->getPeriodById($selPeriodId);
+  $payslips  = $payroll->getPayslipsByPeriod($selPeriodId);
 }
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
