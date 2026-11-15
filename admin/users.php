@@ -68,6 +68,8 @@ LIMIT 1');
     $error = 'You cannot change your own role or status. Ask another admin.';
   } elseif (!in_array($newRole, $roles, true)) {
     $error = 'Unknown role.';
+  } elseif (!in_array($newRank, $ranks, true)) {
+    $error = 'Unknown rank.';
   } elseif (!in_array($newStatus, $statuses, true)) {
     $error = 'Unknown status.';
   } elseif (in_array($newRole, ['employee', 'manager'], true) && $target['employee_id'] === null) {
@@ -103,7 +105,7 @@ LIMIT 1');
     if ($target['employee_id'] !== null) {
       $rankUpdate = $pdo->prepare(
         'UPDATE employees
-         SET rank = :rank,
+         SET `rank` = :rank,
              updated_at = NOW()
          WHERE id = :employee_id'
       );
@@ -113,7 +115,7 @@ LIMIT 1');
         'employee_id' => $target['employee_id']
       ]);
     }
-    $message = "Saved {$target['username']}: role {$newRole}, status {$newStatus}. "
+    $message = "Saved {$target['username']}: role {$newRole}, rank {$newRank}, status {$newStatus}. "
       . 'If they are signed in, the change applies on their next click.';
   }
 }
@@ -263,8 +265,6 @@ foreach ($users as $u) {
   } else {
     $inactiveUsers++;
   }
-
-  
 }
 require __DIR__ . '/../templates/adminTemplates/header.php';
 ?>
@@ -413,6 +413,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
       <tr>
         <th>Username</th>
         <th>Role</th>
+        <th>Rank</th>
         <th>Status</th>
         <th>Employee</th>
         <th>Department</th>
@@ -422,7 +423,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     <tbody>
       <?php if (empty($displayUsers)): ?>
         <tr>
-          <td colspan="<?= $canEdit ? 6 : 5 ?>">
+          <td colspan="<?= $canEdit ? 7 : 6 ?>">
             <div class="empty-state">
               <span class="es-ico">◉</span>
               No users found.
@@ -439,8 +440,24 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
           ?>
           <tr>
             <td><strong><?= h($u['username']) ?></strong></td>
-            <td><span class="pill pill-neutral"><?= h(ucfirst((string)$u['role'])) ?></span></td>
             <td>
+              <span class="pill pill-neutral">
+                <?= h(ucfirst((string)$u['role'])) ?>
+              </span>
+            </td>
+
+            <td>
+              <span class="pill pill-neutral">
+                <?= h(
+                  ucwords(
+                    str_replace('_', ' ', $u['rank'] ?? 'employee')
+                  )
+                ) ?>
+              </span>
+            </td>
+
+            <td>
+
               <?php if ((int)$u['setup_completed'] === 0): ?>
 
                 <span class="pill pill-pending">
