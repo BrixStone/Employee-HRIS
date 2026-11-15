@@ -8,6 +8,7 @@ require_once __DIR__ . '/../classes/User.php';
 
 $canEdit  = Rbac::can($pdo, $account['role'], 'user_management', 'edit');
 $roles    = Rbac::ROLES;
+$ranks = Rbac::RANKS;
 $statuses = ['Active', 'Inactive'];
 $message  = '';
 $error    = '';
@@ -42,10 +43,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
   csrf_check($account['role']);
 
   $targetId  = (int)($_POST['user_id'] ?? 0);
-  $newRole   = Rbac::normalizeRole($_POST['role'] ?? '');
+  $newRole = Rbac::normalizeRole($_POST['role'] ?? '');
+  $newRank = Rbac::normalizeRank($_POST['rank'] ?? 'employee');
   $newStatus = (string)($_POST['status'] ?? '');
 
-  $st = $pdo->prepare('SELECT id, username, role, status, employee_id FROM users WHERE id = :id LIMIT 1');
+  $st = $pdo->prepare('SELECT
+    u.id,
+    u.username,
+    u.role,
+    u.status,
+    u.employee_id,
+    e.rank
+FROM users u
+LEFT JOIN employees e
+    ON e.id = u.employee_id
+WHERE u.id = :id
+LIMIT 1');
   $st->execute(['id' => $targetId]);
   $target = $st->fetch(PDO::FETCH_ASSOC);
 
@@ -55,6 +68,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $error = 'You cannot change your own role or status. Ask another admin.';
   } elseif (!in_array($newRole, $roles, true)) {
     $error = 'Unknown role.';
+  } elseif (!in_array($newRank, $ranks, true)) {
+    $error = 'Unknown rank.';
   } elseif (!in_array($newStatus, $statuses, true)) {
     $error = 'Unknown status.';
   } elseif (in_array($newRole, ['employee', 'manager'], true) && $target['employee_id'] === null) {
@@ -73,9 +88,34 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
   }
 
   if ($error === '') {
-    $up = $pdo->prepare('UPDATE users SET role = :r, status = :s, updated_at = NOW() WHERE id = :id');
-    $up->execute(['r' => $newRole, 's' => $newStatus, 'id' => $targetId]);
-    $message = "Saved {$target['username']}: role {$newRole}, status {$newStatus}. "
+    $up = $pdo->prepare(
+      'UPDATE users
+     SET role = :r,
+         status = :s,
+         updated_at = NOW()
+     WHERE id = :id'
+    );
+
+    $up->execute([
+      'r' => $newRole,
+      's' => $newStatus,
+      'id' => $targetId
+    ]);
+
+    if ($target['employee_id'] !== null) {
+      $rankUpdate = $pdo->prepare(
+        'UPDATE employees
+         SET `rank` = :rank,
+             updated_at = NOW()
+         WHERE id = :employee_id'
+      );
+
+      $rankUpdate->execute([
+        'rank' => $newRank,
+        'employee_id' => $target['employee_id']
+      ]);
+    }
+    $message = "Saved {$target['username']}: role {$newRole}, rank {$newRank}, status {$newStatus}. "
       . 'If they are signed in, the change applies on their next click.';
   }
 }
@@ -208,7 +248,6 @@ $totalUsers = count($users);
 $activeUsers = 0;
 $inactiveUsers = 0;
 $pendingUsers = 0;
-$linkedUsers = 0;
 
 foreach ($users as $u) {
 
@@ -225,10 +264,6 @@ foreach ($users as $u) {
     $activeUsers++;
   } else {
     $inactiveUsers++;
-  }
-
-  if (!empty($u['employee_id'])) {
-    $linkedUsers++;
   }
 }
 require __DIR__ . '/../templates/adminTemplates/header.php';
@@ -281,11 +316,6 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     <div class="metric-top"><span class="metric-ico">✕</span></div>
     <span class="metric-title">Inactive</span>
     <strong class="metric-number blue"><?= number_format($inactiveUsers) ?></strong>
-  </article>
-  <article class="metric-card metric-violet">
-    <div class="metric-top"><span class="metric-ico">⚲</span></div>
-    <span class="metric-title">Linked to Employee</span>
-    <strong class="metric-number purple"><?= number_format($linkedUsers) ?></strong>
   </article>
 </div>
 
@@ -383,6 +413,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
       <tr>
         <th>Username</th>
         <th>Role</th>
+        <th>Rank</th>
         <th>Status</th>
         <th>Employee</th>
         <th>Department</th>
@@ -392,7 +423,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     <tbody>
       <?php if (empty($displayUsers)): ?>
         <tr>
-          <td colspan="<?= $canEdit ? 6 : 5 ?>">
+          <td colspan="<?= $canEdit ? 7 : 6 ?>">
             <div class="empty-state">
               <span class="es-ico">◉</span>
               No users found.
@@ -409,8 +440,24 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
           ?>
           <tr>
             <td><strong><?= h($u['username']) ?></strong></td>
-            <td><span class="pill pill-neutral"><?= h(ucfirst((string)$u['role'])) ?></span></td>
             <td>
+              <span class="pill pill-neutral">
+                <?= h(ucfirst((string)$u['role'])) ?>
+              </span>
+            </td>
+
+            <td>
+              <span class="pill pill-neutral">
+                <?= h(
+                  ucwords(
+                    str_replace('_', ' ', $u['rank'] ?? 'employee')
+                  )
+                ) ?>
+              </span>
+            </td>
+
+            <td>
+
               <?php if ((int)$u['setup_completed'] === 0): ?>
 
                 <span class="pill pill-pending">
@@ -482,6 +529,25 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
                         <option value="<?= h($r) ?>" <?= $r === $uRole ? 'selected' : '' ?>><?= h($r) ?></option>
                       <?php endforeach; ?>
                     </select>
+                    <select
+                      name="rank"
+                      aria-label="Rank for <?= h($u['username']) ?>">
+
+                      <?php foreach ($ranks as $rank): ?>
+                        <option
+                          value="<?= h($rank) ?>"
+                          <?= ($rank === ($u['rank'] ?? 'employee'))
+                            ? 'selected'
+                            : '' ?>>
+
+                          <?= h(
+                            ucwords(str_replace('_', ' ', $rank))
+                          ) ?>
+                        </option>
+                      <?php endforeach; ?>
+
+                    </select>
+
                     <select name="status" aria-label="Status for <?= h($u['username']) ?>">
                       <?php foreach ($statuses as $s): ?>
                         <option value="<?= h($s) ?>" <?= $isActive === ($s === 'Active') ? 'selected' : '' ?>><?= h($s) ?></option>

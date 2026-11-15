@@ -1,4 +1,5 @@
 <?php
+
 /**
  * HRIS SAMPLE DATA SEEDER
  * Database: hris
@@ -98,7 +99,560 @@ try {
             'allowance' => 2500,
             'username' => 'donald',
             'password' => 'donald123'
+        ],
+
+        // =========================================
+        // 10 HR EMPLOYEES - DEPARTMENT ID 1
+        // =========================================
+        [
+            'employee_id' => 'EMP-004',
+            'first_name' => 'Joshua',
+            'middle_name' => 'Miguel',
+            'last_name' => 'Santos',
+            'dob' => '1999-02-12',
+            'gender' => 'Male',
+            'phone' => '09171234504',
+            'email' => 'joshua@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 25000,
+            'allowance' => 1500,
+            'username' => 'joshua',
+            'password' => 'joshua123'
+        ],
+        [
+            'employee_id' => 'EMP-005',
+            'first_name' => 'Angela',
+            'middle_name' => 'Marie',
+            'last_name' => 'Garcia',
+            'dob' => '2000-05-18',
+            'gender' => 'Female',
+            'phone' => '09171234505',
+            'email' => 'angela@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 28000,
+            'allowance' => 2000,
+            'username' => 'angela',
+            'password' => 'angela123'
+        ],
+        [
+            'employee_id' => 'EMP-006',
+            'first_name' => 'Kevin',
+            'middle_name' => 'Paul',
+            'last_name' => 'Rodriguez',
+            'dob' => '1998-09-22',
+            'gender' => 'Male',
+            'phone' => '09171234506',
+            'email' => 'kevin@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 26000,
+            'allowance' => 1500,
+            'username' => 'kevin',
+            'password' => 'kevin123'
+        ],
+        [
+            'employee_id' => 'EMP-007',
+            'first_name' => 'Sophia',
+            'middle_name' => 'Anne',
+            'last_name' => 'Reyes',
+            'dob' => '2001-01-30',
+            'gender' => 'Female',
+            'phone' => '09171234507',
+            'email' => 'sophia@example.com',
+            'address' => 'Consolacion, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 29000,
+            'allowance' => 2000,
+            'username' => 'sophia',
+            'password' => 'sophia123'
+        ],
+        [
+            'employee_id' => 'EMP-008',
+            'first_name' => 'Daniel',
+            'middle_name' => 'Joseph',
+            'last_name' => 'Cruz',
+            'dob' => '1997-07-14',
+            'gender' => 'Male',
+            'phone' => '09171234508',
+            'email' => 'daniel@example.com',
+            'address' => 'Talisay City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 35000,
+            'allowance' => 2500,
+            'username' => 'daniel',
+            'password' => 'daniel123'
+        ],
+        [
+            'employee_id' => 'EMP-009',
+            'first_name' => 'Michelle',
+            'middle_name' => 'Grace',
+            'last_name' => 'Flores',
+            'dob' => '1999-12-05',
+            'gender' => 'Female',
+            'phone' => '09171234509',
+            'email' => 'michelle@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 27000,
+            'allowance' => 1800,
+            'username' => 'michelle',
+            'password' => 'michelle123'
+        ],
+        [
+            'employee_id' => 'EMP-010',
+            'first_name' => 'Patrick',
+            'middle_name' => 'Lee',
+            'last_name' => 'Torres',
+            'dob' => '1996-03-25',
+            'gender' => 'Male',
+            'phone' => '09171234510',
+            'email' => 'patrick@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 32000,
+            'allowance' => 2500,
+            'username' => 'patrick',
+            'password' => 'patrick123'
+        ],
+        [
+            'employee_id' => 'EMP-011',
+            'first_name' => 'Isabella',
+            'middle_name' => 'Rose',
+            'last_name' => 'Mendoza',
+            'dob' => '2000-10-11',
+            'gender' => 'Female',
+            'phone' => '09171234511',
+            'email' => 'isabella@example.com',
+            'address' => 'Lapu-Lapu City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 28500,
+            'allowance' => 2000,
+            'username' => 'isabella',
+            'password' => 'isabella123'
+        ],
+        [
+            'employee_id' => 'EMP-012',
+            'first_name' => 'Nathan',
+            'middle_name' => 'James',
+            'last_name' => 'Villanueva',
+            'dob' => '1998-06-19',
+            'gender' => 'Male',
+            'phone' => '09171234512',
+            'email' => 'nathan@example.com',
+            'address' => 'Consolacion, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 25500,
+            'allowance' => 1500,
+            'username' => 'nathan',
+            'password' => 'nathan123'
+        ],
+        [
+            'employee_id' => 'EMP-013',
+            'first_name' => 'Camille',
+            'middle_name' => 'Joy',
+            'last_name' => 'Aquino',
+            'dob' => '2001-04-08',
+            'gender' => 'Female',
+            'phone' => '09171234513',
+            'email' => 'camille@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 1,
+            'position' => 1,
+            'hired' => '2025-01-06',
+            'salary' => 26500,
+            'allowance' => 1800,
+            'username' => 'camille',
+            'password' => 'camille123'
+        ],
+
+        // =========================================
+        // 10 IT EMPLOYEES - DEPARTMENT ID 2
+        // =========================================
+        [
+            'employee_id' => 'EMP-014',
+            'first_name' => 'Mark',
+            'middle_name' => 'Anthony',
+            'last_name' => 'Bautista',
+            'dob' => '1997-02-14',
+            'gender' => 'Male',
+            'phone' => '09171234514',
+            'email' => 'mark@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 2,
+            'position' => 2,
+            'hired' => '2025-01-06',
+            'salary' => 35000,
+            'allowance' => 2500,
+            'username' => 'mark',
+            'password' => 'mark123'
+        ],
+        [
+            'employee_id' => 'EMP-015',
+            'first_name' => 'Christine',
+            'middle_name' => 'Mae',
+            'last_name' => 'Dizon',
+            'dob' => '1999-08-21',
+            'gender' => 'Female',
+            'phone' => '09171234515',
+            'email' => 'christine@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 2,
+            'position' => 2,
+            'hired' => '2025-01-06',
+            'salary' => 32000,
+            'allowance' => 2000,
+            'username' => 'christine',
+            'password' => 'christine123'
+        ],
+        [
+            'employee_id' => 'EMP-016',
+            'first_name' => 'Ryan',
+            'middle_name' => 'Patrick',
+            'last_name' => 'Lopez',
+            'dob' => '1996-11-03',
+            'gender' => 'Male',
+            'phone' => '09171234516',
+            'email' => 'ryan@example.com',
+            'address' => 'Lapu-Lapu City, Cebu',
+            'department' => 2,
+            'position' => 4,
+            'hired' => '2025-01-06',
+            'salary' => 28000,
+            'allowance' => 1800,
+            'username' => 'ryan',
+            'password' => 'ryan123'
+        ],
+        [
+            'employee_id' => 'EMP-017',
+            'first_name' => 'Andrea',
+            'middle_name' => 'Nicole',
+            'last_name' => 'Castro',
+            'dob' => '2000-03-17',
+            'gender' => 'Female',
+            'phone' => '09171234517',
+            'email' => 'andrea@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 2,
+            'position' => 2,
+            'hired' => '2025-01-06',
+            'salary' => 31000,
+            'allowance' => 2000,
+            'username' => 'andrea',
+            'password' => 'andrea123'
+        ],
+        [
+            'employee_id' => 'EMP-018',
+            'first_name' => 'Michael',
+            'middle_name' => 'John',
+            'last_name' => 'Ramos',
+            'dob' => '1995-06-25',
+            'gender' => 'Male',
+            'phone' => '09171234518',
+            'email' => 'michael@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 2,
+            'position' => 5,
+            'hired' => '2025-01-06',
+            'salary' => 40000,
+            'allowance' => 3000,
+            'username' => 'michael',
+            'password' => 'michael123'
+        ],
+        [
+            'employee_id' => 'EMP-019',
+            'first_name' => 'Patricia',
+            'middle_name' => 'Louise',
+            'last_name' => 'Gonzales',
+            'dob' => '1998-12-09',
+            'gender' => 'Female',
+            'phone' => '09171234519',
+            'email' => 'patricia@example.com',
+            'address' => 'Talisay City, Cebu',
+            'department' => 2,
+            'position' => 4,
+            'hired' => '2025-01-06',
+            'salary' => 29000,
+            'allowance' => 1800,
+            'username' => 'patricia',
+            'password' => 'patricia123'
+        ],
+        [
+            'employee_id' => 'EMP-020',
+            'first_name' => 'Jerome',
+            'middle_name' => 'David',
+            'last_name' => 'Fernandez',
+            'dob' => '1997-04-13',
+            'gender' => 'Male',
+            'phone' => '09171234520',
+            'email' => 'jerome@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 2,
+            'position' => 2,
+            'hired' => '2025-01-06',
+            'salary' => 33000,
+            'allowance' => 2200,
+            'username' => 'jerome',
+            'password' => 'jerome123'
+        ],
+        [
+            'employee_id' => 'EMP-021',
+            'first_name' => 'Nicole',
+            'middle_name' => 'Faith',
+            'last_name' => 'Martinez',
+            'dob' => '2001-07-19',
+            'gender' => 'Female',
+            'phone' => '09171234521',
+            'email' => 'nicole@example.com',
+            'address' => 'Consolacion, Cebu',
+            'department' => 2,
+            'position' => 4,
+            'hired' => '2025-01-06',
+            'salary' => 27500,
+            'allowance' => 1800,
+            'username' => 'nicole',
+            'password' => 'nicole123'
+        ],
+        [
+            'employee_id' => 'EMP-022',
+            'first_name' => 'Francis',
+            'middle_name' => 'Carlo',
+            'last_name' => 'Perez',
+            'dob' => '1996-01-28',
+            'gender' => 'Male',
+            'phone' => '09171234522',
+            'email' => 'francis@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 2,
+            'position' => 5,
+            'hired' => '2025-01-06',
+            'salary' => 38000,
+            'allowance' => 2800,
+            'username' => 'francis',
+            'password' => 'francis123'
+        ],
+        [
+            'employee_id' => 'EMP-023',
+            'first_name' => 'Jasmine',
+            'middle_name' => 'Claire',
+            'last_name' => 'Rivera',
+            'dob' => '2000-09-15',
+            'gender' => 'Female',
+            'phone' => '09171234523',
+            'email' => 'jasmine@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 2,
+            'position' => 2,
+            'hired' => '2025-01-06',
+            'salary' => 30500,
+            'allowance' => 2000,
+            'username' => 'jasmine',
+            'password' => 'jasmine123'
+        ],
+
+        // =========================================
+        // 10 FINANCE EMPLOYEES - DEPARTMENT ID 3
+        // =========================================
+        [
+            'employee_id' => 'EMP-024',
+            'first_name' => 'Robert',
+            'middle_name' => 'James',
+            'last_name' => 'Navarro',
+            'dob' => '1995-05-12',
+            'gender' => 'Male',
+            'phone' => '09171234524',
+            'email' => 'robert@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 35000,
+            'allowance' => 2500,
+            'username' => 'robert',
+            'password' => 'robert123'
+        ],
+        [
+            'employee_id' => 'EMP-025',
+            'first_name' => 'Maria',
+            'middle_name' => 'Elena',
+            'last_name' => 'Delos Santos',
+            'dob' => '1998-10-20',
+            'gender' => 'Female',
+            'phone' => '09171234525',
+            'email' => 'maria@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 30000,
+            'allowance' => 2000,
+            'username' => 'maria',
+            'password' => 'maria123'
+        ],
+        [
+            'employee_id' => 'EMP-026',
+            'first_name' => 'Anthony',
+            'middle_name' => 'Mark',
+            'last_name' => 'Salazar',
+            'dob' => '1997-03-08',
+            'gender' => 'Male',
+            'phone' => '09171234526',
+            'email' => 'anthony@example.com',
+            'address' => 'Lapu-Lapu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 32000,
+            'allowance' => 2200,
+            'username' => 'anthony',
+            'password' => 'anthony123'
+        ],
+        [
+            'employee_id' => 'EMP-027',
+            'first_name' => 'Beatrice',
+            'middle_name' => 'Ann',
+            'last_name' => 'Lim',
+            'dob' => '1999-06-16',
+            'gender' => 'Female',
+            'phone' => '09171234527',
+            'email' => 'beatrice@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 29000,
+            'allowance' => 1800,
+            'username' => 'beatrice',
+            'password' => 'beatrice123'
+        ],
+        [
+            'employee_id' => 'EMP-028',
+            'first_name' => 'Christopher',
+            'middle_name' => 'Paul',
+            'last_name' => 'Tan',
+            'dob' => '1994-12-02',
+            'gender' => 'Male',
+            'phone' => '09171234528',
+            'email' => 'christopher@example.com',
+            'address' => 'Talisay City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 38000,
+            'allowance' => 2800,
+            'username' => 'christopher',
+            'password' => 'christopher123'
+        ],
+        [
+            'employee_id' => 'EMP-029',
+            'first_name' => 'Denise',
+            'middle_name' => 'Marie',
+            'last_name' => 'Sy',
+            'dob' => '2000-02-24',
+            'gender' => 'Female',
+            'phone' => '09171234529',
+            'email' => 'denise@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 28500,
+            'allowance' => 1800,
+            'username' => 'denise',
+            'password' => 'denise123'
+        ],
+        [
+            'employee_id' => 'EMP-030',
+            'first_name' => 'Gabriel',
+            'middle_name' => 'Luis',
+            'last_name' => 'Ocampo',
+            'dob' => '1996-08-11',
+            'gender' => 'Male',
+            'phone' => '09171234530',
+            'email' => 'gabriel@example.com',
+            'address' => 'Mandaue City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 33000,
+            'allowance' => 2300,
+            'username' => 'gabriel',
+            'password' => 'gabriel123'
+        ],
+        [
+            'employee_id' => 'EMP-031',
+            'first_name' => 'Hannah',
+            'middle_name' => 'Joy',
+            'last_name' => 'Chua',
+            'dob' => '2001-05-07',
+            'gender' => 'Female',
+            'phone' => '09171234531',
+            'email' => 'hannah@example.com',
+            'address' => 'Consolacion, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 27500,
+            'allowance' => 1700,
+            'username' => 'hannah',
+            'password' => 'hannah123'
+        ],
+        [
+            'employee_id' => 'EMP-032',
+            'first_name' => 'Vincent',
+            'middle_name' => 'Eric',
+            'last_name' => 'Alvarez',
+            'dob' => '1995-09-29',
+            'gender' => 'Male',
+            'phone' => '09171234532',
+            'email' => 'vincent@example.com',
+            'address' => 'Cebu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 36000,
+            'allowance' => 2500,
+            'username' => 'vincent',
+            'password' => 'vincent123'
+        ],
+        [
+            'employee_id' => 'EMP-033',
+            'first_name' => 'Rachel',
+            'middle_name' => 'Anne',
+            'last_name' => 'Domingo',
+            'dob' => '1999-11-18',
+            'gender' => 'Female',
+            'phone' => '09171234533',
+            'email' => 'rachel@example.com',
+            'address' => 'Lapu-Lapu City, Cebu',
+            'department' => 3,
+            'position' => 3,
+            'hired' => '2025-01-06',
+            'salary' => 29500,
+            'allowance' => 1900,
+            'username' => 'rachel',
+            'password' => 'rachel123'
         ]
+
     ];
 
     $employeeIds = [];
@@ -176,7 +730,6 @@ try {
                 $e['hired'],
                 $id
             ]);
-
         } else {
 
             $stmt = $pdo->prepare("
@@ -219,6 +772,7 @@ try {
     // PART 2: EMPLOYEE LOGIN ACCOUNTS
     // =========================================
 
+
     foreach ($employees as $e) {
 
         $id = $employeeIds[$e['username']];
@@ -229,17 +783,28 @@ try {
         );
 
         // Find existing employee account.
-        $stmt = $pdo->prepare("
-            SELECT id FROM users
-            WHERE username IN (?, ?)
-            LIMIT 1
-        ");
-
         $oldUsername = $e['username'] === 'kaiser'
             ? 'kai'
             : $e['username'];
 
+        $stmt = $pdo->prepare("
+        SELECT id
+        FROM users
+        WHERE username IN (?, ?)
+           OR employee_id = ?
+        ORDER BY
+            CASE
+                WHEN username = ? THEN 0
+                WHEN username = ? THEN 1
+                ELSE 2
+            END
+        LIMIT 1
+    ");
+
         $stmt->execute([
+            $e['username'],
+            $oldUsername,
+            $id,
             $e['username'],
             $oldUsername
         ]);
@@ -249,14 +814,15 @@ try {
         if ($existing) {
 
             $stmt = $pdo->prepare("
-                UPDATE users SET
-                    employee_id = ?,
-                    username = ?,
-                    password = ?,
-                    role = 'employee',
-                    status = 'Active'
-                WHERE id = ?
-            ");
+            UPDATE users SET
+                employee_id = ?,
+                username = ?,
+                password = ?,
+                role = 'employee',
+                status = 'Active',
+                setup_completed = 1
+            WHERE id = ?
+        ");
 
             $stmt->execute([
                 $id,
@@ -264,18 +830,18 @@ try {
                 $hash,
                 $existing['id']
             ]);
-
         } else {
 
             $stmt = $pdo->prepare("
-                INSERT INTO users (
-                    employee_id,
-                    username,
-                    password,
-                    role,
-                    status
-                ) VALUES (?, ?, ?, 'employee', 'Active')
-            ");
+            INSERT INTO users (
+                employee_id,
+                username,
+                password,
+                role,
+                status,
+                setup_completed
+            ) VALUES (?, ?, ?, 'employee', 'Active', 1)
+        ");
 
             $stmt->execute([
                 $id,
@@ -284,6 +850,7 @@ try {
             ]);
         }
     }
+
 
     // =========================================
     // HR AND ADMIN LOGIN ACCOUNTS
@@ -322,30 +889,31 @@ try {
         if ($existing) {
 
             $stmt = $pdo->prepare("
-                UPDATE users SET
-                    password = ?,
-                    role = ?,
-                    status = 'Active'
-                WHERE id = ?
-            ");
+    UPDATE users SET
+        password = ?,
+        role = ?,
+        status = 'Active',
+        setup_completed = 1
+    WHERE id = ?
+");
 
             $stmt->execute([
                 $hash,
                 $account['role'],
                 $existing['id']
             ]);
-
         } else {
 
             $stmt = $pdo->prepare("
-                INSERT INTO users (
-                    employee_id,
-                    username,
-                    password,
-                    role,
-                    status
-                ) VALUES (NULL, ?, ?, ?, 'Active')
-            ");
+    INSERT INTO users (
+        employee_id,
+        username,
+        password,
+        role,
+        status,
+        setup_completed
+    ) VALUES (NULL, ?, ?, ?, 'Active', 1)
+");
 
             $stmt->execute([
                 $account['username'],
@@ -383,7 +951,6 @@ try {
             ");
 
             $stmt->execute([$e['email']]);
-
         } else {
 
             $stmt = $pdo->prepare("
@@ -584,7 +1151,6 @@ try {
                 $e['allowance'],
                 $existing['id']
             ]);
-
         } else {
 
             $stmt = $pdo->prepare("
@@ -810,7 +1376,6 @@ try {
                     $netPay,
                     $existing['id']
                 ]);
-
             } else {
 
                 $stmt = $pdo->prepare("
@@ -897,7 +1462,6 @@ try {
     echo "2 months attendance\n";
     echo "2 payroll periods\n";
     echo "6 payslips\n";
-
 } catch (Throwable $e) {
 
     if ($pdo->inTransaction()) {
