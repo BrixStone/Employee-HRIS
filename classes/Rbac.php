@@ -243,21 +243,47 @@ final class Rbac
      *
      * @return int[]
      */
-    public static function teamEmployeeIds(PDO $pdo, ?int $managerEmployeeId): array
-    {
-        if ($managerEmployeeId === null || $managerEmployeeId < 1) {
+    public static function teamEmployeeIds(
+        PDO $pdo,
+        ?int $managerEmployeeId
+    ): array {
+        if (
+            $managerEmployeeId === null ||
+            $managerEmployeeId < 1
+        ) {
             return [];
         }
+
         try {
-            $st = $pdo->prepare('SELECT id FROM employees WHERE manager_id = :m ORDER BY id');
-            $st->execute(['m' => $managerEmployeeId]);
-            return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
-        } catch (PDOException $e) {
-            // manager_id column not created yet (migration not run): no team.
-            error_log('Rbac: team lookup failed: ' . $e->getMessage());
+            $st = $pdo->prepare(
+                "SELECT team_member.id
+             FROM employees leader
+             INNER JOIN employees team_member
+                 ON team_member.department_id = leader.department_id
+             WHERE leader.id = :leader_id
+               AND team_member.id <> leader.id
+               AND team_member.employment_status = 'Active'
+             ORDER BY team_member.id"
+            );
+
+            $st->execute([
+                'leader_id' => $managerEmployeeId
+            ]);
+
+            return array_map(
+                'intval',
+                $st->fetchAll(PDO::FETCH_COLUMN)
+            );
+        } catch (PDOException $exception) {
+            error_log(
+                'RBAC team lookup failed: ' .
+                    $exception->getMessage()
+            );
+
             return [];
         }
     }
+
 
     public static function isTeamMember(PDO $pdo, ?int $managerEmployeeId, int $employeeId): bool
     {
