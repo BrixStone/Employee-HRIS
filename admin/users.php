@@ -2,6 +2,8 @@
 // admin/users.php: user accounts, their role and their status.
 require_once __DIR__ . '/../authentication/guard.php';
 $account = require_access('user_management', 'view', 'all');
+require_once __DIR__ . '/../classes/AuditLogger.php';
+
 
 require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()
 require_once __DIR__ . '/../classes/User.php';
@@ -115,6 +117,16 @@ LIMIT 1');
         'employee_id' => $target['employee_id']
       ]);
     }
+        AuditLogger::log('user.update', 'user', $targetId, [
+        'username'   => $target['username'],
+        'old_role'   => $target['role'],
+        'new_role'   => $newRole,
+        'old_rank'   => $target['rank'] ?? 'employee',
+        'new_rank'   => $newRank,
+        'old_status' => $target['status'],
+        'new_status' => $newStatus,
+    ]);
+
     $message = "Saved {$target['username']}: role {$newRole}, rank {$newRank}, status {$newStatus}. "
       . 'If they are signed in, the change applies on their next click.';
   }
