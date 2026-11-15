@@ -2,6 +2,7 @@
 session_start();
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../classes/AuditLogger.php';
 
 // Redirect users who are already logged in.
 // POST requests must still be checked.
@@ -70,10 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$user) {
+                AuditLogger::logFailedLogin($identifier);
                 $error = 'Invalid credentials.';
             } elseif (strcasecmp((string) $user['status'], 'Active') !== 0) {
+                AuditLogger::logFailedLogin($identifier);
                 $error = 'Account is inactive. Contact an admin.';
             } elseif (!password_verify($password, $user['password_hash'])) {
+                AuditLogger::logFailedLogin($identifier);
                 $error = 'Invalid credentials.';
             } else {
                 // Clear old session data and regenerate the session ID.
@@ -115,6 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $destination = '/';
                         break;
                 }
+
+                AuditLogger::log('login', 'user', (int) $user['user_id'], [
+                    'username' => $user['username'],
+                    'role'     => $user['role'],
+                ]);
 
                 header('Location: ' . $destination);
                 exit;

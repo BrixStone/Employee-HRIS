@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../classes/AuditLogger.php';
 
 class Employee
 {
@@ -152,7 +153,20 @@ class Employee
             $params['manager_id'] = $data['manager_id'] ?: null;
         }
 
-        return $stmt->execute($params);
+        $result = $stmt->execute($params);
+
+        if ($result) {
+            $newId = (int) $this->pdo->lastInsertId();
+            AuditLogger::log('employee.create', 'employee', $newId, [
+                'employee_id'   => $employeeId,
+                'name'          => $data['first_name'] . ' ' . $data['last_name'],
+                'department_id' => $data['department_id'] ?? null,
+                'position_id'   => $data['position_id']  ?? null,
+                'rank'          => $params['rank'],
+            ]);
+        }
+
+        return $result;
     }
 
     /**
@@ -269,7 +283,32 @@ class Employee
             $params['manager_id'] = $data['manager_id'] ?: null;
         }
 
-        return $stmt->execute($params);
+        $old = $this->findById($id);
+
+        $result = $stmt->execute($params);
+
+        if ($result && $old) {
+            AuditLogger::log('employee.update', 'employee', $id, [
+                'old' => [
+                    'first_name'        => $old['first_name'],
+                    'last_name'         => $old['last_name'],
+                    'rank'              => $old['rank'],
+                    'department_id'     => $old['department_id'],
+                    'position_id'       => $old['position_id'],
+                    'employment_status' => $old['employment_status'],
+                ],
+                'new' => [
+                    'first_name'        => $data['first_name'],
+                    'last_name'         => $data['last_name'],
+                    'rank'              => $params['rank'],
+                    'department_id'     => $data['department_id'],
+                    'position_id'       => $data['position_id'],
+                    'employment_status' => $data['employment_status'],
+                ],
+            ]);
+        }
+
+        return $result;
     }
 
     public function deactivate(int $id): bool
@@ -280,7 +319,11 @@ class Employee
                 WHERE id = :id
                 ";
         $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute(['id' => $id]);
+        $result = $stmt->execute(['id' => $id]);
+        if ($result) {
+            AuditLogger::log('employee.deactivate', 'employee', $id);
+        }
+        return $result;
     }
 
     public function activate(int $id): bool
@@ -291,7 +334,11 @@ class Employee
                 WHERE id = :id
                 ";
         $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute(['id' => $id]);
+        $result = $stmt->execute(['id' => $id]);
+        if ($result) {
+            AuditLogger::log('employee.activate', 'employee', $id);
+        }
+        return $result;
     }
 
     public function generateEmployeeId(): string
