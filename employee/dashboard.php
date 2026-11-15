@@ -202,6 +202,36 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
     <div class="hero-actions">
       <a class="primary-button" href="/employee/file_leave.php">＋ Request Time Off</a>
       <a class="button" href="/employee/attendance.php">View attendance</a>
+      <?php
+      $dashboardRank = Rbac::normalizeRank(
+        $employeeData['rank'] ?? 'employee'
+      );
+      ?>
+
+      <?php if (
+        in_array(
+          $dashboardRank,
+          ['team_leader', 'manager'],
+          true
+        )
+      ): ?>
+
+        <a
+          class="button"
+          href="/employee/team.php">
+          <?= $dashboardRank === 'manager'
+            ? 'Department Overview'
+            : 'My Team' ?>
+        </a>
+
+        <a
+          class="button"
+          href="/employee/promotion_requests.php">
+          Promotions
+        </a>
+
+      <?php endif; ?>
+
     </div>
   </div>
   <div class="hero-orb" aria-hidden="true"></div>
