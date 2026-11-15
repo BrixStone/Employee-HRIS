@@ -1,0 +1,82 @@
+
+/* =========================================
+   PROMOTION REQUESTS - TABLE FIX
+========================================= */
+
+/* Prevent the panel from expanding beyond the screen */
+body.page-promotion_requests .promotion-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Make the table independently scrollable */
+body.page-promotion_requests .promotion-table-wrapper {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto !important;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Give the table enough room for all columns */
+body.page-promotion_requests .promotion-table-wrapper table {
+    width: 100%;
+    min-width: 900px;
+    table-layout: auto;
+    border-collapse: collapse;
+}
+
+/* Keep action column visible when scrolling */
+body.page-promotion_requests .promotion-actions {
+    min-width: 180px;
+    white-space: normal;
+}
+
+/* Stack remarks and buttons */
+body.page-promotion_requests .promotion-actions form {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch;
+    gap: 10px;
+    width: 160px;
+    min-width: 160px;
+}
+
+/* Remarks input */
+body.page-promotion_requests .promotion-remarks {
+    display: block;
+    width: 100% !important;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+body.page-promotion_requests .promotion-actions button {
+    display: block;
+    width: 100% !important;
+    min-width: 0;
+    white-space: normal;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+/* Mobile screens */
+@media screen and (max-width: 768px) {
+    body.page-promotion_requests .promotion-panel {
+        padding: 12px;
+    }
+
+    body.page-promotion_requests .promotion-table-wrapper table {
+        min-width: 900px;
+    }
+
+    body.page-promotion_requests .promotion-actions form {
+        width: 150px;
+        min-width: 150px;
+    }
+}

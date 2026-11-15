@@ -35,6 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'address' => trim($_POST['address'] ?? ''),
         'department_id' => $_POST['department_id'] ?? '',
         'position_id' => $_POST['position_id'] ?? '',
+        'rank' => in_array(
+            $_POST['rank'] ?? 'employee',
+            ['employee', 'team_leader', 'manager'],
+            true
+        )
+            ? $_POST['rank']
+            : 'employee',
+
         'manager_id' => ($_POST['manager_id'] ?? '') !== '' ? (int)$_POST['manager_id'] : null,
         'date_hired' => $_POST['date_hired'] ?? '',
         'employment_type' => $_POST['employment_type'] ?? 'Full-time',
@@ -48,14 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $error = 'Please fill in all required fields.';
     } elseif ($data['manager_id'] !== null && !$employeeModel->isManagerCandidate($data['manager_id'], null)) {
-        $error = 'Please choose a valid manager (an employee with an active manager account).';
+        $error = 'Please choose a valid manager (an active employee with manager rank).';
     } else {
         try {
             $employeeModel->create($data);
 
             header('Location: employees.php');
             exit;
-
         } catch (PDOException $e) {
             $error = $e->getMessage();
         }
@@ -86,8 +93,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             type="text"
             id="first_name"
             name="first_name"
-            required
-        >
+            required>
     </div>
 
     <div>
@@ -95,8 +101,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <input
             type="text"
             id="middle_name"
-            name="middle_name"
-        >
+            name="middle_name">
     </div>
 
     <div>
@@ -105,8 +110,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             type="text"
             id="last_name"
             name="last_name"
-            required
-        >
+            required>
     </div>
 
     <div>
@@ -115,8 +119,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             type="text"
             id="suffix"
             name="suffix"
-            placeholder="Jr., Sr., III"
-        >
+            placeholder="Jr., Sr., III">
     </div>
 
     <div>
@@ -124,8 +127,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <input
             type="date"
             id="date_of_birth"
-            name="date_of_birth"
-        >
+            name="date_of_birth">
     </div>
 
     <div>
@@ -143,8 +145,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <input
             type="text"
             id="phone"
-            name="phone"
-        >
+            name="phone">
     </div>
 
     <div>
@@ -152,56 +153,65 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         <input
             type="email"
             id="email"
-            name="email"
-        >
+            name="email">
     </div>
 
     <div>
         <label for="address">Address</label>
         <textarea
             id="address"
-            name="address"
-        ></textarea>
+            name="address"></textarea>
     </div>
 
 
     <h2>Employment Information</h2>
 
-<div>
-    <label for="department_id">Department</label>
+    <div>
+        <label for="department_id">Department</label>
 
-    <select id="department_id" name="department_id">
+        <select id="department_id" name="department_id">
 
-        <option value="">
-            Select Department
-        </option>
-
-        <?php foreach ($departments as $department): ?>
-
-            <option value="<?= htmlspecialchars($department['id']) ?>">
-                <?= htmlspecialchars($department['name']) ?>
+            <option value="">
+                Select Department
             </option>
 
-        <?php endforeach; ?>
+            <?php foreach ($departments as $department): ?>
 
-    </select>
-</div>
+                <option value="<?= htmlspecialchars($department['id']) ?>">
+                    <?= htmlspecialchars($department['name']) ?>
+                </option>
+
+            <?php endforeach; ?>
+
+        </select>
+    </div>
 
 
     <div>
-    <label for="position_id">Position</label>
+        <label for="position_id">Position</label>
 
-    <select id="position_id" name="position_id">
-        <option value="">Select Position</option>
+        <select id="position_id" name="position_id">
+            <option value="">Select Position</option>
 
-        <?php foreach ($positions as $position): ?>
-            <option value="<?= htmlspecialchars($position['id']) ?>">
-                <?= htmlspecialchars($position['title']) ?>
-            </option>
-        <?php endforeach; ?>
+            <?php foreach ($positions as $position): ?>
+                <option value="<?= htmlspecialchars($position['id']) ?>">
+                    <?= htmlspecialchars($position['title']) ?>
+                </option>
+            <?php endforeach; ?>
 
-    </select>
-</div>
+        </select>
+    </div>
+
+    <div>
+        <label for="rank">Position Rank</label>
+
+        <select id="rank" name="rank">
+            <option value="employee">Employee</option>
+            <option value="team_leader">Team Leader</option>
+            <option value="manager">Department Manager</option>
+        </select>
+    </div>
+
 
 
     <div>
@@ -223,8 +233,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
             type="date"
             id="date_hired"
             name="date_hired"
-            required
-        >
+            required>
     </div>
 
     <div>
@@ -255,8 +264,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 
         <select
             id="employment_status"
-            name="employment_status"
-        >
+            name="employment_status">
             <option value="Active">
                 Active
             </option>
@@ -278,7 +286,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
     <br>
 
     <button type="submit">
-        Save Employee
+        Add Employee
     </button>
 
     <a href="employees.php">
