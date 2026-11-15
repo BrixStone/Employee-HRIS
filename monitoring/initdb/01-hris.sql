@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS employees (
     address           TEXT         DEFAULT NULL,
     department_id     BIGINT       DEFAULT NULL,
     position_id       BIGINT       DEFAULT NULL,
+    `rank`              VARCHAR(30)  NOT NULL DEFAULT 'employee',
     date_hired        DATE         NOT NULL,
     employment_type   VARCHAR(50)  NOT NULL DEFAULT 'Full-time',
     employment_status VARCHAR(30)  NOT NULL DEFAULT 'Active',
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS employees (
     UNIQUE KEY employees_employee_id_key (employee_id),
     KEY idx_employees_department  (department_id),
     KEY idx_employees_position    (position_id),
+    KEY idx_employees_rank        (`rank`),
     KEY idx_employees_status      (employment_status),
     KEY idx_employees_last_name   (last_name),
     CONSTRAINT fk_employee_department
@@ -142,6 +144,139 @@ CREATE TABLE IF NOT EXISTS users (
         FOREIGN KEY (employee_id) REFERENCES employees (id)
         ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- PROMOTION WORKFLOW
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS promotion_requests (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+
+    employee_id BIGINT NOT NULL,
+    recommended_by BIGINT NOT NULL,
+    recommended_rank VARCHAR(30) NOT NULL,
+
+    reason TEXT NOT NULL,
+    effective_date DATE DEFAULT NULL,
+
+    status VARCHAR(40) NOT NULL DEFAULT 'pending_manager_review',
+
+    manager_id BIGINT DEFAULT NULL,
+    manager_remarks TEXT DEFAULT NULL,
+    manager_reviewed_at DATETIME DEFAULT NULL,
+
+    hr_id BIGINT DEFAULT NULL,
+    hr_remarks TEXT DEFAULT NULL,
+    hr_reviewed_at DATETIME DEFAULT NULL,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    KEY idx_promotion_employee (employee_id),
+    KEY idx_promotion_recommended_by (recommended_by),
+    KEY idx_promotion_status (status),
+
+    CONSTRAINT fk_promotion_employee
+        FOREIGN KEY (employee_id)
+        REFERENCES employees(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_promotion_recommended_by
+        FOREIGN KEY (recommended_by)
+        REFERENCES users(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_promotion_manager
+        FOREIGN KEY (manager_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_promotion_hr
+        FOREIGN KEY (hr_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS promotion_logs (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+
+    employee_id BIGINT NOT NULL,
+    old_rank VARCHAR(30) NOT NULL,
+    new_rank VARCHAR(30) NOT NULL,
+
+    promoted_by BIGINT NOT NULL,
+    promotion_request_id BIGINT DEFAULT NULL,
+    effective_date DATE DEFAULT NULL,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    KEY idx_promotion_log_employee (employee_id),
+    KEY idx_promotion_log_request (promotion_request_id),
+
+    CONSTRAINT fk_promotion_log_employee
+        FOREIGN KEY (employee_id)
+        REFERENCES employees(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_promotion_log_user
+        FOREIGN KEY (promoted_by)
+        REFERENCES users(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_promotion_log_request
+        FOREIGN KEY (promotion_request_id)
+        REFERENCES promotion_requests(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+
+    actor_user_id BIGINT DEFAULT NULL,
+    action VARCHAR(80) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id BIGINT DEFAULT NULL,
+
+    details JSON DEFAULT NULL,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    KEY idx_audit_actor (actor_user_id),
+    KEY idx_audit_entity (entity_type, entity_id),
+    KEY idx_audit_action (action),
+
+    CONSTRAINT fk_audit_actor
+        FOREIGN KEY (actor_user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_unicode_ci;
+
 
 CREATE TABLE IF NOT EXISTS user_setup_tokens (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
