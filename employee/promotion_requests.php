@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../authentication/guard.php';
+require_once __DIR__ . '/../classes/AuditLogger.php';
 
 $account = require_access(
     null,
@@ -23,8 +24,8 @@ require_once __DIR__ . '/../config/helpers.php';
 $message = '';
 $error = '';
 
-$departmentId = $account['department_id'] ?? null;
-$selfEmployeeId = $account['employee_id'] ?? null;
+$departmentId   = $account['department_id'] ?? null;
+$selfEmployeeId = $account['employee_id']   ?? null;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,18 +39,12 @@ if (
 ) {
     csrf_check($account['role']);
 
-    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    $employeeId      = (int)($_POST['employee_id']      ?? 0);
     $recommendedRank = (string)($_POST['recommended_rank'] ?? '');
-    $reason = trim((string)($_POST['reason'] ?? ''));
-    $effectiveDate = trim((string)($_POST['effective_date'] ?? ''));
+    $reason          = trim((string)($_POST['reason']        ?? ''));
+    $effectiveDate   = trim((string)($_POST['effective_date'] ?? ''));
 
-    if (
-        !in_array(
-            $recommendedRank,
-            ['team_leader', 'manager'],
-            true
-        )
-    ) {
+    if (!in_array($recommendedRank, ['team_leader', 'manager'], true)) {
         $error = 'Please select a valid recommended rank.';
     } elseif ($reason === '') {
         $error = 'A reason is required.';
@@ -57,9 +52,7 @@ if (
         $error = 'Your employee department information is incomplete.';
     } else {
         $employeeCheck = $pdo->prepare(
-            "SELECT
-                id,
-                `rank`
+            "SELECT id, `rank`
              FROM employees
              WHERE id = :employee_id
                AND department_id = :department_id
@@ -67,32 +60,23 @@ if (
                AND employment_status = 'Active'
              LIMIT 1"
         );
-
         $employeeCheck->execute([
-            'employee_id' => $employeeId,
-            'department_id' => $departmentId,
+            'employee_id'      => $employeeId,
+            'department_id'    => $departmentId,
             'self_employee_id' => $selfEmployeeId,
         ]);
-
         $employee = $employeeCheck->fetch(PDO::FETCH_ASSOC);
 
         if (!$employee) {
             $error = 'You can only recommend an active employee in your department.';
         } else {
             $duplicateCheck = $pdo->prepare(
-                "SELECT id
-                 FROM promotion_requests
+                "SELECT id FROM promotion_requests
                  WHERE employee_id = :employee_id
-                   AND status IN (
-                       'pending_manager_review',
-                       'pending_hr_review'
-                   )
+                   AND status IN ('pending_manager_review','pending_hr_review')
                  LIMIT 1"
             );
-
-            $duplicateCheck->execute([
-                'employee_id' => $employeeId,
-            ]);
+            $duplicateCheck->execute(['employee_id' => $employeeId]);
 
             if ($duplicateCheck->fetch()) {
                 $error = 'This employee already has a promotion request in progress.';
@@ -102,106 +86,35 @@ if (
 
                     $insert = $pdo->prepare(
                         'INSERT INTO promotion_requests (
-                            employee_id,
-                            recommended_by,
-                            recommended_rank,
-                            reason,
-                            effective_date,
-                            status
+                            employee_id, recommended_by, recommended_rank,
+                            reason, effective_date, status
                         ) VALUES (
-                            :employee_id,
-                            :recommended_by,
-                            :recommended_rank,
-                            :reason,
-                            :effective_date,
-                            :status
+                            :employee_id, :recommended_by, :recommended_rank,
+                            :reason, :effective_date, :status
                         )'
                     );
-
                     $insert->execute([
-                        'employee_id' => $employeeId,
-                        'recommended_by' => $account['user_id'],
+                        'employee_id'      => $employeeId,
+                        'recommended_by'   => $account['user_id'],
                         'recommended_rank' => $recommendedRank,
-                        'reason' => $reason,
-                        'effective_date' => $effectiveDate !== ''
-                            ? $effectiveDate
-                            : null,
-                        'status' => 'pending_manager_review',
+                        'reason'           => $reason,
+                        'effective_date'   => $effectiveDate !== '' ? $effectiveDate : null,
+                        'status'           => 'pending_manager_review',
                     ]);
-
-                    try {
-                        $audit = $pdo->prepare(
-                            'INSERT INTO audit_logs (
-            actor_user_id,
-            action,
-            entity_type,
-            entity_id,
-            details
-        ) VALUES (
-            :actor_user_id,
-            :action,
-            :entity_type,
-            :entity_id,
-            :details
-        )'
-                        );
-
-                        $audit->execute([
-                            'actor_user_id' => $account['user_id'],
-                            'action' => 'promotion_recommended',
-                            'entity_type' => 'promotion_request',
-                            'entity_id' => (int)$pdo->lastInsertId(),
-                            'details' => json_encode([
-                                'employee_id' => $employeeId,
-                                'recommended_rank' => $recommendedRank,
-                            ]),
-                        ]);
-                    } catch (Throwable $exception) {
-                        error_log(
-                            'Promotion recommendation audit failed: ' .
-                                $exception->getMessage()
-                        );
-                    }
-
 
                     $requestId = (int)$pdo->lastInsertId();
 
-                    $audit = $pdo->prepare(
-                        'INSERT INTO audit_logs (
-                            actor_user_id,
-                            action,
-                            entity_type,
-                            entity_id,
-                            details
-                        ) VALUES (
-                            :actor_user_id,
-                            :action,
-                            :entity_type,
-                            :entity_id,
-                            :details
-                        )'
-                    );
-
-                    $audit->execute([
-                        'actor_user_id' => $account['user_id'],
-                        'action' => 'promotion_recommended',
-                        'entity_type' => 'promotion_request',
-                        'entity_id' => $requestId,
-                        'details' => json_encode([
-                            'employee_id' => $employeeId,
-                            'recommended_rank' => $recommendedRank,
-                            'reason' => $reason,
-                        ]),
-                    ]);
-
                     $pdo->commit();
+
+                    AuditLogger::log('promotion.recommend', 'promotion_request', $requestId, [
+                        'employee_id'      => $employeeId,
+                        'recommended_rank' => $recommendedRank,
+                        'reason'           => $reason,
+                    ]);
 
                     $message = 'Promotion recommendation sent to the manager.';
                 } catch (Throwable $exception) {
-                    if ($pdo->inTransaction()) {
-                        $pdo->rollBack();
-                    }
-
+                    if ($pdo->inTransaction()) $pdo->rollBack();
                     $error = $exception->getMessage();
                 }
             }
@@ -221,16 +134,13 @@ if (
 ) {
     csrf_check($account['role']);
 
-    $requestId = (int)($_POST['request_id'] ?? 0);
-    $decision = (string)($_POST['manager_decision'] ?? '');
-    $remarks = trim((string)($_POST['remarks'] ?? ''));
+    $requestId = (int)($_POST['request_id']       ?? 0);
+    $decision  = (string)($_POST['manager_decision'] ?? '');
+    $remarks   = trim((string)($_POST['remarks']      ?? ''));
 
     if (!in_array($decision, ['approve', 'reject'], true)) {
         $error = 'Invalid manager decision.';
-    } elseif (
-        $decision === 'reject' &&
-        $remarks === ''
-    ) {
+    } elseif ($decision === 'reject' && $remarks === '') {
         $error = 'A rejection reason is required.';
     } elseif ($departmentId === null) {
         $error = 'Your department information is incomplete.';
@@ -239,25 +149,18 @@ if (
             $pdo->beginTransaction();
 
             $check = $pdo->prepare(
-                "SELECT
-                    pr.id,
-                    pr.employee_id,
-                    e.department_id
+                "SELECT pr.id, pr.employee_id, e.department_id
                  FROM promotion_requests pr
-                 INNER JOIN employees e
-                     ON e.id = pr.employee_id
+                 INNER JOIN employees e ON e.id = pr.employee_id
                  WHERE pr.id = :request_id
                    AND e.department_id = :department_id
                    AND pr.status = 'pending_manager_review'
-                 LIMIT 1
-                 FOR UPDATE"
+                 LIMIT 1 FOR UPDATE"
             );
-
             $check->execute([
-                'request_id' => $requestId,
+                'request_id'    => $requestId,
                 'department_id' => $departmentId,
             ]);
-
             $request = $check->fetch(PDO::FETCH_ASSOC);
 
             if (!$request) {
@@ -278,91 +181,33 @@ if (
                      manager_reviewed_at = NOW()
                  WHERE id = :request_id'
             );
-
             $update->execute([
-                'status' => $newStatus,
+                'status'     => $newStatus,
                 'manager_id' => $account['user_id'],
-                'remarks' => $remarks !== ''
-                    ? $remarks
-                    : null,
+                'remarks'    => $remarks !== '' ? $remarks : null,
                 'request_id' => $requestId,
             ]);
 
-            try {
-                $audit = $pdo->prepare(
-                    'INSERT INTO audit_logs (
-            actor_user_id,
-            action,
-            entity_type,
-            entity_id,
-            details
-        ) VALUES (
-            :actor_user_id,
-            :action,
-            :entity_type,
-            :entity_id,
-            :details
-        )'
-                );
-
-                $audit->execute([
-                    'actor_user_id' => $account['user_id'],
-                    'action' => $decision === 'approve'
-                        ? 'promotion_forwarded_to_hr'
-                        : 'promotion_rejected_by_manager',
-                    'entity_type' => 'promotion_request',
-                    'entity_id' => $requestId,
-                    'details' => json_encode([
-                        'remarks' => $remarks,
-                    ]),
-                ]);
-            } catch (Throwable $exception) {
-                error_log(
-                    'Promotion manager audit failed: ' .
-                        $exception->getMessage()
-                );
-            }
-
-
-            $audit = $pdo->prepare(
-                'INSERT INTO audit_logs (
-                    actor_user_id,
-                    action,
-                    entity_type,
-                    entity_id,
-                    details
-                ) VALUES (
-                    :actor_user_id,
-                    :action,
-                    :entity_type,
-                    :entity_id,
-                    :details
-                )'
-            );
-
-            $audit->execute([
-                'actor_user_id' => $account['user_id'],
-                'action' => $decision === 'approve'
-                    ? 'promotion_forwarded_to_hr'
-                    : 'promotion_rejected_by_manager',
-                'entity_type' => 'promotion_request',
-                'entity_id' => $requestId,
-                'details' => json_encode([
-                    'remarks' => $remarks,
-                    'status' => $newStatus,
-                ]),
-            ]);
-
             $pdo->commit();
+
+            AuditLogger::log(
+                $decision === 'approve'
+                    ? 'promotion.manager_approve'
+                    : 'promotion.manager_reject',
+                'promotion_request',
+                $requestId,
+                [
+                    'new_status'  => $newStatus,
+                    'remarks'     => $remarks,
+                    'employee_id' => $request['employee_id'],
+                ]
+            );
 
             $message = $decision === 'approve'
                 ? 'Promotion recommendation forwarded to HR.'
                 : 'Promotion recommendation rejected.';
         } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $error = $exception->getMessage();
         }
     }
@@ -375,30 +220,19 @@ if (
 */
 $employees = [];
 
-if (
-    $rank === 'team_leader' &&
-    $departmentId !== null &&
-    $selfEmployeeId !== null
-) {
+if ($rank === 'team_leader' && $departmentId !== null && $selfEmployeeId !== null) {
     $employeeQuery = $pdo->prepare(
-        "SELECT
-            id,
-            employee_id,
-            first_name,
-            last_name,
-            `rank`
+        "SELECT id, employee_id, first_name, last_name, `rank`
          FROM employees
          WHERE department_id = :department_id
            AND id <> :self_employee_id
            AND employment_status = 'Active'
          ORDER BY last_name ASC, first_name ASC"
     );
-
     $employeeQuery->execute([
-        'department_id' => $departmentId,
+        'department_id'    => $departmentId,
         'self_employee_id' => $selfEmployeeId,
     ]);
-
     $employees = $employeeQuery->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -412,40 +246,22 @@ $requests = [];
 if ($departmentId !== null) {
     $requestQuery = $pdo->prepare(
         "SELECT
-            pr.id,
-            pr.employee_id,
-            pr.recommended_rank,
-            pr.reason,
-            pr.effective_date,
-            pr.status,
-            pr.manager_remarks,
-            pr.created_at,
-            e.employee_id AS employee_number,
-            e.first_name,
-            e.last_name
+            pr.id, pr.employee_id, pr.recommended_rank, pr.reason,
+            pr.effective_date, pr.status, pr.manager_remarks, pr.created_at,
+            e.employee_id AS employee_number, e.first_name, e.last_name
          FROM promotion_requests pr
-         INNER JOIN employees e
-             ON e.id = pr.employee_id
+         INNER JOIN employees e ON e.id = pr.employee_id
          WHERE e.department_id = :department_id
            AND pr.status = 'pending_manager_review'
          ORDER BY pr.created_at DESC"
     );
-
-    $requestQuery->execute([
-        'department_id' => $departmentId,
-    ]);
-
+    $requestQuery->execute(['department_id' => $departmentId]);
     $requests = $requestQuery->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$pageTitle = $rank === 'manager'
-    ? 'Promotion Reviews'
-    : 'Promotion Recommendations';
-
-$subtitle = $rank === 'manager'
-    ? 'Review recommendations submitted by Team Leaders.'
-    : 'Recommend an employee for promotion.';
-$pageCss = 'promotion_requests';
+$pageTitle = $rank === 'manager' ? 'Promotion Reviews'          : 'Promotion Recommendations';
+$subtitle  = $rank === 'manager' ? 'Review recommendations submitted by Team Leaders.' : 'Recommend an employee for promotion.';
+$pageCss   = 'promotion_requests';
 require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
