@@ -1,7 +1,7 @@
 <?php
 
 require_once __DIR__ . '/LeaveAuditLog.php';
-
+require_once __DIR__ . '/../classes/AuditLogger.php';
 class LeaveRequest
 {
     public const STATUSES = ['Pending', 'Approved', 'Rejected', 'Cancelled'];
@@ -20,9 +20,13 @@ class LeaveRequest
 
     private PDO $pdo;
 
-    public function __construct(PDO $pdo) { $this->pdo = $pdo; }
+    public function __construct(PDO $pdo)
+    {
+        $this->pdo = $pdo;
+    }
 
-    public function findById(int $id): ?array {
+    public function findById(int $id): ?array
+    {
         $st = $this->pdo->prepare(self::SELECT_WITH_NAMES . " WHERE lr.id = :id LIMIT 1");
         $st->execute(['id' => $id]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
@@ -30,7 +34,8 @@ class LeaveRequest
     }
 
     /** Newest first, optionally filtered by status and/or employee (employees.id). */
-    public function search(?string $status = null, ?int $employeeId = null): array {
+    public function search(?string $status = null, ?int $employeeId = null): array
+    {
         $where = [];
         $params = [];
         if ($status !== null) {
@@ -42,8 +47,8 @@ class LeaveRequest
             $params['emp'] = $employeeId;
         }
         $sql = self::SELECT_WITH_NAMES
-             . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-             . ' ORDER BY lr.created_at DESC, lr.id DESC';
+            . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
+            . ' ORDER BY lr.created_at DESC, lr.id DESC';
         $st = $this->pdo->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -55,7 +60,8 @@ class LeaveRequest
      *
      * @param int[] $employeeIds
      */
-    public function searchForEmployees(array $employeeIds, ?string $status = null): array {
+    public function searchForEmployees(array $employeeIds, ?string $status = null): array
+    {
         $employeeIds = array_values(array_unique(array_map('intval', $employeeIds)));
         if (!$employeeIds) {
             return [];
@@ -77,7 +83,8 @@ class LeaveRequest
      * The owner withdraws a Pending request. Returns false when the request
      * is not theirs or is no longer Pending.
      */
-    public function cancel(int $requestId, int $employeeId, array $actor = []): bool {
+    public function cancel(int $requestId, int $employeeId, array $actor = []): bool
+    {
         $st = $this->pdo->prepare("
             UPDATE leave_requests
             SET status = 'Cancelled'
@@ -96,26 +103,44 @@ class LeaveRequest
             'Cancelled',
             $actor + ['id' => $employeeId, 'role' => 'employee']
         );
+        AuditLogger::log('leave.cancel', 'leave_request', $requestId, [
+            'employee_id' => $employeeId,
+        ]);
+
         return true;
     }
 
-    public function create(array $data): bool {
+    public function create(array $data): bool
+    {
         $sql = "INSERT INTO leave_requests
                 (employee_id, leave_type_id, start_date, end_date, number_of_days, reason, status)
                 VALUES
                 (:emp, :type, :start, :end, :days, :reason, 'Pending')";
         $st = $this->pdo->prepare($sql);
-        return $st->execute([
+        $result = $st->execute([
             'emp'   => $data['employee_id'],
             'type'  => $data['leave_type_id'],
             'start' => $data['start_date'],
             'end'   => $data['end_date'],
             'days'  => $data['number_of_days'],
-            'reason'=> $data['reason'] ?? null,
+            'reason' => $data['reason'] ?? null,
         ]);
+
+        if ($result) {
+            AuditLogger::log('leave.create', 'leave_request', (int)$this->pdo->lastInsertId(), [
+                'employee_id'   => $data['employee_id'],
+                'leave_type_id' => $data['leave_type_id'],
+                'start_date'    => $data['start_date'],
+                'end_date'      => $data['end_date'],
+                'days'          => $data['number_of_days'],
+            ]);
+        }
+
+        return $result;
     }
 
-    public function getForHR(?string $status = null): array {
+    public function getForHR(?string $status = null): array
+    {
         $sql = "SELECT lr.*, e.employee_id AS employee_no,
                        e.first_name, e.middle_name, e.last_name,
                        lt.leave_name
@@ -133,65 +158,76 @@ class LeaveRequest
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getForEmployee(int $employeeId): array {
+    public function getForEmployee(int $employeeId): array
+    {
         $sql = "SELECT lr.*, lt.leave_name
                 FROM leave_requests lr
                 JOIN leave_types lt ON lt.id = lr.leave_type_id
                 WHERE lr.employee_id = :emp
                 ORDER BY lr.created_at DESC";
         $st = $this->pdo->prepare($sql);
-        $st->execute(['emp'=>$employeeId]);
+        $st->execute(['emp' => $employeeId]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    
+
     /**
      * @param array $actor Reviewer account for the audit trail:
      *                     ['id' => ?int, 'name' => ?string, 'email' => ?string, 'role' => ?string]
      */
-    public function approve(int $requestId, ?int $hrUserId = null, array $actor = []): bool {
+    public function approve(int $requestId, ?int $hrUserId = null, array $actor = []): bool
+    {
         try {
             $this->pdo->beginTransaction();
 
-            
+
             $q = "SELECT * FROM leave_requests WHERE id = :id FOR UPDATE";
             $st = $this->pdo->prepare($q);
-            $st->execute(['id'=>$requestId]);
+            $st->execute(['id' => $requestId]);
             $lr = $st->fetch(PDO::FETCH_ASSOC);
             if (!$lr) throw new RuntimeException('Request not found');
             if ($lr['status'] !== 'Pending') throw new RuntimeException('Request is not Pending');
 
-            
+
             $yrStart = (int)date('Y', strtotime($lr['start_date']));
             $yrEnd   = (int)date('Y', strtotime($lr['end_date']));
             if ($yrStart !== $yrEnd) throw new RuntimeException('Leave spanning multiple years not supported in this version.');
 
-            
+
             $sqlLT = "SELECT default_days FROM leave_types WHERE id = :t";
             $stLT = $this->pdo->prepare($sqlLT);
-            $stLT->execute(['t'=>$lr['leave_type_id']]);
+            $stLT->execute(['t' => $lr['leave_type_id']]);
             $lt = $stLT->fetch(PDO::FETCH_ASSOC);
             $defaultAlloc = $lt ? (float)$lt['default_days'] : 0.0;
 
             $lb = new LeaveBalance($this->pdo);
             $lb->ensureRow((int)$lr['employee_id'], (int)$lr['leave_type_id'], $yrStart, $defaultAlloc);
 
-            
+
             if (!$lb->hasSufficient((int)$lr['employee_id'], (int)$lr['leave_type_id'], $yrStart, (float)$lr['number_of_days'])) {
                 throw new RuntimeException('Insufficient leave balance.');
             }
 
-            
+
             $qa = "UPDATE leave_requests
                    SET status='Approved', approved_by=:by, approved_at=NOW()
                    WHERE id=:id";
             $sta = $this->pdo->prepare($qa);
-            $sta->execute(['by'=>$hrUserId, 'id'=>$requestId]);
+            $sta->execute(['by' => $hrUserId, 'id' => $requestId]);
 
-            
+
             $lb->consume((int)$lr['employee_id'], (int)$lr['leave_type_id'], $yrStart, (float)$lr['number_of_days']);
 
             $this->pdo->commit();
+
+            AuditLogger::log('leave.approve', 'leave_request', $requestId, [
+                'employee_id'  => $lr['employee_id'],
+                'days'         => $lr['number_of_days'],
+                'leave_type'   => $lr['leave_type_id'],
+                'start_date'   => $lr['start_date'],
+                'end_date'     => $lr['end_date'],
+                'approved_by'  => $hrUserId,
+            ]);
 
             $this->audit()->log(
                 $requestId,
@@ -202,19 +238,19 @@ class LeaveRequest
                 $actor + ['id' => $hrUserId, 'role' => 'hr']
             );
             return true;
-
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
             throw $e;
         }
     }
 
-    public function reject(int $requestId, ?int $hrUserId = null, array $actor = []): bool {
+    public function reject(int $requestId, ?int $hrUserId = null, array $actor = []): bool
+    {
         $sql = "UPDATE leave_requests
                 SET status='Rejected', approved_by=:by, approved_at=NOW()
                 WHERE id=:id AND status='Pending'";
         $st = $this->pdo->prepare($sql);
-        $st->execute(['by'=>$hrUserId, 'id'=>$requestId]);
+        $st->execute(['by' => $hrUserId, 'id' => $requestId]);
 
         if ($st->rowCount() === 0) {
             return false; // not found or no longer Pending
@@ -233,6 +269,20 @@ class LeaveRequest
             'Rejected',
             $actor + ['id' => $hrUserId, 'role' => 'hr']
         );
+        $this->audit()->log(
+            $requestId,
+            (int)$employeeId,
+            LeaveAuditLog::ACTION_REJECTED,
+            'Pending',
+            'Rejected',
+            $actor + ['id' => $hrUserId, 'role' => 'hr']
+        );
+
+        AuditLogger::log('leave.reject', 'leave_request', $requestId, [
+            'employee_id' => $employeeId,
+            'rejected_by' => $hrUserId,
+        ]);
+
         return true;
     }
 
@@ -244,7 +294,8 @@ class LeaveRequest
      *
      * @param array $actor Who/what sent the reminder (usually the scheduler).
      */
-    public function remind(int $requestId, array $actor = [], ?string $remarks = null): bool {
+    public function remind(int $requestId, array $actor = [], ?string $remarks = null): bool
+    {
         $st = $this->pdo->prepare("SELECT employee_id, status FROM leave_requests WHERE id = :id LIMIT 1");
         $st->execute(['id' => $requestId]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
@@ -266,7 +317,8 @@ class LeaveRequest
     }
 
     /** How many reminders have already been logged for this request. */
-    public function countReminders(int $requestId): int {
+    public function countReminders(int $requestId): int
+    {
         try {
             $st = $this->pdo->prepare("
                 SELECT COUNT(*) FROM leave_request_logs
@@ -280,7 +332,8 @@ class LeaveRequest
         }
     }
 
-    private function audit(): LeaveAuditLog {
+    private function audit(): LeaveAuditLog
+    {
         return new LeaveAuditLog($this->pdo);
     }
 }
