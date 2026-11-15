@@ -18,14 +18,16 @@ $navCan = static function (string $module, string $ability) use ($navPdo, $navRo
 };
 // [link, label, icon, pages that highlight it, visible to this role?]
 $navItems = [
-    ['/admin/users.php', 'User Management', "\u{25C9}", ['users'], $navCan('user_management', 'view')],
-    ['/admin/create_user.php', 'Create User', "\u{FF0B}", ['create_user'], $navCan('user_management', 'edit')],
-    ['/admin/permissions.php', 'System Settings', "\u{2699}", ['permissions'], $navCan('system_settings', 'view')],
+    ['/admin/users.php',       'User Management', "\u{25C9}", ['users'],       $navCan('user_management',  'view')],
+    ['/admin/create_user.php', 'Create User',     "\u{FF0B}", ['create_user'], $navCan('user_management',  'edit')],
+    ['/admin/audit_logs.php',  'Audit Trail',     "\u{1F4CB}", ['audit_logs'], $navCan('audit_logs',       'view')],
+    ['/admin/permissions.php', 'System Settings', "\u{2699}", ['permissions'], $navCan('system_settings',  'view')],
 ];
 
 $pageTitles = [
     'users'       => 'User Management',
     'create_user' => 'Create User',
+    'audit_logs'  => 'Audit Trail',
     'permissions' => 'System Settings',
 ];
 $pageTitle = $pageTitles[$currentPage] ?? 'Administration';
