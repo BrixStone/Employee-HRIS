@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Rbac: role-based access control for the whole app (pages, API, realtime).
  * ==========================================================================
@@ -36,7 +37,18 @@
  */
 final class Rbac
 {
-    public const ROLES = ['admin', 'hr', 'manager', 'employee'];
+    public const ROLES = [
+        'admin',
+        'hr',
+        'payroll',
+        'employee'
+    ];
+
+    public const RANKS = [
+        'employee',
+        'team_leader',
+        'manager'
+    ];
 
     /** module key => label shown to admins */
     public const MODULES = [
@@ -64,24 +76,40 @@ final class Rbac
     /** The permission table from the HRIS roles design. */
     public const DEFAULTS = [
         'admin' => [
-            'dashboard' => 'full', 'employee_records' => 'full', 'attendance' => 'full',
-            'leave_requests' => 'full', 'payslips' => 'full',
-            'user_management' => 'full', 'system_settings' => 'full',
+            'dashboard' => 'full',
+            'employee_records' => 'full',
+            'attendance' => 'full',
+            'leave_requests' => 'full',
+            'payslips' => 'full',
+            'user_management' => 'full',
+            'system_settings' => 'full',
         ],
         'hr' => [
-            'dashboard' => 'view', 'employee_records' => 'manage', 'attendance' => 'manage',
-            'leave_requests' => 'manage', 'payslips' => 'manage',
-            'user_management' => 'none', 'system_settings' => 'none',
+            'dashboard' => 'view',
+            'employee_records' => 'manage',
+            'attendance' => 'manage',
+            'leave_requests' => 'manage',
+            'payslips' => 'manage',
+            'user_management' => 'none',
+            'system_settings' => 'none',
         ],
         'manager' => [
-            'dashboard' => 'view', 'employee_records' => 'team', 'attendance' => 'team',
-            'leave_requests' => 'approve_team', 'payslips' => 'none',
-            'user_management' => 'none', 'system_settings' => 'none',
+            'dashboard' => 'view',
+            'employee_records' => 'team',
+            'attendance' => 'team',
+            'leave_requests' => 'approve_team',
+            'payslips' => 'none',
+            'user_management' => 'none',
+            'system_settings' => 'none',
         ],
         'employee' => [
-            'dashboard' => 'view', 'employee_records' => 'own', 'attendance' => 'own',
-            'leave_requests' => 'submit_own', 'payslips' => 'own',
-            'user_management' => 'none', 'system_settings' => 'none',
+            'dashboard' => 'view',
+            'employee_records' => 'own',
+            'attendance' => 'own',
+            'leave_requests' => 'submit_own',
+            'payslips' => 'own',
+            'user_management' => 'none',
+            'system_settings' => 'none',
         ],
     ];
 
@@ -95,6 +123,57 @@ final class Rbac
     {
         return strtolower(trim((string)$role));
     }
+    public static function normalizeRank(mixed $rank): string
+    {
+        $rank = strtolower(trim((string) $rank));
+
+        return in_array($rank, self::RANKS, true)
+            ? $rank
+            : 'employee';
+    }
+    public static function rankCan(
+        string $rank,
+        string $module,
+        string $ability
+    ): bool {
+        $permissions = [
+            'employee' => [
+                'attendance' => ['view'],
+                'leave_requests' => ['view', 'submit'],
+                'employee_records' => ['view'],
+                'payslips' => ['view'],
+                'dashboard' => ['view'],
+            ],
+
+            'team_leader' => [
+                'attendance' => ['view', 'approve'],
+                'leave_requests' => ['view', 'submit', 'approve'],
+                'employee_records' => ['view'],
+                'promotion_requests' => ['view', 'submit'],
+                'dashboard' => ['view'],
+                'payslips' => ['view'],
+            ],
+
+            'manager' => [
+                'attendance' => ['view', 'approve'],
+                'leave_requests' => ['view', 'submit', 'approve'],
+                'employee_records' => ['view'],
+                'promotion_requests' => ['view', 'approve'],
+                'department_reports' => ['view'],
+                'dashboard' => ['view'],
+                'payslips' => ['view'],
+            ],
+        ];
+
+        $rank = self::normalizeRank($rank);
+
+        return in_array(
+            $ability,
+            $permissions[$rank][$module] ?? [],
+            true
+        );
+    }
+
 
     /**
      * The whole matrix: role => module => access.
