@@ -29,6 +29,7 @@ class User
             e.middle_name,
             e.last_name,
             e.department_id,
+            e.rank,
 
             d.name AS department_name
 
