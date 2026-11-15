@@ -129,6 +129,41 @@ if (
                         'status' => 'pending_manager_review',
                     ]);
 
+                    try {
+                        $audit = $pdo->prepare(
+                            'INSERT INTO audit_logs (
+            actor_user_id,
+            action,
+            entity_type,
+            entity_id,
+            details
+        ) VALUES (
+            :actor_user_id,
+            :action,
+            :entity_type,
+            :entity_id,
+            :details
+        )'
+                        );
+
+                        $audit->execute([
+                            'actor_user_id' => $account['user_id'],
+                            'action' => 'promotion_recommended',
+                            'entity_type' => 'promotion_request',
+                            'entity_id' => (int)$pdo->lastInsertId(),
+                            'details' => json_encode([
+                                'employee_id' => $employeeId,
+                                'recommended_rank' => $recommendedRank,
+                            ]),
+                        ]);
+                    } catch (Throwable $exception) {
+                        error_log(
+                            'Promotion recommendation audit failed: ' .
+                                $exception->getMessage()
+                        );
+                    }
+
+
                     $requestId = (int)$pdo->lastInsertId();
 
                     $audit = $pdo->prepare(
@@ -253,6 +288,42 @@ if (
                 'request_id' => $requestId,
             ]);
 
+            try {
+                $audit = $pdo->prepare(
+                    'INSERT INTO audit_logs (
+            actor_user_id,
+            action,
+            entity_type,
+            entity_id,
+            details
+        ) VALUES (
+            :actor_user_id,
+            :action,
+            :entity_type,
+            :entity_id,
+            :details
+        )'
+                );
+
+                $audit->execute([
+                    'actor_user_id' => $account['user_id'],
+                    'action' => $decision === 'approve'
+                        ? 'promotion_forwarded_to_hr'
+                        : 'promotion_rejected_by_manager',
+                    'entity_type' => 'promotion_request',
+                    'entity_id' => $requestId,
+                    'details' => json_encode([
+                        'remarks' => $remarks,
+                    ]),
+                ]);
+            } catch (Throwable $exception) {
+                error_log(
+                    'Promotion manager audit failed: ' .
+                        $exception->getMessage()
+                );
+            }
+
+
             $audit = $pdo->prepare(
                 'INSERT INTO audit_logs (
                     actor_user_id,
@@ -356,10 +427,7 @@ if ($departmentId !== null) {
          INNER JOIN employees e
              ON e.id = pr.employee_id
          WHERE e.department_id = :department_id
-           AND pr.status IN (
-               'pending_manager_review',
-               'pending_hr_review'
-           )
+           AND pr.status = 'pending_manager_review'
          ORDER BY pr.created_at DESC"
     );
 
@@ -377,7 +445,7 @@ $pageTitle = $rank === 'manager'
 $subtitle = $rank === 'manager'
     ? 'Review recommendations submitted by Team Leaders.'
     : 'Recommend an employee for promotion.';
-
+$pageCss = 'promotion_requests';
 require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
@@ -443,8 +511,8 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
                         <option value="<?= (int)$employee['id'] ?>">
                             <?= h(
                                 $employee['employee_id'] . ' - ' .
-                                $employee['first_name'] . ' ' .
-                                $employee['last_name']
+                                    $employee['first_name'] . ' ' .
+                                    $employee['last_name']
                             ) ?>
                         </option>
                     <?php endforeach; ?>
@@ -502,121 +570,124 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
     </div>
 <?php endif; ?>
 
-<div class="panel table-card">
-    <div class="panel-head">
-        <h2>
-            <?= $rank === 'manager'
-                ? 'Requests for Review'
-                : 'Requests in Progress' ?>
-        </h2>
+<div class="panel table-card promotion-panel">
+    <div class="table-responsive promotion-table-wrapper">
+        <div class="panel-head">
+            <h2>
+                <?= $rank === 'manager'
+                    ? 'Requests for Review'
+                    : 'Requests in Progress' ?>
+            </h2>
 
-        <span class="muted">
-            <?= number_format(count($requests)) ?>
-        </span>
-    </div>
+            <span class="muted">
+                <?= number_format(count($requests)) ?>
+            </span>
+        </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Employee</th>
-                <th>Recommended Rank</th>
-                <th>Reason</th>
-                <th>Status</th>
-
-                <?php if ($rank === 'manager'): ?>
-                    <th>Action</th>
-                <?php endif; ?>
-            </tr>
-        </thead>
-
-        <tbody>
-            <?php if (empty($requests)): ?>
+        <table>
+            <thead>
                 <tr>
-                    <td colspan="<?= $rank === 'manager' ? 5 : 4 ?>">
-                        <div class="empty-state">
-                            No promotion requests found.
-                        </div>
-                    </td>
+                    <th>Employee</th>
+                    <th>Recommended Rank</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+
+                    <?php if ($rank === 'manager'): ?>
+                        <th>Action</th>
+                    <?php endif; ?>
                 </tr>
-            <?php else: ?>
-                <?php foreach ($requests as $request): ?>
+            </thead>
+
+            <tbody>
+                <?php if (empty($requests)): ?>
                     <tr>
-                        <td>
-                            <?= h(
-                                $request['employee_number'] . ' - ' .
-                                $request['first_name'] . ' ' .
-                                $request['last_name']
-                            ) ?>
+                        <td colspan="<?= $rank === 'manager' ? 5 : 4 ?>">
+                            <div class="empty-state">
+                                No promotion requests found.
+                            </div>
                         </td>
-
-                        <td>
-                            <?= h(
-                                ucwords(
-                                    str_replace(
-                                        '_',
-                                        ' ',
-                                        $request['recommended_rank']
-                                    )
-                                )
-                            ) ?>
-                        </td>
-
-                        <td>
-                            <?= h($request['reason']) ?>
-                        </td>
-
-                        <td>
-                            <?= h(
-                                ucwords(
-                                    str_replace(
-                                        '_',
-                                        ' ',
-                                        $request['status']
-                                    )
-                                )
-                            ) ?>
-                        </td>
-
-                        <?php if ($rank === 'manager'): ?>
-                            <td>
-                                <form method="post">
-                                    <?= csrf_field() ?>
-
-                                    <input
-                                        type="hidden"
-                                        name="request_id"
-                                        value="<?= (int)$request['id'] ?>">
-
-                                    <input
-                                        type="text"
-                                        name="remarks"
-                                        placeholder="Remarks">
-
-                                    <button
-                                        class="primary-button"
-                                        type="submit"
-                                        name="manager_decision"
-                                        value="approve">
-
-                                        Forward to HR
-                                    </button>
-
-                                    <button
-                                        class="button"
-                                        type="submit"
-                                        name="manager_decision"
-                                        value="reject">
-
-                                        Reject
-                                    </button>
-                                </form>
-                            </td>
-                        <?php endif; ?>
                     </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
+                <?php else: ?>
+                    <?php foreach ($requests as $request): ?>
+                        <tr>
+                            <td>
+                                <?= h(
+                                    $request['employee_number'] . ' - ' .
+                                        $request['first_name'] . ' ' .
+                                        $request['last_name']
+                                ) ?>
+                            </td>
+
+                            <td>
+                                <?= h(
+                                    ucwords(
+                                        str_replace(
+                                            '_',
+                                            ' ',
+                                            $request['recommended_rank']
+                                        )
+                                    )
+                                ) ?>
+                            </td>
+
+                            <td>
+                                <?= h($request['reason']) ?>
+                            </td>
+
+                            <td>
+                                <?= h(
+                                    ucwords(
+                                        str_replace(
+                                            '_',
+                                            ' ',
+                                            $request['status']
+                                        )
+                                    )
+                                ) ?>
+                            </td>
+
+                            <?php if ($rank === 'manager'): ?>
+                                <td class="promotion-actions">
+                                    <form method="post">
+                                        <?= csrf_field() ?>
+
+                                        <input
+                                            type="hidden"
+                                            name="request_id"
+                                            value="<?= (int)$request['id'] ?>">
+
+                                        <input
+                                            type="text"
+                                            name="remarks"
+                                            placeholder="Remarks"
+                                            class="promotion-remarks">
+
+                                        <button
+                                            class="primary-button"
+                                            type="submit"
+                                            name="manager_decision"
+                                            value="approve">
+
+                                            Forward to HR
+                                        </button>
+
+                                        <button
+                                            class="button"
+                                            type="submit"
+                                            name="manager_decision"
+                                            value="reject">
+
+                                            Reject
+                                        </button>
+                                    </form>
+                                </td>
+                            <?php endif; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>
