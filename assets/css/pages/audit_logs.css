@@ -1,0 +1,219 @@
+/* ── Audit Trail Page — Moonlit theme ─────────────────────────────────────── */
+@import url("../hris-base.css");
+
+/* ── Toolbar ───────────────────────────────────────────────────────────────── */
+.audit-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+
+.filter-select,
+.filter-input {
+  height: 2.1rem;
+  padding: 0 .75rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  font-size: .85rem;
+  background: var(--panel-2);
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+  border-color: var(--blue);
+}
+
+.filter-select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.filter-input::placeholder { color: var(--muted); }
+.filter-input { width: 10rem; }
+
+/* ── Meta row ──────────────────────────────────────────────────────────────── */
+.audit-meta {
+  font-size: .82rem;
+  color: var(--muted);
+  margin-bottom: .75rem;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────────────── */
+.table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+
+.audit-table thead tr {
+  background: var(--panel-2);
+}
+
+.audit-table th {
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: .72rem;
+  letter-spacing: .05em;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.audit-table td {
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.audit-table tbody tr:hover td {
+  background: var(--panel-2);
+}
+
+.audit-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Column widths ─────────────────────────────────────────────────────────── */
+.col-id  { width: 3.5rem; color: var(--muted); font-size: .78rem; }
+.col-ts  { width: 10.5rem; white-space: nowrap; }
+.col-eid { width: 5rem; text-align: center; color: var(--muted); }
+
+.ts {
+  font-variant-numeric: tabular-nums;
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+/* ── Actor cell ────────────────────────────────────────────────────────────── */
+.actor-name   { font-weight: 600; color: var(--moon); }
+.actor-id     { margin-left: .3rem; font-size: .75rem; color: var(--muted); }
+.actor-system { font-style: italic; color: var(--muted); }
+
+/* ── Badges (dark theme) ───────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border-radius: 999px;
+  font-size: .73rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+.badge-success {
+  background: rgba(52, 211, 153, .15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, .3);
+}
+
+.badge-danger {
+  background: rgba(251, 113, 133, .15);
+  color: #fb7185;
+  border: 1px solid rgba(251, 113, 133, .3);
+}
+
+.badge-warning {
+  background: rgba(251, 191, 36, .15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, .3);
+}
+
+.badge-info {
+  background: rgba(59, 130, 246, .15);
+  color: var(--moon);
+  border: 1px solid rgba(59, 130, 246, .3);
+}
+
+.badge-neutral {
+  background: rgba(255, 255, 255, .06);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* ── Details expand ────────────────────────────────────────────────────────── */
+details summary {
+  cursor: pointer;
+  color: var(--teal);
+  font-size: .8rem;
+  user-select: none;
+  list-style: none;
+}
+
+details summary:hover { color: var(--moon); }
+
+.details-json {
+  margin-top: .4rem;
+  padding: .6rem .85rem;
+  background: var(--page-2);
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  font-size: .75rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-width: 28rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+/* ── Pagination ────────────────────────────────────────────────────────────── */
+.pagination {
+  display: flex;
+  gap: .4rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  padding: .35rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  font-size: .84rem;
+  color: var(--muted);
+  text-decoration: none;
+  background: var(--panel);
+  transition: background .15s, color .15s;
+}
+
+.page-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.page-btn.active {
+  background: var(--blue);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 700;
+}
+
+/* ── Empty state ───────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem;
+  color: var(--muted);
+  background: var(--panel);
+}
