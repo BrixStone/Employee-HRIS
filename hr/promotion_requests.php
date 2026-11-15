@@ -137,6 +137,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'request_id' => $requestId,
             ]);
 
+            try {
+                $audit = $pdo->prepare(
+                    'INSERT INTO audit_logs (
+            actor_user_id,
+            action,
+            entity_type,
+            entity_id,
+            details
+        ) VALUES (
+            :actor_user_id,
+            :action,
+            :entity_type,
+            :entity_id,
+            :details
+        )'
+                );
+
+                $audit->execute([
+                    'actor_user_id' => $account['user_id'],
+                    'action' => $decision === 'approve'
+                        ? 'promotion_approved_by_hr'
+                        : 'promotion_rejected_by_hr',
+                    'entity_type' => 'promotion_request',
+                    'entity_id' => $requestId,
+                    'details' => json_encode([
+                        'remarks' => $remarks,
+                        'new_rank' => $request['recommended_rank'],
+                    ]),
+                ]);
+            } catch (Throwable $exception) {
+                error_log(
+                    'Promotion HR audit failed: ' .
+                        $exception->getMessage()
+                );
+            }
+
+
             $audit = $pdo->prepare(
                 'INSERT INTO audit_logs (
                     actor_user_id,
