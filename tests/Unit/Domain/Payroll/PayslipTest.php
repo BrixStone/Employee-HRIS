@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Unit\Domain\Payroll;
@@ -57,22 +58,44 @@ final class PayslipTest extends TestCase
         $this->assertSame('19000.00', $payslip->grossPay()->format());
     }
 
-    public function test_late_deduction_reduces_gross_pay(): void
+    public function test_late_deduction_is_recorded_separately_from_gross_pay(): void
     {
-        // Oct 1–15: 11 working days
-        // daily rate = (35000/2) / 11 = 1590.909...
-        // 60 min late → 1.0 day deducted
-        // gross = 17500 − 1590.91 = 15909.09
         $payslip = $this->makePayslip(
             salary: 35000.00,
-            lateRecords: [['late_minutes' => 60]]
+            lateRecords: [
+                ['late_minutes' => 60],
+            ]
         );
-        $daily      = Money::fromPesos(35000.00)->half()->multiplyBy(1 / 11);
-        $expected   = Money::fromPesos(35000.00)
-                           ->half()
-                           ->subtract($daily->multiplyBy(1.0));
-        $this->assertSame($expected->format(), $payslip->grossPay()->format());
+
+        $this->assertSame(
+            '17500.00',
+            $payslip->grossPay()->format()
+        );
+
+        $this->assertSame(
+            '1590.91',
+            $payslip->lateDeduction()->format()
+        );
     }
+
+    public function test_net_pay_includes_late_deduction(): void
+    {
+        $payslip = $this->makePayslip(
+            salary: 35000.00,
+            lateRecords: [
+                ['late_minutes' => 60],
+            ]
+        );
+
+        $expected = $payslip->grossPay()
+            ->subtract($payslip->totalDeductions());
+
+        $this->assertSame(
+            $expected->format(),
+            $payslip->netPay()->format()
+        );
+    }
+
 
     // ── Deductions ────────────────────────────────────────────────────
 
@@ -103,9 +126,9 @@ final class PayslipTest extends TestCase
     {
         $payslip     = $this->makePayslip(salary: 35000.00, lateRecords: []);
         $expected    = $payslip->grossPay()
-                               ->subtract($payslip->sssDeduction())
-                               ->subtract($payslip->philHealthDeduction())
-                               ->subtract($payslip->pagIbigDeduction());
+            ->subtract($payslip->sssDeduction())
+            ->subtract($payslip->philHealthDeduction())
+            ->subtract($payslip->pagIbigDeduction());
         $this->assertSame($expected->format(), $payslip->netPay()->format());
     }
 
@@ -151,15 +174,22 @@ final class PayslipTest extends TestCase
         float $allowance = 0.00
     ): Payslip {
         return Payslip::compute(
-            employeeId:  1,
+            employeeId: 1,
+            payType: 'Monthly',
             basicSalary: Money::fromPesos($salary),
-            allowance:   Money::fromPesos($allowance),
-            cutOff:      $this->cutOff,
+            allowance: Money::fromPesos($allowance),
+            workingDays: 11,
+            daysWorked: 11,
+            workedHours: 88,
+            absentDays: 0,
             lateRecords: $lateRecords,
-            policy:      $this->policy,
-            sssRate:     0.045,
-            philRate:    0.025,
-            pagIbig:     Money::fromPesos(100.00),
+            overtimeHours: 0,
+            overtimeMultiplier: 1.25,
+            latePolicy: $this->policy,
+            sssRate: 0.045,
+            philHealthRate: 0.025,
+            pagIbigFixed: Money::fromPesos(100.00),
+            withholdingTaxRate: 0.00,
         );
     }
 }
