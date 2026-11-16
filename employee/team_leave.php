@@ -20,6 +20,9 @@ if (!in_array($rank, ['team_leader', 'manager'], true)) {
 
 require_once __DIR__ . '/../config/helpers.php';
 require_once __DIR__ . '/../classes/LeaveRequest.php';
+require_once __DIR__ . '/../classes/LeaveBalance.php'; // approve() deducts from the balance
+
+$pdo = guard_pdo();
 
 $teamEmployeeIds = Rbac::teamEmployeeIds(
     $pdo,
@@ -65,18 +68,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $message = 'Leave request approved.';
             } elseif ($decision === 'reject') {
-                $leaveModel->reject(
-                    $requestId,
-                    $account['user_id'],
-                    $actor
-                );
-
-                $message = 'Leave request rejected.';
+                if ($leaveModel->reject($requestId, $account['user_id'], $actor)) {
+                    $message = 'Leave request rejected.';
+                } else {
+                    $error = 'That leave request was just handled by someone else.';
+                }
             } else {
                 $error = 'Invalid leave decision.';
             }
-        } catch (Throwable $exception) {
+        } catch (RuntimeException $exception) {
+            // Business rules, e.g. "Insufficient leave balance."
             $error = $exception->getMessage();
+        } catch (Throwable $exception) {
+            error_log('team leave action failed: ' . $exception->getMessage());
+            $error = 'Could not complete that action. Please try again.';
         }
     }
 }
