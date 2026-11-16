@@ -274,10 +274,11 @@ implements PayslipRepositoryInterface
     private function toDomainStatus(
         string $status
     ): PayslipStatus {
-        return match ($status) {
-            'Finalized' => PayslipStatus::Finalized,
-            'Paid' => PayslipStatus::Paid,
-            default => PayslipStatus::Generated,
+        return match (strtolower($status)) {
+            'generated' => PayslipStatus::Generated,
+            'finalized' => PayslipStatus::Finalized,
+            'paid'      => PayslipStatus::Paid,
+            default     => PayslipStatus::Generated,
         };
     }
     public function finalizeAllForPeriod(int $periodId): int
