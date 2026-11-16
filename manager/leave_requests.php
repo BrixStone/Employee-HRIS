@@ -2,7 +2,7 @@
 // manager/leave_requests.php: approve or reject the team's leave requests.
 require_once __DIR__ . '/../authentication/guard.php';
 $account = require_access('leave_requests', 'view', 'team', ['manager']);
-
+$pdo = guard_pdo();
 require_once __DIR__ . '/../config/helpers.php'; // h()
 require_once __DIR__ . '/../classes/LeaveRequest.php';
 require_once __DIR__ . '/../classes/LeaveBalance.php'; // approve() deducts from the balance
