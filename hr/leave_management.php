@@ -102,6 +102,52 @@ $typesActive = $lt->getActive();
 $empFilter = isset($_GET['emp']) && ctype_digit($_GET['emp']) ? (int)$_GET['emp'] : null;
 $yearFilter = isset($_GET['year']) && ctype_digit($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 $balances = [];
+
+// Search by employee number (EMP-001) or by name instead of a dropdown / raw id.
+$empSearch  = trim((string)($_GET['q'] ?? ''));
+$empMatches = [];
+$empSelected = null;
+
+if ($tab === 'balances') {
+  try {
+    if ($empSearch !== '') {
+      $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $empSearch) . '%';
+      $st = $pdo->prepare("
+        SELECT id, employee_id, first_name, middle_name, last_name
+        FROM employees
+        WHERE employee_id LIKE :q1
+           OR first_name LIKE :q2
+           OR last_name LIKE :q3
+           OR CONCAT(first_name, ' ', last_name) LIKE :q4
+           OR CONCAT(last_name, ', ', first_name) LIKE :q5
+        ORDER BY (employee_id = :exact) DESC, last_name, first_name
+        LIMIT 25
+      ");
+      $st->execute([
+        'q1' => $like, 'q2' => $like, 'q3' => $like, 'q4' => $like, 'q5' => $like,
+        'exact' => $empSearch,
+      ]);
+      $empMatches = $st->fetchAll(PDO::FETCH_ASSOC);
+
+      // An exact EMP-### match, or a single result, opens straight away.
+      if (count($empMatches) === 1 || ($empMatches && strcasecmp((string)$empMatches[0]['employee_id'], $empSearch) === 0)) {
+        $empFilter = (int)$empMatches[0]['id'];
+      }
+    }
+
+    if ($empFilter) {
+      $st = $pdo->prepare("SELECT id, employee_id, first_name, middle_name, last_name FROM employees WHERE id = :id LIMIT 1");
+      $st->execute(['id' => $empFilter]);
+      $empSelected = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+      if ($empSelected === null) {
+        $empFilter = null;
+      }
+    }
+  } catch (Throwable $e) {
+    error_log('Leave balance employee search failed: ' . $e->getMessage());
+  }
+}
+
 if ($empFilter) {
   $balances = $lb->getForEmployee($empFilter, $yearFilter);
 }
@@ -253,18 +299,34 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 
   <h2>Leave Balances</h2>
 
-  <!-- Quick view filter -->
+  <!-- Search by employee number (EMP-001) or name -->
   <form method="get" style="margin:8px 0;">
     <input type="hidden" name="tab" value="balances">
-    <label>Employee (internal id):</label>
-    <input type="number" name="emp" value="<?= $empFilter ? (int)$empFilter : '' ?>" placeholder="employees.id">
+    <label for="emp_search">Search employee:</label>
+    <input type="search" id="emp_search" name="q" value="<?= h($empSearch) ?>"
+      placeholder="EMP-001 or employee name" autocomplete="off" style="min-width:260px">
     <label>Year:</label>
     <input type="number" name="year" min="2000" max="2100" value="<?= (int)$yearFilter ?>">
-    <button type="submit">View</button>
+    <button type="submit">Search</button>
   </form>
 
-  <?php if ($empFilter): ?>
-    <h3>Balances for Employee #<?= (int)$empFilter ?> (<?= (int)$yearFilter ?>)</h3>
+  <?php if ($empSearch !== '' && !$empMatches): ?>
+    <p class="muted">No employee found for “<?= h($empSearch) ?>”.</p>
+  <?php elseif (count($empMatches) > 1 && !$empSelected): ?>
+    <p>Select an employee:</p>
+    <ul>
+      <?php foreach ($empMatches as $m): ?>
+        <li>
+          <a href="/hr/leave_management.php?tab=balances&emp=<?= (int)$m['id'] ?>&year=<?= (int)$yearFilter ?>">
+            <?= h($m['employee_id']) ?> — <?= h(fullName($m)) ?>
+          </a>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  <?php endif; ?>
+
+  <?php if ($empFilter && $empSelected): ?>
+    <h3>Balances for <?= h($empSelected['employee_id']) ?> — <?= h(fullName($empSelected)) ?> (<?= (int)$yearFilter ?>)</h3>
     <table border="1" cellpadding="6" cellspacing="0" style="margin-bottom:12px;">
       <thead>
         <tr>
@@ -294,11 +356,15 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 
   <!-- Allocate / adjust -->
   <h3>Allocate / Adjust Balance</h3>
+  <?php if (!$empSelected): ?>
+    <p class="muted">Search and select an employee above to allocate leave.</p>
+  <?php else: ?>
   <form method="POST">
     <input type="hidden" name="form" value="balance_alloc">
+    <input type="hidden" name="employee_id" value="<?= (int)$empSelected['id'] ?>">
     <div>
-      <label>Employee (internal id) *</label>
-      <input type="number" name="employee_id" required value="<?= $empFilter ? (int)$empFilter : '' ?>">
+      <label>Employee</label>
+      <strong><?= h($empSelected['employee_id']) ?> — <?= h(fullName($empSelected)) ?></strong>
     </div>
     <div>
       <label>Leave Type *</label>
@@ -319,6 +385,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
     </div>
     <button type="submit">Save Allocation</button>
   </form>
+  <?php endif; ?>
 
 <?php else: // $tab === 'requests' 
 ?>
@@ -360,7 +427,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
           // toArray() gives front→back order (oldest first)
           foreach ($pendingQueue->toArray() as $qItem):
           ?>
-            <tr <?= $position === 1 ?  : '' ?>>
+            <tr>
               <td>
                 <?php if ($position === 1): ?>
                   <span class="pill pill-active">Next</span>

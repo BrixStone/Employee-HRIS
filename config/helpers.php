@@ -42,3 +42,35 @@ if (!function_exists('respond')) {
         exit;
     }
 }
+
+if (!function_exists('rank_label')) {
+    /** Display name of an employee rank (employee | team_leader | manager). */
+    function rank_label($rank): string
+    {
+        switch (strtolower(trim((string)($rank ?? '')))) {
+            case 'manager':
+                return 'Manager';
+            case 'team_leader':
+                return 'Team Leader';
+            default:
+                return 'Employee';
+        }
+    }
+}
+
+if (!function_exists('rank_badge')) {
+    /** Small coloured badge that shows an employee's rank. Safe to echo. */
+    function rank_badge($rank): string
+    {
+        $key = strtolower(trim((string)($rank ?? '')));
+        $colors = [
+            'manager'     => 'background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.4)',
+            'team_leader' => 'background:rgba(71,99,255,.15);color:#8da0ff;border:1px solid rgba(71,99,255,.4)',
+        ];
+        $style = $colors[$key] ?? 'background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid rgba(148,163,184,.35)';
+
+        return '<span class="rank-badge" style="display:inline-block;padding:2px 10px;border-radius:999px;'
+            . 'font-size:12px;font-weight:600;white-space:nowrap;' . $style . '">'
+            . h(rank_label($rank)) . '</span>';
+    }
+}

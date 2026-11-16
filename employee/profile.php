@@ -2,6 +2,7 @@
 session_start();
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/helpers.php';
 
 // Logged in, account still active, employee portal, allowed by the permission matrix
 require_once __DIR__ . '/../authentication/guard.php';
@@ -116,6 +117,7 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
     <h1><?= $user['name'] ?></h1>
     <p class="muted"><?= $user['email'] ?></p>
     <span class="pill <?= $isActive ? 'pill-active' : 'pill-inactive' ?>"><?= $user['status'] ?></span>
+    <?= rank_badge($employee['rank'] ?? 'employee') ?>
   </div>
 
   <!-- Profile strength meter: the bar fills up and the number counts up -->
@@ -189,6 +191,10 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
     <div class="info-cell wide">
       <span class="info-label">Employment Status</span>
       <strong class="info-value <?= $isActive ? 'green' : '' ?>"><?= $user['status'] ?></strong>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Rank</span>
+      <strong class="info-value"><?= rank_badge($employee['rank'] ?? 'employee') ?></strong>
     </div>
   </div>
 

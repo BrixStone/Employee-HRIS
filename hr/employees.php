@@ -5,6 +5,7 @@ require_access('employee_records', 'view', 'all');
 
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
+require_once __DIR__ . '/../config/helpers.php';
 require __DIR__ . '/../classes/DSA/Searching.php';
 require __DIR__ . '/../classes/DSA/Sorting.php';
 require __DIR__ . '/../classes/DSA/BinarySearchTree.php';
@@ -215,6 +216,7 @@ $inactiveShown = $totalShown - $activeShown;
         <th>Name</th>
         <th>Department</th>
         <th>Position</th>
+        <th>Rank</th>
         <th>Date Hired</th>
         <th>Status</th>
         <th>Action</th>
@@ -223,7 +225,7 @@ $inactiveShown = $totalShown - $activeShown;
     <tbody>
       <?php if (empty($employees)): ?>
         <tr>
-          <td colspan="7">
+          <td colspan="8">
             <div class="empty-state">
               <span class="es-ico">♟</span>
               No employees found<?= $q !== '' ? ' for “' . htmlspecialchars($q) . '”' : '' ?>.
@@ -269,6 +271,8 @@ $inactiveShown = $totalShown - $activeShown;
 
             <!-- Hash Table: Position lookup -->
             <td><?= htmlspecialchars($posTitle, ENT_QUOTES, 'UTF-8') ?></td>
+
+            <td><?= rank_badge($employee['rank'] ?? 'employee') ?></td>
 
             <td><?= htmlspecialchars($employee['date_hired']) ?></td>
             <td><span class="pill <?= $pillClass ?>"><?= htmlspecialchars($employee['employment_status'] ?: 'Unknown') ?></span></td>
