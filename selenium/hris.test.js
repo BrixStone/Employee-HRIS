@@ -28,7 +28,7 @@ describe('HRIS Employee Portal Tests', function () {
 
         assert.equal(
             await driver.getTitle(),
-            'Sign in'
+            'HRIS | Sign In'
         );
     });
 
