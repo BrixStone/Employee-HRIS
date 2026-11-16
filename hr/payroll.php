@@ -81,117 +81,246 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ── Generate Payslips (DDD — GeneratePayslipHandler) ─────────────────────
   elseif ($form === 'generate_payslips') {
     $periodId = (int)($_POST['period_id'] ?? 0);
+
     if ($periodId <= 0) {
-      $errors[] = 'Invalid period.';
+      $errors[] = 'Invalid payroll period.';
     } else {
-      // Load period dates
-      $periodRow = $pdo->prepare("
-          SELECT start_date, end_date FROM payroll_periods WHERE id = ?
-      ");
-      $periodRow->execute([$periodId]);
-      $period = $periodRow->fetch(PDO::FETCH_ASSOC);
+      $periodStatement = $pdo->prepare(
+        'SELECT *
+         FROM payroll_periods
+         WHERE id = :id
+         LIMIT 1'
+      );
+
+      $periodStatement->execute([
+        ':id' => $periodId,
+      ]);
+
+      $period = $periodStatement->fetch(PDO::FETCH_ASSOC);
 
       if (!$period) {
-        $errors[] = 'Period not found.';
+        $errors[] = 'Payroll period not found.';
+      } elseif ($period['status'] !== 'Draft') {
+        $errors[] = 'Only Draft payroll periods can be generated.';
       } else {
-        // Load deduction rates from DB
-        // Load deduction rates from DB
-        $rates    = [];
-        $rateRows = $pdo->query("SELECT name, type, rate FROM deduction_rates WHERE is_active = 1")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rateRows as $r) $rates[strtolower($r['name'])] = $r;
+        $rateRows = $pdo->query(
+          'SELECT name, type, rate, applies_to
+           FROM deduction_rates
+           WHERE is_active = 1'
+        )->fetchAll(PDO::FETCH_ASSOC);
 
-        // SSS — Percentage of basic salary
-        $sssRate  = isset($rates['sss'])
+        $rates = [];
+
+        foreach ($rateRows as $rate) {
+          $rates[strtolower($rate['name'])] = $rate;
+        }
+
+        $sssRate = isset($rates['sss'])
           ? (float)$rates['sss']['rate'] / 100
           : 0.045;
 
-        // PhilHealth — Percentage of basic salary
-        $philRate = isset($rates['philhealth'])
+        $philHealthRate = isset($rates['philhealth'])
           ? (float)$rates['philhealth']['rate'] / 100
           : 0.025;
 
-        // Pag-IBIG — Fixed amount
-        $pagFixed = isset($rates['pag-ibig'])
+        $pagIbigFixed = isset($rates['pag-ibig'])
           ? (float)$rates['pag-ibig']['rate']
-          : 100.0;
+          : 100.00;
 
-        $salaries  = $payroll->getAllSalaries();
+        $withholdingTaxRate = isset($rates['withholding tax'])
+          ? (float)$rates['withholding tax']['rate'] / 100
+          : 0.00;
+
+        $salaryRows = $payroll->getAllSalaries();
+
         $generated = 0;
-        $skipped   = 0;
+        $skipped = 0;
 
-        foreach ($salaries as $s) {
-          $empId = (int) $s['employee_id'];
-          if (!$empId || (float)$s['basic_salary'] <= 0) {
-            $skipped++;
-            continue;
-          }
-
-          // Check if employee has ANY attendance in this period
-          // If zero records — they did not work this cut-off, skip payslip generation
-          $attCountStmt = $pdo->prepare("
-        SELECT COUNT(*) FROM attendance
-        WHERE employee_id = :eid
-          AND DATE(time_in) BETWEEN :start AND :end
-    ");
-          $attCountStmt->execute([
-            ':eid'   => $empId,
-            ':start' => $period['start_date'],
-            ':end'   => $period['end_date'],
-          ]);
-          $attCount = (int) $attCountStmt->fetchColumn();
-
-          if ($attCount === 0) {
-            $skipped++;
-            continue; // No attendance this cut-off — do not generate payslip
-          }
-
-          // Fetch late minutes per attendance day in this period
-          $lateStmt = $pdo->prepare("
-        SELECT
-            GREATEST(0, TIMESTAMPDIFF(MINUTE,
-                CONCAT(DATE(time_in), ' 08:00:00'), time_in
-            )) AS late_minutes
-        FROM attendance
-        WHERE employee_id = :eid
-          AND DATE(time_in) BETWEEN :start AND :end
-          AND TIMESTAMPDIFF(MINUTE, CONCAT(DATE(time_in), ' 08:00:00'), time_in) > 0
-    ");
-          $lateStmt->execute([
-            ':eid'   => $empId,
-            ':start' => $period['start_date'],
-            ':end'   => $period['end_date'],
-          ]);
-          $lateRecords = $lateStmt->fetchAll(PDO::FETCH_ASSOC);
-
-          $command = new GeneratePayslipCommand(
-            employeeId: $empId,
-            basicSalary: (float) $s['basic_salary'],
-            allowance: (float) ($s['allowance'] ?? 0),
-            periodStart: $period['start_date'],
-            periodEnd: $period['end_date'],
-            lateRecords: $lateRecords,
-            sssRate: $sssRate,
-            philRate: $philRate,
-            pagIbigFixed: $pagFixed,
-            payrollPeriodId: $periodId,
-          );
+        foreach ($salaryRows as $salary) {
+          $employeeId = (int)$salary['employee_id'];
 
           try {
+            $attendanceStatement = $pdo->prepare(
+              "SELECT
+                  COUNT(DISTINCT DATE(time_in)) AS days_worked,
+                  COALESCE(SUM(workhours), 0) AS worked_hours
+               FROM attendance
+               WHERE employee_id = :employee_id
+                 AND time_in IS NOT NULL
+                 AND DATE(time_in) BETWEEN :start_date AND :end_date"
+            );
+
+            $attendanceStatement->execute([
+              ':employee_id' => $employeeId,
+              ':start_date' => $period['start_date'],
+              ':end_date' => $period['end_date'],
+            ]);
+
+            $attendance = $attendanceStatement->fetch(
+              PDO::FETCH_ASSOC
+            ) ?: [];
+
+            $workingDays = $payroll->countWorkingDays(
+              $period['start_date'],
+              $period['end_date']
+            );
+
+            $daysWorked = (float)(
+              $attendance['days_worked'] ?? 0
+            );
+
+            $workedHours = (float)(
+              $attendance['worked_hours'] ?? 0
+            );
+
+            if ($daysWorked <= 0) {
+              $skipped++;
+
+              continue;
+            }
+
+            $absentDays = max(
+              0,
+              $workingDays - $daysWorked
+            );
+
+
+
+            $lateStatement = $pdo->prepare(
+              "SELECT
+                  GREATEST(
+                    0,
+                    TIMESTAMPDIFF(
+                      MINUTE,
+                      CONCAT(DATE(time_in), ' 08:00:00'),
+                      time_in
+                    )
+                  ) AS late_minutes
+               FROM attendance
+               WHERE employee_id = :employee_id
+                 AND time_in IS NOT NULL
+                 AND DATE(time_in) BETWEEN :start_date AND :end_date"
+            );
+
+            $lateStatement->execute([
+              ':employee_id' => $employeeId,
+              ':start_date' => $period['start_date'],
+              ':end_date' => $period['end_date'],
+            ]);
+
+            $lateRecords = $lateStatement->fetchAll(
+              PDO::FETCH_ASSOC
+            );
+
+            $overtimeHours = 0.0;
+
+            foreach ($lateRecords as $lateRecord) {
+              // Late records contain only lateness.
+              // Overtime is calculated separately below.
+            }
+
+            $overtimeStatement = $pdo->prepare(
+              "SELECT
+                  COALESCE(
+                    SUM(GREATEST(workhours - 8, 0)),
+                    0
+                  ) AS overtime_hours
+               FROM attendance
+               WHERE employee_id = :employee_id
+                 AND time_in IS NOT NULL
+                 AND DATE(time_in) BETWEEN :start_date AND :end_date"
+            );
+
+            $overtimeStatement->execute([
+              ':employee_id' => $employeeId,
+              ':start_date' => $period['start_date'],
+              ':end_date' => $period['end_date'],
+            ]);
+
+            $overtimeHours = (float)(
+              $overtimeStatement->fetchColumn() ?? 0
+            );
+
+            $command = new GeneratePayslipCommand(
+              employeeId: $employeeId,
+              payType: (string)$salary['pay_type'],
+              basicSalary: (float)$salary['basic_salary'],
+              allowance: (float)$salary['allowance'],
+              workingDays: $workingDays,
+              daysWorked: $daysWorked,
+              workedHours: $workedHours,
+              absentDays: $absentDays,
+              lateRecords: $lateRecords,
+              overtimeHours: $overtimeHours,
+              overtimeMultiplier: 1.25,
+              sssRate: $sssRate,
+              philHealthRate: $philHealthRate,
+              pagIbigFixed: $pagIbigFixed,
+              withholdingTaxRate: $withholdingTaxRate,
+              payrollPeriodId: $periodId,
+            );
+
             $psHandler->handle($command);
             $generated++;
-          } catch (Throwable $e) {
+          } catch (\Throwable $exception) {
             $skipped++;
+
+            error_log(
+              'DDD payroll generation failed for employee '
+                . $employeeId . ': '
+                . $exception->getMessage()
+            );
           }
         }
 
-        $msg = "Generated {$generated} payslip(s) via DDD handler.";
-        if ($skipped > 0) $msg .= " Skipped {$skipped}.";
-        header('Location: /hr/payroll.php?tab=payslips&period_id=' . $periodId
-          . '&success=' . urlencode($msg));
+        $message = "Generated {$generated} Draft payslip(s).";
+
+        if ($skipped > 0) {
+          $message .= " Skipped {$skipped} employee(s).";
+        }
+
+        header(
+          'Location: /hr/payroll.php?tab=payslips&period_id='
+            . $periodId
+            . '&success='
+            . urlencode($message)
+        );
+
         exit;
       }
     }
+
     $tab = 'payslips';
+  }
+
+  // ── Finalize All Draft Payslips ─────────────────────────────────────────
+  elseif ($form === 'finalize_all_payslips') {
+    $periodId = (int)($_POST['period_id'] ?? 0);
+
+    if ($periodId <= 0) {
+      $errors[] = 'Invalid payroll period.';
+      $tab = 'payslips';
+    } else {
+      try {
+        $finalizedCount = $psRepo->finalizeAllForPeriod(
+          $periodId
+        );
+
+        header(
+          'Location: /hr/payroll.php?tab=payslips&period_id='
+            . $periodId
+            . '&success='
+            . urlencode(
+              "Finalized {$finalizedCount} payslip(s)."
+            )
+        );
+
+        exit;
+      } catch (\Throwable $exception) {
+        $errors[] = $exception->getMessage();
+        $tab = 'payslips';
+      }
+    }
   }
 
   // ── Update Payslip Status ─────────────────────────────────────────────────
@@ -199,7 +328,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payslipId = (int)($_POST['payslip_id'] ?? 0);
     $status    = $_POST['status']            ?? '';
     $periodId  = (int)($_POST['period_id']   ?? 0);
-    $ok = $payroll->updatePayslipStatus($payslipId, $status);
+    $allowedTransitions = [
+      'Draft' => ['Finalized'],
+      'Finalized' => ['Paid'],
+    ];
+
+    $currentStatement = $pdo->prepare(
+      'SELECT status
+   FROM payslips
+   WHERE id = :id
+   LIMIT 1'
+    );
+
+    $currentStatement->execute([
+      ':id' => $payslipId,
+    ]);
+
+    $currentStatus = $currentStatement->fetchColumn();
+
+    $ok = $currentStatus !== false
+      && in_array(
+        $status,
+        $allowedTransitions[$currentStatus] ?? [],
+        true
+      );
+
+    if ($ok) {
+      $updateStatement = $pdo->prepare(
+        'UPDATE payslips
+     SET status = :new_status
+     WHERE id = :id
+       AND status = :current_status'
+      );
+
+      $ok = $updateStatement->execute([
+        ':new_status' => $status,
+        ':current_status' => $currentStatus,
+        ':id' => $payslipId,
+      ]);
+    }
+
     if ($ok) {
       header('Location: /hr/payroll.php?tab=payslips&period_id=' . $periodId
         . '&success=' . urlencode('Payslip status updated.'));
@@ -212,15 +380,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ── Update Period Status ──────────────────────────────────────────────────
   elseif ($form === 'update_period_status') {
     $periodId = (int)($_POST['period_id'] ?? 0);
-    $status   = $_POST['status']           ?? '';
-    $ok = $payroll->updatePeriodStatus($periodId, $status);
-    if ($ok) {
-      header('Location: /hr/payroll.php?tab=periods&success='
-        . urlencode('Period status updated.'));
+    $status = trim($_POST['status'] ?? '');
+
+    try {
+      $ok = $payroll->updatePeriodStatus(
+        $periodId,
+        $status
+      );
+
+      if (!$ok) {
+        throw new \RuntimeException(
+          'Payroll period status could not be updated.'
+        );
+      }
+
+      $successMessage = $status === 'Processed'
+        ? 'Payroll period marked as Processed.'
+        : 'Payroll period and payslips marked as Paid.';
+
+      header(
+        'Location: /hr/payroll.php?tab=periods&success='
+          . urlencode($successMessage)
+      );
+
       exit;
+    } catch (\Throwable $exception) {
+      $errors[] = $exception->getMessage();
+      $tab = 'periods';
     }
-    $errors[] = 'Could not update period status.';
-    $tab = 'periods';
   }
 }
 
@@ -590,6 +777,54 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
         </form>
       </div>
     <?php endif; ?>
+
+    <?php
+    $draftCount = 0;
+
+    foreach ($payslips as $payslip) {
+      if ($payslip['status'] === 'Draft') {
+        $draftCount++;
+      }
+    }
+    ?>
+
+    <?php if ($draftCount > 0): ?>
+      <div class="card">
+        <h3>Finalize Payroll</h3>
+
+        <p class="muted">
+          This will finalize all
+          <strong><?= $draftCount ?></strong>
+          Draft payslip(s) for this payroll period.
+          Finalized payslips cannot be regenerated.
+        </p>
+
+        <form method="post">
+          <?= csrf_field() ?>
+
+          <input
+            type="hidden"
+            name="form"
+            value="finalize_all_payslips">
+
+          <input
+            type="hidden"
+            name="period_id"
+            value="<?= (int)$selPeriod['id'] ?>">
+
+          <button
+            class="btn btn-orange"
+            type="submit"
+            onclick="return confirm(
+          'Finalize all Draft payslips for this period?'
+        );">
+
+            Finalize All Draft Payslips
+          </button>
+        </form>
+      </div>
+    <?php endif; ?>
+
 
     <!-- Payslips table -->
     <div class="card">

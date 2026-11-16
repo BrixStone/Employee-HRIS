@@ -143,23 +143,249 @@ class Payroll
         return $row ?: null;
     }
 
-    public function updatePeriodStatus(int $id, string $status): bool
-    {
-        $allowed = ['Draft', 'Processed', 'Paid', 'Cancelled'];
-        if (!in_array($status, $allowed, true)) return false;
-        $stmt = $this->pdo->prepare("
-            UPDATE payroll_periods SET status = :s WHERE id = :id
-        ");
-        $result = $stmt->execute([':s' => $status, ':id' => $id]);
+    public function updatePeriodStatus(
+    int $periodId,
+    string $newStatus
+): bool {
+    $allowedStatuses = [
+        'Processed',
+        'Paid',
+        'Cancelled',
+    ];
 
-        if ($result) {
-            AuditLogger::log('payroll_period.status_change', 'payroll_period', $id, [
-                'new_status' => $status,
+    if (!in_array($newStatus, $allowedStatuses, true)) {
+        return false;
+    }
+
+    try {
+        $this->pdo->beginTransaction();
+
+        $periodStatement = $this->pdo->prepare(
+            'SELECT status
+             FROM payroll_periods
+             WHERE id = :period_id
+             LIMIT 1
+             FOR UPDATE'
+        );
+
+        $periodStatement->execute([
+            ':period_id' => $periodId,
+        ]);
+
+        $currentStatus = $periodStatement->fetchColumn();
+
+        if ($currentStatus === false) {
+            throw new RuntimeException(
+                'Payroll period was not found.'
+            );
+        }
+
+        /*
+         * Only these transitions are allowed:
+         *
+         * Draft     → Processed
+         * Processed → Paid
+         */
+        if ($currentStatus === 'Draft') {
+            if ($newStatus !== 'Processed') {
+                throw new RuntimeException(
+                    'A Draft period can only be marked Processed.'
+                );
+            }
+        } elseif ($currentStatus === 'Processed') {
+            if ($newStatus !== 'Paid') {
+                throw new RuntimeException(
+                    'A Processed period can only be marked Paid.'
+                );
+            }
+        } elseif ($currentStatus === 'Paid') {
+            throw new RuntimeException(
+                'A Paid payroll period cannot be changed.'
+            );
+        } elseif ($currentStatus === 'Cancelled') {
+            throw new RuntimeException(
+                'A Cancelled payroll period cannot be changed.'
+            );
+        } else {
+            throw new RuntimeException(
+                'Invalid payroll period status.'
+            );
+        }
+
+        /*
+         * Cancellation is allowed only before processing.
+         */
+        if ($newStatus === 'Cancelled') {
+            if ($currentStatus !== 'Draft') {
+                throw new RuntimeException(
+                    'Only Draft periods can be cancelled.'
+                );
+            }
+
+            $cancelStatement = $this->pdo->prepare(
+                "UPDATE payroll_periods
+                 SET status = 'Cancelled'
+                 WHERE id = :period_id
+                   AND status = 'Draft'"
+            );
+
+            $cancelStatement->execute([
+                ':period_id' => $periodId,
+            ]);
+
+            $this->pdo->commit();
+
+            return true;
+        }
+
+        /*
+         * A period cannot be processed or paid without payslips.
+         */
+        $summaryStatement = $this->pdo->prepare(
+            "SELECT
+                COUNT(*) AS total_payslips,
+                SUM(
+                    CASE
+                        WHEN status = 'Draft'
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS draft_payslips,
+                SUM(
+                    CASE
+                        WHEN status = 'Finalized'
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS finalized_payslips,
+                SUM(
+                    CASE
+                        WHEN status = 'Paid'
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS paid_payslips
+             FROM payslips
+             WHERE payroll_period_id = :period_id"
+        );
+
+        $summaryStatement->execute([
+            ':period_id' => $periodId,
+        ]);
+
+        $summary = $summaryStatement->fetch(
+            PDO::FETCH_ASSOC
+        );
+
+        $totalPayslips = (int)(
+            $summary['total_payslips'] ?? 0
+        );
+
+        $draftPayslips = (int)(
+            $summary['draft_payslips'] ?? 0
+        );
+
+        $finalizedPayslips = (int)(
+            $summary['finalized_payslips'] ?? 0
+        );
+
+        $paidPayslips = (int)(
+            $summary['paid_payslips'] ?? 0
+        );
+
+        if ($totalPayslips === 0) {
+            throw new \RuntimeException(
+                'You must generate payslips before marking '
+                . 'this payroll period as Processed.'
+            );
+        }
+
+        /*
+         * Draft → Processed:
+         * Every payslip must be finalized first.
+         */
+        if ($currentStatus === 'Draft') {
+            if ($draftPayslips > 0) {
+                throw new \RuntimeException(
+                    'You must finalize all payslips before '
+                    . 'marking this period as Processed.'
+                );
+            }
+
+            if ($finalizedPayslips !== $totalPayslips) {
+                throw new \RuntimeException(
+                    'Every payslip must be finalized before '
+                    . 'marking this period as Processed.'
+                );
+            }
+        }
+
+        /*
+         * Processed → Paid:
+         * Every payslip must still be Finalized.
+         * They will all be marked Paid automatically below.
+         */
+        if ($currentStatus === 'Processed') {
+            if ($draftPayslips > 0) {
+                throw new \RuntimeException(
+                    'You must finalize all payslips before '
+                    . 'marking this period as Paid.'
+                );
+            }
+
+            if ($finalizedPayslips !== $totalPayslips) {
+                throw new \RuntimeException(
+                    'Every payslip must be finalized before '
+                    . 'marking this period as Paid.'
+                );
+            }
+        }
+
+        /*
+         * Mark the payroll period.
+         */
+        $periodUpdate = $this->pdo->prepare(
+            'UPDATE payroll_periods
+             SET status = :new_status
+             WHERE id = :period_id
+               AND status = :current_status'
+        );
+
+        $periodUpdate->execute([
+            ':new_status' => $newStatus,
+            ':period_id' => $periodId,
+            ':current_status' => $currentStatus,
+        ]);
+
+        /*
+         * When the period becomes Paid, automatically mark
+         * every Finalized payslip as Paid.
+         */
+        if ($newStatus === 'Paid') {
+            $payslipUpdate = $this->pdo->prepare(
+                "UPDATE payslips
+                 SET status = 'Paid'
+                 WHERE payroll_period_id = :period_id
+                   AND status = 'Finalized'"
+            );
+
+            $payslipUpdate->execute([
+                ':period_id' => $periodId,
             ]);
         }
 
-        return $result;
+        $this->pdo->commit();
+
+        return true;
+    } catch (\Throwable $exception) {
+        if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+        }
+
+        throw $exception;
     }
+}
+
 
     // ─── Attendance Summary ──────────────────────────────────────────────────
 
