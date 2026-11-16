@@ -167,10 +167,10 @@ try {
 // Pill helper (same as payslips.php)
 function dashPayslipPill(string $status): array
 {
-  return match ($status) {
+  return match (strtolower($status)) {
     'paid'      => ['pill-active',  'Paid'],
     'finalized' => ['pill-warning', 'Finalized'],
-    'generated' => ['pill-info',    'Generated'],
+    'draft'     => ['pill-info',    'Draft'],
     default     => ['pill-neutral', 'Pending'],
   };
 }
