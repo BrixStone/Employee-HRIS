@@ -1,7 +1,8 @@
 <?php
 
 
-// to run unit testing =  .\vendor\bin\phpunit.bat tests\LeaveBalanceTest.php 
+//in window to run unit testing =  .\vendor\bin\phpunit.bat tests\LeaveBalanceTest.php 
+//in linux to run unit testing =  ./vendor/bin/phpunit tests/LeaveBalanceTest.php
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../classes/LeaveBalance.php';

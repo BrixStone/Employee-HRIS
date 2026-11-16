@@ -107,23 +107,24 @@ legend
 # = already added in jira
 ## = done checking and make ppt
 
-1.GitHub #
-2.jira #
-3.Prometheus #
-4.Grafana #
-5.CI/CD #
-6.Unit test #
-7.Terraform #
-8.Makefile #
-9.SWAGGER #
-10.figma 
-11. UI test #
-12. Rbac #
-13. Cron job #
-14. Web socket #
-15.docker #
-16. Audit trail
-18. DDD/TDD # ##
+
+1.GitHub #          ipa kita ra natu ang github natu
+2.jira #            ipa kita ra natu ang jira   natu
+3.Prometheus #      ipa kita ra natu ang Prometheus natu
+4.Grafana #         ipa kita ra natu ang grafana natu
+5.CI/CD #           ipa kita ra natu ang CI/CD natu sa github 
+6.Unit test #       Open = tests/LeaveBalanceTest.php to run is .\vendor\bin\phpunit.bat tests\LeaveBalanceTest.php
+7.Terraform #       Iipa kita ang terraform
+8.Makefile #        make file natu kay DDD/TDD /Makefile, other Makefile kay selenium/Makefile
+9.SWAGGER #         ipa kita ato swagger ato swagger
+10.figma            ipa kita ato FIGMA
+11. UI test #       open selenium nya run 
+12. Rbac #          sample natu na admin naku change sa ilahang rank from employee to team leader or manager
+13. Cron job #      
+14. Web socket #    websocket sa leave request natu siya gi add
+15.docker #         docker naa na atu docker
+16. Audit trail     mao na ato admin 
+18. DDD/TDD # ##    
 19. Final - live deployment
 
 
