@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../authentication/guard.php';
 $account = require_access('employee_records', 'view', 'team', ['manager']);
 
+$pdo = guard_pdo();
+
 require_once __DIR__ . '/../config/helpers.php'; // h()
 
 $q = trim((string)($_GET['q'] ?? ''));
