@@ -278,11 +278,12 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
 // Feed the shared Pocket Profile modal (rendered by the footer) with this
 // page's full details so "About Me" shows ID, phone and status too.
 $pocketProfile = [
-    'id'           => $user['id'],
+    'employee_id' => $employee['employee_id'] ?? null,
     'email'        => $employee['email'] ?? '',
     'phone'        => $employee['phone'] ?? 'Not Provided',
     'status'       => $user['status'],
     'avatar'       => Avatar::url($employee),
+
     // Only the profile page offers the "change photo" control.
     'allow_upload' => true,
 ];
