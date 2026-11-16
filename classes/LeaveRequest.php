@@ -269,14 +269,6 @@ class LeaveRequest
             'Rejected',
             $actor + ['id' => $hrUserId, 'role' => 'hr']
         );
-        $this->audit()->log(
-            $requestId,
-            (int)$employeeId,
-            LeaveAuditLog::ACTION_REJECTED,
-            'Pending',
-            'Rejected',
-            $actor + ['id' => $hrUserId, 'role' => 'hr']
-        );
 
         AuditLogger::log('leave.reject', 'leave_request', $requestId, [
             'employee_id' => $employeeId,
