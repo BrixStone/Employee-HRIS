@@ -1,8 +1,13 @@
+
 name: CI - Main
 
 on:
   pull_request:
-    branches: 
+    branches:
+      - main
+
+  push:
+    branches:
       - main
 
 permissions:
