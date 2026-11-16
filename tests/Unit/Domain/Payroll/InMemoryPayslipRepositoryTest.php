@@ -89,15 +89,28 @@ final class InMemoryPayslipRepositoryTest extends TestCase
     private function makePayslip(int $employeeId): Payslip
     {
         return Payslip::compute(
-            employeeId:  $employeeId,
-            basicSalary: Money::fromPesos(35000.00),
-            allowance:   Money::fromPesos(3000.00),
-            cutOff:      $this->cutOff,
-            lateRecords: [],
-            policy:      new LateDeductionPolicy(),
-            sssRate:     0.045,
-            philRate:    0.025,
-            pagIbig:     Money::fromPesos(100.00),
-        );
+    employeeId: $employeeId,
+    payType: 'Monthly',
+    basicSalary: Money::fromPesos(35000.00),
+    allowance: Money::fromPesos(0.00),
+
+    workingDays: 11,
+    daysWorked: 11,
+    workedHours: 88,
+    absentDays: 0,
+
+    lateRecords: [],
+    overtimeHours: 0,
+    overtimeMultiplier: 1.25,
+
+    latePolicy: new LateDeductionPolicy(),
+    sssRate: 0.045,
+    philHealthRate: 0.025,
+    pagIbigFixed: Money::fromPesos(100.00),
+    withholdingTaxRate: 0.00,
+
+    payrollPeriodId: null,
+);
+
     }
 }

@@ -10,34 +10,36 @@ use App\Domain\Payroll\Money;
 use App\Domain\Payroll\Payslip;
 use App\Domain\Payroll\PayslipRepositoryInterface;
 
-/**
- * Application use case: generate one semi-monthly payslip.
- *
- * Knows the domain. Knows the repository interface.
- * Does NOT know MySQL, PDO, $_SESSION, or HTML.
- */
 final class GeneratePayslipHandler
 {
-    private LateDeductionPolicy $policy;
-
     public function __construct(
         private readonly PayslipRepositoryInterface $repository,
+        private readonly LateDeductionPolicy $latePolicy = new LateDeductionPolicy(),
     ) {
-        $this->policy = new LateDeductionPolicy();
     }
 
-    public function handle(GeneratePayslipCommand $command): Payslip
-    {
+    public function handle(
+        GeneratePayslipCommand $command
+    ): Payslip {
         $payslip = Payslip::compute(
             employeeId: $command->employeeId,
+            payType: $command->payType,
             basicSalary: Money::fromPesos($command->basicSalary),
             allowance: Money::fromPesos($command->allowance),
-            cutOff: CutOff::fromDates($command->periodStart, $command->periodEnd),
+            workingDays: $command->workingDays,
+            daysWorked: $command->daysWorked,
+            workedHours: $command->workedHours,
+            absentDays: $command->absentDays,
             lateRecords: $command->lateRecords,
-            policy: $this->policy,
+            overtimeHours: $command->overtimeHours,
+            overtimeMultiplier: $command->overtimeMultiplier,
+            latePolicy: $this->latePolicy,
             sssRate: $command->sssRate,
-            philRate: $command->philRate,
-            pagIbig: Money::fromPesos($command->pagIbigFixed),
+            philHealthRate: $command->philHealthRate,
+            pagIbigFixed: Money::fromPesos(
+                $command->pagIbigFixed
+            ),
+            withholdingTaxRate: $command->withholdingTaxRate,
             payrollPeriodId: $command->payrollPeriodId,
         );
 

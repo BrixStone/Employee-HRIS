@@ -1,0 +1,219 @@
+OUR PPT
+
+
+==============================================================================================================================================
+==============================================================================================================================================
+FOR OUR DDD
+How I Integrated DDD into the Existing System
+
+I integrated DDD into the payroll module without rewriting the entire HRIS.
+
+    The existing HR payroll page collects the employee salary and attendance data, then creates a payroll command:
+
+        hr/payroll.php
+                ↓
+        GeneratePayslipCommand
+                ↓
+        GeneratePayslipHandler
+                ↓
+        Payslip Domain Model
+                ↓
+        PdoPayslipRepository
+                ↓
+        MySQL payslips table
+
+Main DDD parts
+    Presentation Layer: hr/payroll.php
+
+    Collects payroll data and displays results.
+    Application Layer:
+
+    GeneratePayslipCommand.php and GeneratePayslipHandler.php
+
+    Coordinates the generate-payslip use case.
+    Domain Layer: Payslip.php, Money.php, and LateDeductionPolicy.php
+
+    Contains the actual payroll rules and calculations.
+    Infrastructure Layer: PdoPayslipRepository.php
+
+    Saves the calculated payslip to MySQL.
+
+The important principle is:
+
+    The page collects data.
+    The domain calculates payroll.
+    The repository saves the result.
+    This keeps the payroll rules separate from the HTML and database code.
+
+
+How TDD Works in My System
+
+    TDD means Test-Driven Development. I write automated tests for the payroll behavior and run them using PHPUnit.
+
+The process is:
+
+    Write a test
+        ↓
+    Run the test
+        ↓
+    Fix or implement the code
+        ↓
+    Run the test again
+
+The tests verify:
+    Salary calculation
+    Allowance
+    Overtime
+    Late deductions
+    Net pay
+    Payslip status changes
+    Repository saving
+
+For example, one test checks that:
+
+    Late deductions reduce net pay,
+    but do not reduce gross pay.
+
+
+How to Run the TDD Tests
+
+    From the project root, run:
+
+        powershell
+        vendor/bin/phpunit tests/Unit/Domain/Payroll
+
+    To run all project tests:
+        powershell
+        vendor/bin/phpunit
+
+
+    The successful result is:
+    text
+        OK (64 tests, 90 assertions)
+
+    This means:
+
+    64 automated tests passed
+    90 conditions were verified
+    0 failures
+    0 errors
+
+
+TDD is not a separate page in the system. It is the automated testing process used to prove that the DDD payroll rules work correctly.
+==============================================================================================================================================
+==============================================================================================================================================
+
+legend 
+# = already added in jira
+## = done checking and make ppt
+
+1.GitHub #
+2.jira #
+3.Prometheus #
+4.Grafana #
+5.CI/CD #
+6.Unit test #
+7.Terraform #
+8.Makefile #
+9.SWAGGER #
+10.figma 
+11. UI test #
+12. Rbac #
+13. Cron job #
+14. Web socket #
+15.docker #
+16. Audit trail
+18. DDD/TDD # ##
+19. Final - live deployment
+
+
+
+
+QA - CHECKING
+
+EMPLOYEE TEAM LEADER SIDE AND MANAGER SIDE           ---------- Dapat imo rank naka team_leader or Manager imoha para maka access ka diri kay ang rank na employee kay normal ra ------------
+
+{
+    FIX
+        employee/dashboard.php 
+        {
+
+            the weekly hours in dashboard 352.0 pero ang working time kay 8 hrs ra so 8*7 if full week man gani monday to sunday kay 56 hours ra 
+                {
+                    mao guro nang 352 gikan pero ang label niya kay weeky hours nya 352/// pero sa per week kay 56hrs raman kong 8hrs a day ang iya duty so need e fix
+                }
+
+            babaw sa log out nay small panel e click na nya e change ang employee id to EMP-### dili kay #1 / check gani ang profile lahi ra sila duha ang Employee ID, gamit ang EMP-###
+
+            Attendance summary 
+                { 
+                    e fix na siya tarunga na wa na mao 
+                }
+
+            Recent payslip
+                {
+                    ang status sa payslip e fix na siya, pending ang naka butang dapat di nana siya pending kung naa nagi na sa recent is dapat status paid nana
+                }
+        }
+
+        employee/file_leave.php or sa Leave option sa sidebar
+        {            
+            File leave
+                {
+                    ni file kog leave na personal type 3days ang avail nya 2 days ako gi file pero wa na kuha an ang 3 days na naka indicator sa babaw: e fix nya na dapat ma kuha an na siya after ma approve ang leave and buhata na sa tanan leave type and 3 ra ka leave type ug iya leave balance ang gi display
+                }
+            
+            24-Hour Request Limit Active
+                {
+                    wa koy sure kong okay ba ang 24-Hour Request Limit Active 
+                }
+
+            My Leave Application & Review Status 
+                {
+                    fix ang layout under sa DAYS kay na guba siya - para ma kita nimo need kag sample na mu file leave
+                }
+
+            Leave History// ma kita siya sa babaw
+                {
+                    ang search application kay ang Icon ug ang text niya kay nag overlap;
+
+                       --Leave record $ status history 
+                            {
+                                same gihapon awa ang DAYS column ang iya layout na guba e fix
+                            } 
+                }
+        }
+
+        employee/payslip.php
+        {
+            Pay History
+                {
+                    awa ang status sa naka pending dapat paid nana siya or unsa man ganii
+                }
+        }
+
+        employee/team_leave.php
+        {
+            Pending Leave Request
+                {
+                    ang approve niya nay error fix nya
+                }
+        }
+
+    ADD      ## enter nasad ni sa tanan 
+        employee rank, naa tay rank sa employee {employee, team leader, manager} add lang sag na mu indicate na kani siya kay team leader or manager or employee
+
+}
+
+HR SIDE 
+    {
+        FIX
+            {
+                Leave Management
+                    {
+                        sa leave balances dapat naka search na siya dili naka dropdown and either EMP-### sa employee ang e search or ilahang name para ma check ilahang balance
+                    }
+
+            }
+    }
+
