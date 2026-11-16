@@ -69,13 +69,15 @@ $stmtAtt = $pdo->prepare("SELECT time_in, time_out FROM attendance WHERE email =
 $stmtAtt->execute(['email' => $userEmail]);
 $attendanceData = $stmtAtt->fetch();
 
-$stmtWeekly = $pdo->prepare("SELECT SUM(workhours) as total_hours FROM attendance WHERE email = :email");
+// FIX: Added YEARWEEK filter to sum only the current week's hours (resets every week)
+$stmtWeekly = $pdo->prepare("SELECT SUM(workhours) as total_hours FROM attendance WHERE email = :email AND YEARWEEK(time_in, 1) = YEARWEEK(NOW(), 1)");
 $stmtWeekly->execute(['email' => $userEmail]);
 $weeklyTotalResult = $stmtWeekly->fetch();
 $totalWeeklyHours  = $weeklyTotalResult['total_hours'] ? (float) $weeklyTotalResult['total_hours'] : 0;
 
 $todayLogText    = 'No logs yet';
-$progressPercent = min(100, round(($totalWeeklyHours / 40) * 100));
+// FIX: Updated target from 40 to 56 hours
+$progressPercent = min(100, round(($totalWeeklyHours / 56) * 100));
 
 if ($attendanceData) {
   $timeIn      = new DateTime($attendanceData['time_in']);

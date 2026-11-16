@@ -24,7 +24,7 @@ $ppName    = $navName ?? ($pp['name'] ?? 'Employee');
 $ppEmail   = $pp['email'] ?? ($navEmail ?? '');
 // Prefer an avatar the page resolved (uploaded picture); fall back to sidebar.
 $ppAvatar  = $pp['avatar'] ?? ($navAvatar ?? ('https://ui-avatars.com/api/?name=' . urlencode($ppName) . '&background=4763ff&color=fff'));
-$ppId      = $pp['id'] ?? null;
+$ppId      = $pp['employee_id'] ?? null;
 $ppPhone   = $pp['phone'] ?? null;
 $ppStatus  = $pp['status'] ?? null;
 $ppActive  = $ppStatus !== null ? (strcasecmp((string)$ppStatus, 'Active') === 0) : null;
