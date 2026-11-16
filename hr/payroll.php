@@ -326,7 +326,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ── Update Payslip Status ─────────────────────────────────────────────────
   elseif ($form === 'update_payslip_status') {
     $payslipId = (int)($_POST['payslip_id'] ?? 0);
-    $status    = $_POST['status']            ?? '';
+    $status    = trim($_POST['status'] ?? '');
     $periodId  = (int)($_POST['period_id']   ?? 0);
     $allowedTransitions = [
       'Draft' => ['Finalized'],

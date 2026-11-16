@@ -100,7 +100,7 @@ function payslipPill(string $status): array {
     return match (strtolower(trim($status))) {
         'paid'      => ['pill-active',  'Paid'],
         'finalized' => ['pill-warning', 'Finalized'],
-        'generated' => ['pill-info',    'Generated'],
+        'draft'     => ['pill-info',    'Draft'],
         default     => ['pill-neutral', 'Pending'],
     };
 }
@@ -144,7 +144,10 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
     <div class="metric-top"><span class="metric-ico">▦</span><span class="metric-chip">Status</span></div>
     <span class="metric-title">Latest Payslip</span>
     <strong class="metric-number purple" style="font-size:20px;margin-top:14px">
-      <?= ucfirst($latestStatus) ?>
+      <?php
+          [$pillClass, $pillLabel] = payslipPill($latestStatus);
+          echo $pillLabel;
+      ?>
     </strong>
   </article>
 </div>
