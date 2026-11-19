@@ -4,6 +4,47 @@ require_once __DIR__ . '/../config/database.php';
 
 date_default_timezone_set('Asia/Manila');
 
+function publishRealtimeEvent(array $channels, array $event): void {
+  $cfgPath = __DIR__ . '/../config/realtime.json';
+  if (!is_file($cfgPath)) {
+    return;
+  }
+
+  $cfg = json_decode((string)file_get_contents($cfgPath), true);
+  $publishUrl = $cfg['publish_url'] ?? getenv('HRIS_REALTIME_PUBLISH_URL') ?? '';
+  $secret     = $cfg['secret'] ?? getenv('HRIS_REALTIME_SECRET') ?? '';
+
+  if ($publishUrl === '' || strlen($secret) < 32 || !function_exists('curl_init')) {
+    return;
+  }
+
+  $body = json_encode([
+    'ts'       => time(),
+    'channels' => $channels,
+    'event'    => $event,
+  ], JSON_UNESCAPED_SLASHES);
+
+  if ($body === false) {
+    return;
+  }
+
+  $sig = 'sha256=' . hash_hmac('sha256', $body, $secret);
+
+  $ch = curl_init($publishUrl);
+  curl_setopt_array($ch, [
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $body,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 2,
+    CURLOPT_HTTPHEADER     => [
+      'Content-Type: application/json',
+      'X-Hris-Signature: ' . $sig,
+    ],
+  ]);
+  @curl_exec($ch);
+  @curl_close($ch);
+}
+
 // Logged in, account still active, employee portal, allowed by the permission matrix
 require_once __DIR__ . '/../authentication/guard.php';
 // Clocking in/out (POST) is an edit of their own attendance; just looking is a view.
@@ -45,17 +86,14 @@ $currentTime = date('Y-m-d H:i:s');
 $currentHour = (int) date('H');
 $currentMinute = (int) date('i');
 
-// Continue with your existing POST attendance logic below.
-
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   $action = $_POST['action'];
 
   // Check if employee already completed a shift today
   $todayCheckStmt = $pdo->prepare("
-        SELECT id FROM attendance 
-        WHERE email = :email 
-        AND time_out IS NOT NULL 
+        SELECT id FROM attendance
+        WHERE email = :email
+        AND time_out IS NOT NULL
         AND DATE(time_in) = CURRENT_DATE
     ");
   $todayCheckStmt->execute(['email' => $email]);
@@ -77,6 +115,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           ':email'   => $email,
           ':time_in' => $currentTime,
         ]);
+
+        publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
+          'type'        => 'attendance.time_in',
+          'employee_id' => (int)$employeeId,
+          'employee'    => $employeeData['name'],
+          'time_in'     => $currentTime,
+        ]);
+
         $message = "Successfully Timed In at " . date('h:i:s A') . "!";
       }
     }
@@ -98,6 +144,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       } else {
         $updateBreak = $pdo->prepare('UPDATE attendance SET `Break_Time` = :break_time WHERE id = :id');
         $updateBreak->execute(['break_time' => $currentTime, 'id' => $activeShift['id']]);
+
+        publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
+          'type'        => 'attendance.break_time',
+          'employee_id' => (int)$employeeId,
+          'employee'    => $employeeData['name'],
+          'break_time'  => $currentTime,
+        ]);
+
         $message = "Break Time recorded successfully at " . date('h:i:s A') . ".";
       }
     }
@@ -123,33 +177,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
       $updateStmt = $pdo->prepare("UPDATE attendance SET time_out = :time_out, workhours = :workhours WHERE id = :id");
       $updateStmt->execute([
-        'time_out' => $currentTime,
+        'time_out'  => $currentTime,
         'workhours' => $workhours,
-        'id' => $activeShift['id']
+        'id'        => $activeShift['id'],
       ]);
+
+      publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
+        'type'        => 'attendance.time_out',
+        'employee_id' => (int)$employeeId,
+        'employee'    => $employeeData['name'],
+        'time_out'    => $currentTime,
+        'workhours'   => $workhours,
+      ]);
+
       $message = "Successfully Timed Out! Total Work Hours (excluding break): {$workhours} hrs.";
     }
   }
 }
 
-// Fetch history (backticks keep the mixed-case Break_Time column name)
 // ── Cut-off period logic ──────────────────────────────────────────────
-// Determine current cut-off based on today's date
 $todayDay   = (int) date('j');
 $todayYear  = date('Y');
 $todayMonth = date('m');
 
-// Default cut-off: 1–15 or 16–end of current month
 if ($todayDay <= 15) {
   $defaultStart = "{$todayYear}-{$todayMonth}-01";
   $defaultEnd   = "{$todayYear}-{$todayMonth}-15";
 } else {
-  $lastDay      = date('t'); // last day of current month
+  $lastDay      = date('t');
   $defaultStart = "{$todayYear}-{$todayMonth}-16";
   $defaultEnd   = "{$todayYear}-{$todayMonth}-{$lastDay}";
 }
 
-// Build list of all available cut-offs Aug–current month for the dropdown
 $availableCutOffs = [];
 $start = new DateTime('2026-08-01');
 $now   = new DateTime();
@@ -175,14 +234,11 @@ while ($start <= $now) {
   $start->modify('first day of next month');
 }
 
-// Most recent first
 $availableCutOffs = array_reverse($availableCutOffs);
 
-// Allow employee to switch cut-off via GET — validate against allowed list
 $selectedStart = $_GET['start'] ?? $defaultStart;
 $selectedEnd   = $_GET['end']   ?? $defaultEnd;
 
-// Security: only allow dates from the known cut-off list
 $validPair = false;
 foreach ($availableCutOffs as $co) {
   if ($co['start'] === $selectedStart && $co['end'] === $selectedEnd) {
@@ -192,11 +248,9 @@ foreach ($availableCutOffs as $co) {
   }
 }
 
-// If someone tampers with GET params, fall back to default
 if (!$validPair) {
   $selectedStart = $defaultStart;
   $selectedEnd   = $defaultEnd;
-  // Find label for default
   foreach ($availableCutOffs as $co) {
     if ($co['start'] === $selectedStart && $co['end'] === $selectedEnd) {
       $selectedLabel = $co['label'];
@@ -223,11 +277,10 @@ $attendanceLogs = $historyStmt->fetchAll();
 $nameParts = explode(' ', trim($employeeData['name']));
 $user = [
   'full_name' => htmlspecialchars($employeeData['name']),
-  'email' => htmlspecialchars($employeeData['email']),
-  'avatar' => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name']) . '&background=4763ff&color=fff'
+  'email'     => htmlspecialchars($employeeData['email']),
+  'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name']) . '&background=4763ff&color=fff',
 ];
 
-// Shell configuration
 $title = 'Attendance';
 $eyebrow = 'TIME & ATTENDANCE';
 $subtitle = 'Daily time record and attendance history';
@@ -264,7 +317,6 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
   </div>
 </section>
 
-<!-- Cut-off switcher -->
 <!-- Cut-off switcher — value encodes both start|end to avoid hidden field mismatch -->
 <div style="margin-bottom:1rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
     <span style="font-weight:600;">Showing:</span>
