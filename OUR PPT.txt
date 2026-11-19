@@ -34,12 +34,12 @@ EMPLOYEE TEAM LEADER SIDE AND MANAGER SIDE           ---------- Dapat imo rank n
         employee/dashboard.php 
         {
 
-            the weekly hours in dashboard 352.0 pero ang working time kay 8 hrs ra so 8*7 if full week man gani monday to sunday kay 56 hours ra 
+            the weekly hours in dashboard 352.0 pero ang working time kay 8 hrs ra so 8*7 if full week man gani monday to sunday kay 56 hours ra  ====== FIX NANI====
                 {
                     mao guro nang 352 gikan pero ang label niya kay weeky hours nya 352/// pero sa per week kay 56hrs raman kong 8hrs a day ang iya duty so need e fix
                 }
 
-            babaw sa log out nay small panel e click na nya e change ang employee id to EMP-### dili kay #1 / check gani ang profile lahi ra sila duha ang Employee ID, gamit ang EMP-###
+            babaw sa log out nay small panel e click na nya e change ang employee id to EMP-### dili kay #1 / check gani ang profile lahi ra sila duha ang Employee ID, gamit ang EMP-### ====FIX NANI=====
 
             Attendance summary 
                 { 
@@ -48,7 +48,7 @@ EMPLOYEE TEAM LEADER SIDE AND MANAGER SIDE           ---------- Dapat imo rank n
 
             Recent payslip
                 {
-                    ang status sa payslip e fix na siya, pending ang naka butang dapat di nana siya pending kung naa nagi na sa recent is dapat status paid nana
+                    ang status sa payslip e fix na siya, pending ang naka butang dapat di nana siya pending kung naa nagi na sa recent is dapat status paid nana ==== FIX NANI ========
                 }
         }
 

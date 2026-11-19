@@ -67,9 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors[] = 'Username must be at least 3 characters.';
   }
 
-  // Employees and managers require employee records.
-  if (in_array($role, ['employee', 'manager'], true) && $employee_id === null) {
-    $errors[] = "The {$role} role needs a linked employee.";
+  // Employee accounts require an employee record. (Manager and team leader
+  // are employee ranks, set on the employee record, not account roles.)
+  if ($role === 'employee' && $employee_id === null) {
+    $errors[] = 'The employee role needs a linked employee.';
   }
 
   // Get employee email.
@@ -125,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   // Check application URL.
-  $appUrl = $mailConfig['app_url'] ?? '';
+  $appUrl = rtrim((string)($mailConfig['app_url'] ?? ''), '/');
 
   if (!$appUrl || !filter_var($appUrl, FILTER_VALIDATE_URL)) {
     $errors[] = 'Application URL is not configured correctly.';
@@ -254,7 +255,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           "HRIS invitation email failed for user ID: {$userId}"
         );
 
-        $errors[] = 'The account was created, but the invitation email could not be sent. The account is still pending activation.';
+        // Remove the pending account so the same username/employee can be retried.
+        try {
+          $userModel->deletePendingAccount($userId);
+          $errors[] = 'The invitation email could not be sent, so the account was not created. Check the mail settings and try again.';
+        } catch (Throwable $cleanupError) {
+          $errors[] = 'The account was created, but the invitation email could not be sent. Use "Resend invitation" on the Users page.';
+        }
       }
     } catch (Throwable $e) {
 
@@ -364,7 +371,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
         </select>
 
         <div class="muted" style="margin-top:6px">
-          Employee and manager accounts require an employee record.
+          Employee accounts require an employee record.
           Linked accounts receive their invitation at the employee's
           registered email address.
         </div>

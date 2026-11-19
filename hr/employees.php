@@ -5,6 +5,7 @@ require_access('employee_records', 'view', 'all');
 
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
+require_once __DIR__ . '/../config/helpers.php';
 require __DIR__ . '/../classes/DSA/Searching.php';
 require __DIR__ . '/../classes/DSA/Sorting.php';
 require __DIR__ . '/../classes/DSA/BinarySearchTree.php';

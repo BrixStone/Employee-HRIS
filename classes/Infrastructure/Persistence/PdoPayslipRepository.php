@@ -289,13 +289,7 @@ implements PayslipRepositoryInterface
             $check = $this->pdo->prepare(
                 "SELECT
                 COUNT(*) AS total_count,
-                SUM(
-                    CASE
-                        WHEN status <> 'Draft'
-                        THEN 1
-                        ELSE 0
-                    END
-                ) AS invalid_count,
+                0 AS invalid_count,
                 SUM(
                     CASE
                         WHEN gross_pay <= 0
@@ -304,7 +298,8 @@ implements PayslipRepositoryInterface
                     END
                 ) AS invalid_amount_count
              FROM payslips
-             WHERE payroll_period_id = :period_id"
+             WHERE payroll_period_id = :period_id
+               AND status = 'Draft'"
             );
 
             $check->execute([
@@ -321,7 +316,7 @@ implements PayslipRepositoryInterface
 
             if ($totalCount === 0) {
                 throw new \RuntimeException(
-                    'There are no payslips to finalize.'
+                    'There are no Draft payslips to finalize.'
                 );
             }
 

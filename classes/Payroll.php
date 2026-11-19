@@ -312,7 +312,7 @@ class Payroll
                 );
             }
 
-            if ($finalizedPayslips !== $totalPayslips) {
+            if ($finalizedPayslips + $paidPayslips !== $totalPayslips) {
                 throw new \RuntimeException(
                     'Every payslip must be finalized before '
                     . 'marking this period as Processed.'
@@ -333,7 +333,8 @@ class Payroll
                 );
             }
 
-            if ($finalizedPayslips !== $totalPayslips) {
+            // Payslips already marked Paid one by one are fine.
+            if ($finalizedPayslips + $paidPayslips !== $totalPayslips) {
                 throw new \RuntimeException(
                     'Every payslip must be finalized before '
                     . 'marking this period as Paid.'

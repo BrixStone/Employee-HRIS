@@ -55,7 +55,12 @@ try {
             ps.days_worked,
             (ps.days_worked * 8) AS hours_worked,
             ps.late_minutes,
-            ps.status,
+            -- A payslip in a Paid period is paid, even if its own row was
+            -- finalized before the period was closed.
+            CASE
+                WHEN pp.status = 'Paid' THEN 'Paid'
+                ELSE ps.status
+            END AS status,
             pp.period_name AS period_label,
             pp.start_date AS period_start,
             pp.end_date   AS period_end
@@ -81,14 +86,18 @@ $latestNet   = $latest ? (float) $latest['net_pay']      : 0.0;
 $latestLabel = $latest
     ? htmlspecialchars($latest['period_label'], ENT_QUOTES, 'UTF-8')
     : date('M Y');
-$latestStatus = $latest ? strtolower($latest['status']) : 'pending';
+$latestStatus = $latest ? strtolower((string) $latest['status']) : 'pending';
+if ($latestStatus === 'draft') {
+    $latestStatus = 'pending';
+}
 $hasPayroll  = !empty($payslips);
 
 /* ---------------------------------------------------------------
  * Pill helper — maps DB status → CSS class + display label.
  * ------------------------------------------------------------- */
 function payslipPill(string $status): array {
-    return match (strtolower($status)) {
+    // DB values are capitalised (Draft, Finalized, Paid), so compare lower-case.
+    return match (strtolower(trim($status))) {
         'paid'      => ['pill-active',  'Paid'],
         'finalized' => ['pill-warning', 'Finalized'],
         'draft'     => ['pill-info',    'Draft'],
