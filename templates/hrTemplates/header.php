@@ -27,6 +27,7 @@ $pageTitles = [
   'add_employee' => 'Add Employee',
   'edit_employee' => 'Edit Employee',
   'view_employee' => 'Employee Profile',
+  'recruitment' => 'Recruitment',
   'department' => 'Department Management',
   'position' => 'Position Management',
   'leave_management' => 'Leave Management',
@@ -47,6 +48,7 @@ $cssPage = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
 $navItems = [
   ['/hr/dashboard.php', 'Dashboard', '▦', ['dashboard'], $isHrSide && $navCan('dashboard', 'view', 'all')],
   ['/hr/employees.php', 'Employees', '♙', ['employees', 'add_employee', 'edit_employee', 'view_employee', 'employee_deactivate'], $isHrSide && $navCan('employee_records', 'view', 'all')],
+  ['/hr/recruitment.php', 'Recruitment', '❖', ['recruitment'], $isHrSide && $navCan('employee_records', 'view', 'all')],
   ['/hr/leave_management.php', 'Leave Management', '◷', ['leave_management'], $isHrSide && $navCan('leave_requests', 'edit', 'all')],
   ['/hr/department.php', 'Departments', '▤', ['department'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
   ['/hr/position.php', 'Positions', '▣', ['position'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
@@ -85,7 +87,7 @@ $navHome = function_exists('role_home') ? role_home($navRole) : '/hr/dashboard.p
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?> | HRIS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
