@@ -398,5 +398,4 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
   </aside>
 </div>
 
-<?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>
-
+<?php require __DIR__ . '/../templates/employeeTemplates/footer.php';?>
