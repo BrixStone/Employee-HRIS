@@ -15,6 +15,7 @@ if (is_file($gateHelper)) {
 }
 
 $empId = (int)($_SESSION['employee_id'] ?? 0);
+$role  = strtolower(trim((string)($_SESSION['role'] ?? 'employee')));
 $email = trim((string)($_SESSION['email'] ?? ''));
 $name  = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? ''));
 
@@ -68,8 +69,11 @@ if (!function_exists('hris_is_orientation_locked_for_employee')) {
     }
 }
 
-function hris_get_facilitator_assignments(PDO $pdo, int $empId, string $name): array
+function hris_get_facilitator_assignments(PDO $pdo, int $empId, string $name, string $role = 'employee'): array
 {
+    if (!in_array($role, ['hr', 'admin', 'manager', 'facilitator'], true)) {
+        return [];
+    }
     if ($empId <= 0 && $name === '') {
         return [];
     }
@@ -111,10 +115,20 @@ function hris_get_facilitator_assignments(PDO $pdo, int $empId, string $name): a
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email, string $name): array
+function hris_notify_onboarding_realtime(array $payload): void
+{
+    if (function_exists('hris_broadcast_onboarding_event')) {
+        hris_broadcast_onboarding_event('onboarding_updated', $payload);
+    }
+    if (function_exists('hris_realtime_push')) {
+        hris_realtime_push('onboarding', 'onboarding_updated', $payload);
+    }
+}
+
+function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email, string $name, string $role = 'employee'): array
 {
     $onb = hris_get_linked_onboarding_record($pdo, $empId, $email, $name);
-    $facilitatorQueue = hris_get_facilitator_assignments($pdo, $empId, $name);
+    $facilitatorQueue = hris_get_facilitator_assignments($pdo, $empId, $name, $role);
     $gate = hris_is_orientation_locked_for_employee($pdo, $empId, $email, $name);
 
     return [
@@ -131,11 +145,11 @@ function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email,
 if (isset($_GET['api']) && $_GET['api'] === 'live_state') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    echo json_encode(hris_get_employee_onboarding_state($pdo, $empId, $email, $name), JSON_UNESCAPED_UNICODE);
+    echo json_encode(hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role), JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$initial = hris_get_employee_onboarding_state($pdo, $empId, $email, $name);
+$initial = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
 $onb     = $initial['onb'];
 
 $flashError   = '';
@@ -148,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'facilitator_mark_attended' || $action === 'facilitator_unmark_attended') {
         $targetId = (int)($_POST['target_onb_id'] ?? 0);
         if ($targetId > 0) {
-            $allowed = hris_get_facilitator_assignments($pdo, $empId, $name);
+            $allowed = hris_get_facilitator_assignments($pdo, $empId, $name, $role);
             $isAssigned = false;
             foreach ($allowed as $item) {
                 if ((int)$item['id'] === $targetId) {
@@ -187,14 +201,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $msg = 'New employee orientation attendance reset to Pending.';
                 }
 
-                if (function_exists('hris_broadcast_onboarding_event')) {
-                    hris_broadcast_onboarding_event('onboarding_updated', [
-                        'onb_id' => $targetId,
-                        'action' => $action,
-                    ]);
-                }
+                hris_notify_onboarding_realtime([
+                    'onb_id'           => $targetId,
+                    'action'           => $action,
+                    'step_orientation' => $action === 'facilitator_mark_attended' ? 1 : 0,
+                ]);
 
-                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name);
+                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -205,6 +218,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($onb && $action === 'acknowledge_policies') {
+        if ((int)($onb['step_policy'] ?? 0) === 1) {
+            $msg = 'Company policies are already acknowledged and permanently locked.';
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'ok'      => true,
+                    'message' => $msg,
+                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role),
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            header('Location: onboarding.php');
+            exit;
+        }
+
         if ((int)($onb['step_orientation'] ?? 0) !== 1) {
             $msg = 'You cannot acknowledge or submit policies until HR or your assigned facilitator marks your orientation attendance as Present.';
             if ($isAjax) {
@@ -212,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode([
                     'ok'      => false,
                     'message' => $msg,
-                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name),
+                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role),
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
             }
@@ -223,26 +251,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $p3 = isset($_POST['pol_privacy']);
 
             if ($p1 && $p2 && $p3) {
+                $onbId = (int)$onb['id'];
                 $pdo->prepare("
                     UPDATE `employee_onboarding`
                     SET `step_policy` = 1, `policy_acknowledged_at` = NOW()
                     WHERE `id` = ?
-                ")->execute([(int)$onb['id']]);
+                ")->execute([$onbId]);
 
-                if (function_exists('hris_broadcast_onboarding_event')) {
-                    hris_broadcast_onboarding_event('onboarding_updated', [
-                        'onb_id' => (int)$onb['id'],
-                        'action' => $action,
-                    ]);
-                }
+                hris_notify_onboarding_realtime([
+                    'onb_id'        => $onbId,
+                    'employee_code' => (string)($onb['employee_code'] ?? ''),
+                    'full_name'     => (string)($onb['full_name'] ?? ''),
+                    'action'        => $action,
+                    'step_policy'   => 1,
+                ]);
 
-                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name);
+                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
                     echo json_encode([
                         'ok'      => true,
-                        'message' => 'Company policies acknowledged live.',
+                        'message' => 'Company policies acknowledged, locked, and synced to HR in real time.',
                         'state'   => $updated,
                     ], JSON_UNESCAPED_UNICODE);
                     exit;
@@ -262,11 +292,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$hasFacilitatorAccess = in_array($role, ['hr', 'admin', 'manager', 'facilitator'], true);
+
 require_once __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
 <style>
-  .eo-wrap { max-width: 1140px; margin: 24px auto 48px; padding: 0 20px; }
+  .eo-wrap { max-width: 1140px; margin: 24px auto 48px; padding: 0 20px; position: relative; z-index: 1; }
   .eo-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; }
   .eo-top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .eo-back {
@@ -293,7 +325,7 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.45; transform: scale(0.85); }
   }
-  .eo-card { background: #ffffff; color: #0f172a; border-radius: 16px; padding: 22px 24px; }
+  .eo-card { background: #ffffff; color: #0f172a; border-radius: 16px; padding: 22px 24px; position: relative; z-index: 2; }
   .eo-hero {
     background: #ffffff; color: #0f172a; border-radius: 16px; padding: 22px 26px;
     display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px;
@@ -320,16 +352,50 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     border-radius: 10px; padding: 12px 14px; font-size: 14px; font-weight: 700;
   }
   .eo-pol-item {
-    display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
-    border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; cursor: pointer; color: #0f172a;
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+    border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 10px;
+    cursor: pointer; color: #0f172a; background: #ffffff;
+    position: relative; z-index: 3; user-select: none;
   }
-  .eo-pol-item.is-locked { opacity: 0.6; cursor: not-allowed; background: #f8fafc; }
+  .eo-pol-item:hover:not(.is-locked):not(.is-done) {
+    border-color: #2563eb; background: #f8fafc;
+  }
+  .eo-pol-item.is-locked {
+    opacity: 0.6; cursor: not-allowed; background: #f8fafc;
+  }
+  .eo-pol-item.is-done {
+    cursor: default; background: #f0fdf4; border-color: #86efac;
+  }
+  .eo-pol-checkbox {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    opacity: 1 !important;
+    position: static !important;
+    pointer-events: auto !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    margin-top: 2px !important;
+    accent-color: #16a34a;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .eo-pol-checkbox:disabled {
+    opacity: 1 !important;
+    cursor: default;
+  }
   .eo-btn-submit {
     width: 100%; border: none; border-radius: 10px; padding: 12px 16px;
     background: #2563eb; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer;
+    position: relative; z-index: 3;
   }
-  .eo-btn-submit.is-done { background: #16a34a; cursor: default; }
+  .eo-btn-submit.is-done {
+    background: #16a34a; color: #ffffff; opacity: 1; cursor: default;
+  }
   .eo-btn-submit:disabled:not(.is-done) { background: #94a3b8; cursor: not-allowed; }
+  .eo-pol-note {
+    margin-top: 8px; font-size: 12px; color: #166534; font-weight: 600; text-align: center;
+  }
 
   .eo-fac-panel {
     background: #ffffff; color: #0f172a; border-radius: 16px; padding: 22px 24px;
@@ -401,10 +467,12 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
   <div class="eo-top">
     <div class="eo-top-actions">
       <a href="dashboard.php" class="eo-back">← Back to Employee Dashboard</a>
-      <button type="button" class="eo-fac-btn" id="toggleFacilitatorPanelBtn">
-        <span>Facilitator Check-In</span>
-        <span class="eo-fac-count" id="eoFacCountBadge"><?= count($initial['facilitatorQueue']) ?></span>
-      </button>
+      <?php if ($hasFacilitatorAccess): ?>
+        <button type="button" class="eo-fac-btn" id="toggleFacilitatorPanelBtn">
+          <span>Facilitator Check-In</span>
+          <span class="eo-fac-count" id="eoFacCountBadge"><?= count($initial['facilitatorQueue']) ?></span>
+        </button>
+      <?php endif; ?>
     </div>
     <div class="eo-sync">
       <span class="eo-dot"></span>
@@ -421,73 +489,76 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     <?php endif; ?>
   </div>
 
-  <div class="eo-fac-panel" id="eoFacilitatorPanel">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-      <div>
-        <h2 style="margin:0 0 3px; font-size:18px; color:#0f172a;">My Assigned Orientation Schedule (HR / Facilitator)</h2>
-        <p style="margin:0; font-size:13px; color:#475569;">
-          New employees scheduled for orientation under <strong><?= htmlspecialchars($name !== '' ? $name : 'your account', ENT_QUOTES, 'UTF-8') ?></strong>. Verify their Name or Employee ID at the orientation room and mark attendance as Done.
-        </p>
+  <?php if ($hasFacilitatorAccess): ?>
+    <div class="eo-fac-panel" id="eoFacilitatorPanel">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <h2 style="margin:0 0 3px; font-size:18px; color:#0f172a;">My Assigned Orientation Schedule (HR / Facilitator)</h2>
+          <p style="margin:0; font-size:13px; color:#475569;">
+            New employees scheduled for orientation under <strong><?= htmlspecialchars($name !== '' ? $name : 'your account', ENT_QUOTES, 'UTF-8') ?></strong>. Verify their Name or Employee ID at the orientation room and mark attendance as Done.
+          </p>
+        </div>
+        <button type="button" id="closeFacilitatorPanelBtn" class="eo-btn-undo">Close</button>
       </div>
-      <button type="button" id="closeFacilitatorPanelBtn" class="eo-btn-undo">Close</button>
-    </div>
 
-    <div class="eo-dt-controls">
-      <div class="eo-dt-left">
-        <label class="eo-dt-label">
-          Show
-          <select id="eoDtPageSize" class="eo-dt-select">
-            <option value="5" selected>5</option>
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-          </select>
-          entries
-        </label>
-        <label class="eo-dt-label">
-          Status:
-          <select id="eoDtStatusFilter" class="eo-dt-select">
-            <option value="all" selected>All</option>
-            <option value="pending">Scheduled / Pending</option>
-            <option value="attended">Attended</option>
-          </select>
-        </label>
+      <div class="eo-dt-controls">
+        <div class="eo-dt-left">
+          <label class="eo-dt-label">
+            Show
+            <select id="eoDtPageSize" class="eo-dt-select">
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+            entries
+          </label>
+          <label class="eo-dt-label">
+            Status:
+            <select id="eoDtStatusFilter" class="eo-dt-select">
+              <option value="all" selected>All</option>
+              <option value="pending">Scheduled / Pending</option>
+              <option value="attended">Attended</option>
+            </select>
+          </label>
+        </div>
+        <div class="eo-dt-right">
+          <input type="text" id="eoFacSearchInput" class="eo-search" placeholder="Search ID, Name, Dept, Room...">
+        </div>
       </div>
-      <div class="eo-dt-right">
-        <input type="text" id="eoFacSearchInput" class="eo-search" placeholder="Search ID, Name, Dept, Room...">
+
+      <div class="eo-table-wrap">
+        <table class="eo-table" id="eoFacilitatorDataTable">
+          <thead>
+            <tr>
+              <th class="eo-sortable" data-sort-col="employee_code">Employee ID <span class="eo-sort-ind" id="sort-employee_code">⇅</span></th>
+              <th class="eo-sortable" data-sort-col="full_name">New Employee <span class="eo-sort-ind" id="sort-full_name">⇅</span></th>
+              <th class="eo-sortable" data-sort-col="department_role">Department / Role <span class="eo-sort-ind" id="sort-department_role">⇅</span></th>
+              <th class="eo-sortable" data-sort-col="orientation_at">Scheduled Time <span class="eo-sort-ind" id="sort-orientation_at">⇅</span></th>
+              <th class="eo-sortable" data-sort-col="orientation_room">Room <span class="eo-sort-ind" id="sort-orientation_room">⇅</span></th>
+              <th class="eo-sortable" data-sort-col="attendance">Attendance <span class="eo-sort-ind" id="sort-attendance">⇅</span></th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="eoFacilitatorTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="eo-dt-footer">
+        <div id="eoDtInfo">Showing 0 entries</div>
+        <div class="eo-dt-pages" id="eoDtPagination"></div>
       </div>
     </div>
-
-    <div class="eo-table-wrap">
-      <table class="eo-table" id="eoFacilitatorDataTable">
-        <thead>
-          <tr>
-            <th class="eo-sortable" data-sort-col="employee_code">Employee ID <span class="eo-sort-ind" id="sort-employee_code">⇅</span></th>
-            <th class="eo-sortable" data-sort-col="full_name">New Employee <span class="eo-sort-ind" id="sort-full_name">⇅</span></th>
-            <th class="eo-sortable" data-sort-col="department_role">Department / Role <span class="eo-sort-ind" id="sort-department_role">⇅</span></th>
-            <th class="eo-sortable" data-sort-col="orientation_at">Scheduled Time <span class="eo-sort-ind" id="sort-orientation_at">⇅</span></th>
-            <th class="eo-sortable" data-sort-col="orientation_room">Room <span class="eo-sort-ind" id="sort-orientation_room">⇅</span></th>
-            <th class="eo-sortable" data-sort-col="attendance">Attendance <span class="eo-sort-ind" id="sort-attendance">⇅</span></th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="eoFacilitatorTableBody"></tbody>
-      </table>
-    </div>
-
-    <div class="eo-dt-footer">
-      <div id="eoDtInfo">Showing 0 entries</div>
-      <div class="eo-dt-pages" id="eoDtPagination"></div>
-    </div>
-  </div>
+  <?php endif; ?>
 
   <div id="eoContainer"></div>
 </div>
 
 <script>
   (function () {
+    const hasFacilitatorAccess = <?= $hasFacilitatorAccess ? 'true' : 'false' ?>;
     let empState = <?= json_encode($initial, JSON_UNESCAPED_UNICODE) ?>;
-    let facPanelOpen = <?= !empty($initial['facilitatorQueue']) ? 'true' : 'false' ?>;
+    let facPanelOpen = hasFacilitatorAccess && <?= !empty($initial['facilitatorQueue']) ? 'true' : 'false' ?>;
 
     let dtSortCol = 'orientation_at';
     let dtSortDir = 'asc';
@@ -514,7 +585,7 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     const closePanelBtn = document.getElementById('closeFacilitatorPanelBtn');
 
     function syncPanelVisibility() {
-      if (panel) panel.classList.toggle('is-open', facPanelOpen);
+      if (panel) panel.classList.toggle('is-open', hasFacilitatorAccess && facPanelOpen);
     }
 
     if (toggleBtn) {
@@ -587,6 +658,7 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     }
 
     function renderFacilitatorDataTable(queue) {
+      if (!hasFacilitatorAccess) return;
       const list = Array.isArray(queue) ? queue : [];
       const badge = document.getElementById('eoFacCountBadge');
       if (badge) badge.textContent = String(list.length);
@@ -798,7 +870,9 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
               </span>
             </div>
             <p style="color:#475569; font-size:13.5px; margin:8px 0 14px;">
-              Please review and check each company policy below to submit your digital acknowledgement to HR.
+              ${polDone
+                ? 'Your policy acknowledgement has been submitted and permanently locked.'
+                : 'Please review and check each company policy below to submit your digital acknowledgement to HR.'}
             </p>
 
             ${policyLocked ? `
@@ -810,24 +884,24 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
             <form method="post" id="empPolicyForm">
               <input type="hidden" name="emp_onb_action" value="acknowledge_policies">
 
-              <label class="eo-pol-item ${policyLocked ? 'is-locked' : ''}">
-                <input type="checkbox" name="pol_handbook" value="1" ${(polDone || policyLocked) ? (polDone ? 'checked disabled' : 'disabled') : 'required'} style="margin-top:3px;">
+              <label class="eo-pol-item ${polDone ? 'is-done' : (policyLocked ? 'is-locked' : '')}">
+                <input type="checkbox" class="eo-pol-checkbox" name="pol_handbook" value="1" ${polDone ? 'checked disabled' : (policyLocked ? 'disabled' : 'required')}>
                 <div>
                   <strong>Employee Handbook</strong>
                   <div style="font-size:12px; color:#475569;">Core workplace guidelines, benefits, and company values.</div>
                 </div>
               </label>
 
-              <label class="eo-pol-item ${policyLocked ? 'is-locked' : ''}">
-                <input type="checkbox" name="pol_conduct" value="1" ${(polDone || policyLocked) ? (polDone ? 'checked disabled' : 'disabled') : 'required'} style="margin-top:3px;">
+              <label class="eo-pol-item ${polDone ? 'is-done' : (policyLocked ? 'is-locked' : '')}">
+                <input type="checkbox" class="eo-pol-checkbox" name="pol_conduct" value="1" ${polDone ? 'checked disabled' : (policyLocked ? 'disabled' : 'required')}>
                 <div>
                   <strong>Code of Conduct &amp; Attendance Policy</strong>
                   <div style="font-size:12px; color:#475569;">Work hours, leave filing rules, and professional ethics.</div>
                 </div>
               </label>
 
-              <label class="eo-pol-item ${policyLocked ? 'is-locked' : ''}">
-                <input type="checkbox" name="pol_privacy" value="1" ${(polDone || policyLocked) ? (polDone ? 'checked disabled' : 'disabled') : 'required'} style="margin-top:3px;">
+              <label class="eo-pol-item ${polDone ? 'is-done' : (policyLocked ? 'is-locked' : '')}">
+                <input type="checkbox" class="eo-pol-checkbox" name="pol_privacy" value="1" ${polDone ? 'checked disabled' : (policyLocked ? 'disabled' : 'required')}>
                 <div>
                   <strong>Data Privacy &amp; Confidentiality Agreement</strong>
                   <div style="font-size:12px; color:#475569;">Protection of company, client, and employee information.</div>
@@ -837,6 +911,12 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
               <button type="submit" class="eo-btn-submit ${polDone ? 'is-done' : ''}" ${(polDone || policyLocked) ? 'disabled' : ''}>
                 ${polDone ? 'Policies Acknowledged ✓' : (policyLocked ? 'Locked — Awaiting Orientation Check-In' : 'Acknowledge & Submit Policies')}
               </button>
+
+              ${polDone ? `
+                <div class="eo-pol-note">
+                  Permanent Sign-Off Recorded${onb.policy_acknowledged_at ? ` on ${esc(onb.policy_acknowledged_at)}` : ''} • Cannot be undone
+                </div>
+              ` : ''}
             </form>
           </div>
         </div>
