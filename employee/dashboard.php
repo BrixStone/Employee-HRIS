@@ -1,4 +1,6 @@
 <?php
+// employee/dashboard.php
+
 session_start();
 
 require_once __DIR__ . '/../config/database.php';
@@ -29,7 +31,6 @@ $stmt = $pdo->prepare("
 FROM employees
 WHERE id = :id
 LIMIT 1
-
 ");
 $stmt->execute([':id' => $employeeId]);
 
@@ -58,7 +59,6 @@ $user = [
       )
     )
   ),
-
   'avatar'     => 'https://ui-avatars.com/api/?name='
     . urlencode($fullName)
     . '&background=4763ff&color=fff'
@@ -69,14 +69,13 @@ $stmtAtt = $pdo->prepare("SELECT time_in, time_out FROM attendance WHERE email =
 $stmtAtt->execute(['email' => $userEmail]);
 $attendanceData = $stmtAtt->fetch();
 
-// FIX: Added YEARWEEK filter to sum only the current week's hours (resets every week)
+// Added YEARWEEK filter to sum only the current week's hours (resets every week)
 $stmtWeekly = $pdo->prepare("SELECT SUM(workhours) as total_hours FROM attendance WHERE email = :email AND YEARWEEK(time_in, 1) = YEARWEEK(NOW(), 1)");
 $stmtWeekly->execute(['email' => $userEmail]);
 $weeklyTotalResult = $stmtWeekly->fetch();
 $totalWeeklyHours  = $weeklyTotalResult['total_hours'] ? (float) $weeklyTotalResult['total_hours'] : 0;
 
 $todayLogText    = 'No logs yet';
-// FIX: Updated target from 40 to 56 hours
 $progressPercent = min(100, round(($totalWeeklyHours / 56) * 100));
 
 if ($attendanceData) {
@@ -137,9 +136,9 @@ if (empty($upcomingHolidays)) {
 }
 
 /* ---------------------------------------------------------------
- * Most recent payslip for this employee
- * Joins payroll_periods so we can show the period label + dates.
- * ------------------------------------------------------------- */
+- Most recent payslip for this employee
+- Joins payroll_periods so we can show the period label + dates.
+- ------------------------------------------------------------- */
 $recentPayslip = null;
 try {
   $psStmt = $pdo->prepare("
@@ -173,6 +172,27 @@ function dashPayslipPill(string $status): array
     'draft'     => ['pill-info',    'Draft'],
     default     => ['pill-neutral', 'Pending'],
   };
+}
+
+// Check if this employee has an active (In Progress) onboarding checklist
+$activeOnboarding = null;
+try {
+  $onbStmt = $pdo->prepare("
+        SELECT id, status,
+               (step_info + step_documents + step_orientation + step_policy) AS done_steps
+        FROM employee_onboarding
+        WHERE (LOWER(email) = LOWER(:email) OR LOWER(full_name) = LOWER(:full_name))
+          AND status = 'In Progress'
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+  $onbStmt->execute([
+    ':email'     => $userEmail ?? '',
+    ':full_name' => $fullName,
+  ]);
+  $activeOnboarding = $onbStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+  error_log('Dashboard onboarding check failed: ' . $e->getMessage());
 }
 
 // Shell configuration
@@ -238,6 +258,18 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
   </div>
   <div class="hero-orb" aria-hidden="true"></div>
 </section>
+
+<?php if ($activeOnboarding): ?>
+<div style="margin: 16px 0; padding: 14px 18px; border-radius: 12px; background: rgba(79, 70, 229, 0.16); border: 1px solid rgba(129, 140, 248, 0.35); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+  <div>
+    <strong style="color: #e0e7ff;">New Hire Onboarding Checklist (<?= (int)$activeOnboarding['done_steps'] ?>/4 Completed)</strong>
+    <div style="font-size: 13px; color: #94a3b8;">View your Company Orientation schedule and sign your Policy Acknowledgements.</div>
+  </div>
+  <a href="/employee/onboarding.php" style="padding: 9px 16px; border-radius: 9px; background: #4f46e5; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 700;">
+    Open My Onboarding →
+  </a>
+</div>
+<?php endif; ?>
 
 <div class="metric-strip">
   <article class="metric-card metric-teal">
@@ -323,6 +355,7 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
       <div class="quick-stack">
         <a class="primary-button" href="/employee/file_leave.php" style="width:100%">Request Time Off</a>
         <a class="button" href="/employee/leave_history.php" style="width:100%">View Leave History</a>
+        <a class="button" href="/employee/onboarding.php" style="width:100%">My Onboarding</a>
         <a class="button" href="/employee/profile.php" style="width:100%">Edit My Profile</a>
       </div>
     </article>
@@ -398,4 +431,4 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
   </aside>
 </div>
 
-<?php require __DIR__ . '/../templates/employeeTemplates/footer.php';?>
+<?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>
