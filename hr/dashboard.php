@@ -4,6 +4,8 @@ require_access('dashboard', 'view', null, ['admin', 'hr']);
 $title = 'Dashboard';
 
 $employeeCount = $activeEmployeeCount = $presentTodayCount = $onLeaveCount = $pendingRequestCount = 0;
+$overdueLeaveAlerts = [];
+$currentPendingLeaveIds = [];
 
 try {
     require_once __DIR__ . '/../config/database.php';
@@ -36,19 +38,55 @@ try {
         try {
             $pendingRequestCount = (int)$pdo->query("SELECT COUNT(*) FROM leave_requests WHERE LOWER(status) = 'pending'")->fetchColumn();
         } catch (Throwable $e) {}
+
+        try {
+            $pendingStmt = $pdo->query("SELECT id FROM leave_requests WHERE LOWER(COALESCE(status, '')) = 'pending'");
+            foreach ($pendingStmt->fetchAll(PDO::FETCH_COLUMN) as $pid) {
+                if ($pid !== false && $pid !== null) {
+                    $currentPendingLeaveIds[] = (int)$pid;
+                }
+            }
+        } catch (Throwable $e) {}
+
+        try {
+            $stmt = $pdo->query("
+                SELECT
+                    lr.id,
+                    lr.employee_id,
+                    COALESCE(lr.leave_type, 'Leave') AS leave_type,
+                    lr.created_at,
+                    UNIX_TIMESTAMP(lr.created_at) AS created_ts,
+                    TIMESTAMPDIFF(DAY, lr.created_at, NOW()) AS days_pending,
+                    TRIM(CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, ''))) AS employee_name
+                FROM leave_requests lr
+                LEFT JOIN employees e ON lr.employee_id = e.id
+                WHERE LOWER(COALESCE(lr.status, '')) = 'pending'
+                  AND TIMESTAMPDIFF(DAY, lr.created_at, NOW()) >= 2
+                ORDER BY lr.created_at ASC
+            ");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $empName = trim((string)($row['employee_name'] ?? ''));
+                if ($empName === '') {
+                    $empName = 'Employee #' . (int)($row['employee_id'] ?? 0);
+                }
+                $days = max(2, (int)($row['days_pending'] ?? 2));
+                $reqId = (int)($row['id'] ?? 0);
+                $createdTs = !empty($row['created_ts']) ? (int)$row['created_ts'] : (!empty($row['created_at']) ? (int)strtotime((string)$row['created_at']) : time());
+                $overdueLeaveAlerts[] = [
+                    'id'         => 'db_leave_2d_' . $reqId,
+                    'request_id' => $reqId,
+                    'category'   => 'leave_2d',
+                    'title'      => "Unprocessed Leave ({$days}d): {$empName}",
+                    'message'    => "{$row['leave_type']} request #{$reqId} has not been approved or rejected for {$days} days.",
+                    'created_at' => $createdTs * 1000,
+                    'url'        => '/hr/leave_management.php',
+                ];
+            }
+        } catch (Throwable $e) {}
     }
 } catch (Throwable $e) {}
 
 $overviewTotal = $activeEmployeeCount + $onLeaveCount;
-
-$reportDataReady = false;
-try {
-    if (isset($pdo) && $pdo instanceof PDO) {
-        $REPORT_ALLOW_EXPORT = false;
-        require_once __DIR__ . '/_report_data.php';
-        $reportDataReady = true;
-    }
-} catch (Throwable $e) {}
 
 require __DIR__ . '/../templates/hrTemplates/header.php';
 
@@ -60,6 +98,7 @@ $rawSessionName = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] 
 $displayProfileName = $rawSessionName !== '' ? ucwords($rawSessionName) : 'Donald Toñacao';
 $hrName = ucfirst(explode(' ', trim((string)($_SESSION['username'] ?? 'Hr')))[0] ?: 'Hr');
 $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
+$initialBellCount = count($overdueLeaveAlerts) > 0 ? count($overdueLeaveAlerts) : (int)$pendingRequestCount;
 ?>
 
 <style>
@@ -148,7 +187,7 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     background: #ec4899;
   }
 
-  /* Bell Notification & Cron Popover Window */
+  /* Bell Notification Popover Window */
   .bell-popover-wrap {
     position: relative;
   }
@@ -157,7 +196,7 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     position: absolute;
     top: calc(100% + 10px);
     right: 0;
-    width: 360px;
+    width: 375px;
     max-width: calc(100vw - 32px);
     border-radius: 14px;
     background: #0f172a;
@@ -182,18 +221,21 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     font-size: 13.5px;
     color: #f8fafc;
   }
-  .cron-run-btn {
-    padding: 5px 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(96, 165, 250, 0.45);
-    background: #2563eb;
-    color: #ffffff;
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
+  .bell-auto-pill {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.35);
   }
-  .cron-run-btn:hover {
-    background: #1d4ed8;
+  .bell-popover-status {
+    padding: 6px 14px;
+    font-size: 11px;
+    color: #93c5fd;
+    background: rgba(37, 99, 235, 0.12);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   }
   .bell-popover-body {
     max-height: 310px;
@@ -225,10 +267,10 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     text-transform: uppercase;
     padding: 2px 6px;
     border-radius: 6px;
-    background: rgba(59, 130, 246, 0.18);
-    color: #60a5fa;
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
   }
-  .bell-notif-tag.cron {
+  .bell-notif-tag.info {
     background: rgba(16, 185, 129, 0.18);
     color: #34d399;
   }
@@ -331,7 +373,7 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     display: grid;
     grid-template-columns: 1.4fr 1fr;
     gap: 18px;
-    margin-bottom: 18px;
+    margin-bottom: 24px;
   }
   @media (max-width: 1100px) {
     .analytics-row, .bottom-row { grid-template-columns: 1fr; }
@@ -468,21 +510,6 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
     font-size: 18px;
     flex-shrink: 0;
   }
-  .day-filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .day-date-input {
-    padding: 7px 11px;
-    border-radius: 8px;
-    border: 1px solid rgba(96, 165, 250, 0.45);
-    background: rgba(15, 23, 42, 0.8);
-    color: #f8fafc;
-    font-size: 13px;
-    font-weight: 600;
-  }
 </style>
 
 <!-- Top Search & Profile Utility Bar -->
@@ -499,27 +526,20 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
   </div>
 
   <div class="top-utility-right">
-    <!-- Bell Icon + Small Window Popover for HR & Cron Job Notifications -->
+    <!-- Bell Icon + Real-Time HR Notifications Popover -->
     <div class="bell-popover-wrap">
-      <button type="button" id="bell-icon-btn" class="icon-badge-btn" title="HR & Cron Notifications" aria-expanded="false">
+      <button type="button" id="bell-icon-btn" class="icon-badge-btn" title="HR Notifications (Real-Time)" aria-expanded="false">
         <span>🔔</span>
-        <span class="icon-badge-count" id="top-notif-badge"><?= (int)$pendingRequestCount ?></span>
+        <span class="icon-badge-count" id="top-notif-badge"><?= $initialBellCount ?></span>
       </button>
 
       <div class="bell-popover-window" id="bell-popover-window" role="dialog" aria-label="HR Notifications">
         <div class="bell-popover-head">
-          <strong>HR &amp; Cron Notifications</strong>
-          <button type="button" class="cron-run-btn" id="btn-run-cron-now">▶ Run Cron</button>
+          <strong>HR Stored Notifications</strong>
+          <span class="bell-auto-pill">LIVE</span>
         </div>
-        <div class="bell-popover-body" id="bell-popover-list">
-          <div class="bell-notif-item">
-            <div class="bell-notif-top">
-              <span class="bell-notif-title">Cron Job Monitor</span>
-              <span class="bell-notif-tag cron">Cron</span>
-            </div>
-            <p class="bell-notif-msg">Click the bell or Run Cron to check automated HR job status.</p>
-          </div>
-        </div>
+        <div class="bell-popover-status" id="bell-popover-status">Real-time 2+ day leave alerts &amp; status sync</div>
+        <div class="bell-popover-body" id="bell-popover-list"></div>
       </div>
     </div>
 
@@ -694,79 +714,19 @@ $avatarInitials = strtoupper(substr($displayProfileName, 0, 1));
   </article>
 </div>
 
-<!-- Row 4: Calendar Daily Employee Attendance & Leave Tracker + Day Report -->
-<article class="card" style="margin-bottom: 24px;">
-  <div class="card-heading" style="flex-wrap: wrap; gap: 12px;">
-    <div>
-      <p class="eyebrow">DAILY ATTENDANCE &amp; REPORT</p>
-      <h2 id="daily-attendance-heading">Employee Attendance (Today)</h2>
-    </div>
-    <div class="day-filter-bar">
-      <label for="attendance-date-picker" style="font-size:12.5px;color:#94a3b8;font-weight:600;">Calendar Date:</label>
-      <input
-        type="date"
-        id="attendance-date-picker"
-        class="day-date-input"
-        value="<?= htmlspecialchars(date('Y-m-d')) ?>"
-      >
-      <button type="button" class="button" id="btn-day-today">Today</button>
-      <button type="button" class="button" id="btn-day-yesterday">Yesterday</button>
-      <a
-        class="button"
-        id="download-day-report"
-        href="/api/hr_dashboard_stats.php?export=csv&date=<?= htmlspecialchars(date('Y-m-d')) ?>"
-      >⬇ Download Report (CSV)</a>
-    </div>
-  </div>
-
-  <div style="overflow-x: auto; margin-top: 8px;">
-    <table style="width: 100%; border-collapse: collapse; font-size: 13.5px;">
-      <thead>
-        <tr style="border-bottom: 1px solid rgba(148,163,184,0.2); text-align: left; color: #94a3b8;">
-          <th style="padding: 10px 8px;">Employee ID</th>
-          <th style="padding: 10px 8px;">Name</th>
-          <th style="padding: 10px 8px;">Position</th>
-          <th style="padding: 10px 8px;">Department</th>
-          <th style="padding: 10px 8px;">Status</th>
-          <th style="padding: 10px 8px;">Time In</th>
-          <th style="padding: 10px 8px;">Time Out</th>
-          <th style="padding: 10px 8px;">Work Hours</th>
-        </tr>
-      </thead>
-      <tbody id="daily-attendance-tbody">
-        <tr>
-          <td colspan="8" style="padding: 14px 8px; color: #94a3b8;">Loading attendance records...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</article>
-
-<!-- Preserved Embedded Reports Section -->
-<?php if ($reportDataReady): ?>
-<section id="reports-section" class="dashboard-reports">
-  <div class="card-heading" style="margin-top:8px">
-    <div>
-      <p class="eyebrow">ANALYTICS</p>
-      <h2>Reports &amp; Audits</h2>
-    </div>
-    <a class="button" href="/hr/report.php">Open full reports →</a>
-  </div>
-  <?php
-    $reportEmbedded = true;
-    require __DIR__ . '/_report_section.php';
-  ?>
-</section>
-<?php endif; ?>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // Bell Icon Popover Window + Cron Job Logic
+  // Real-Time HR Notification Store (Live Relative Time + Auto-Remove on Approve/Reject/Cancel)
   const bellBtn = document.getElementById('bell-icon-btn');
   const bellWin = document.getElementById('bell-popover-window');
   const bellList = document.getElementById('bell-popover-list');
-  const runCronBtn = document.getElementById('btn-run-cron-now');
+  const bellStatus = document.getElementById('bell-popover-status');
+  const bellBadge = document.getElementById('top-notif-badge');
+  const BELL_STORAGE_KEY = 'hris_hr_stored_notifications_v2';
+
+  const dbOverdueLeaves = <?= json_encode($overdueLeaveAlerts, JSON_UNESCAPED_UNICODE) ?>;
+  let activePendingLeaveIds = new Set(<?= json_encode($currentPendingLeaveIds, JSON_UNESCAPED_UNICODE) ?>.map(Number));
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -774,47 +734,170 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  function renderBellNotifications(items) {
-    if (!Array.isArray(items) || items.length === 0) {
-      bellList.innerHTML = `<div class="bell-notif-item"><p class="bell-notif-msg">No HR or cron job notifications right now.</p></div>`;
+  function formatRelativeTime(createdMs) {
+    const ts = Number(createdMs);
+    if (!Number.isFinite(ts) || ts <= 0) return 'Just now';
+    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (diffSec < 45) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return `${diffDay}d ago`;
+  }
+
+  function isItemStillValid(item) {
+    if (!item || !item.id) return false;
+    const reqId = Number(item.request_id || 0);
+    if (reqId > 0 && activePendingLeaveIds.size > 0 && !activePendingLeaveIds.has(reqId)) {
+      return false;
+    }
+    return true;
+  }
+
+  function loadStoredBellList() {
+    let saved = [];
+    try {
+      const raw = sessionStorage.getItem(BELL_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) saved = parsed;
+    } catch (_) {}
+
+    const merged = [];
+    const seenIds = new Set();
+
+    for (const item of (Array.isArray(dbOverdueLeaves) ? dbOverdueLeaves : [])) {
+      if (!item || !item.id || seenIds.has(item.id) || !isItemStillValid(item)) continue;
+      seenIds.add(item.id);
+      merged.push({
+        ...item,
+        created_at: Number(item.created_at) || Date.now()
+      });
+    }
+
+    for (const item of saved) {
+      if (!item || !item.id || seenIds.has(item.id) || !isItemStillValid(item)) continue;
+      seenIds.add(item.id);
+      merged.push({
+        ...item,
+        created_at: Number(item.created_at) || Date.now()
+      });
+    }
+
+    const pruned = merged.slice(0, 15);
+    saveStoredBellList(pruned);
+    return pruned;
+  }
+
+  function saveStoredBellList(items) {
+    try {
+      sessionStorage.setItem(BELL_STORAGE_KEY, JSON.stringify((items || []).slice(0, 15)));
+    } catch (_) {}
+  }
+
+  function storeBellNotification(entry) {
+    if (!entry || !entry.id) return;
+    const reqId = Number(entry.request_id || 0);
+    if (reqId > 0) {
+      activePendingLeaveIds.add(reqId);
+    }
+    const current = loadStoredBellList().filter(x => x.id !== entry.id);
+    current.unshift({
+      ...entry,
+      created_at: Number(entry.created_at) || Date.now()
+    });
+    saveStoredBellList(current);
+    renderBellNotifications();
+  }
+
+  function removeLeaveNotificationByRequestId(requestId) {
+    const reqId = Number(requestId || 0);
+    if (reqId > 0) {
+      activePendingLeaveIds.delete(reqId);
+    }
+    let saved = [];
+    try {
+      const raw = sessionStorage.getItem(BELL_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) saved = parsed;
+    } catch (_) {}
+
+    const filtered = saved.filter(item => {
+      if (!item) return false;
+      if (reqId > 0 && Number(item.request_id || 0) === reqId) return false;
+      return isItemStillValid(item);
+    });
+    saveStoredBellList(filtered);
+
+    for (let i = dbOverdueLeaves.length - 1; i >= 0; i--) {
+      if (reqId > 0 && Number(dbOverdueLeaves[i].request_id || 0) === reqId) {
+        dbOverdueLeaves.splice(i, 1);
+      }
+    }
+    renderBellNotifications();
+  }
+
+  function syncPendingLeaveIdsFromStats(data) {
+    if (!data || typeof data !== 'object') return;
+    if (Array.isArray(data.pending_leave_ids)) {
+      activePendingLeaveIds = new Set(data.pending_leave_ids.map(Number).filter(n => n > 0));
+      renderBellNotifications();
+      return;
+    }
+    if (Array.isArray(data.pending_leaves)) {
+      activePendingLeaveIds = new Set(
+        data.pending_leaves.map(r => Number(r?.id ?? r?.request_id ?? 0)).filter(n => n > 0)
+      );
+      renderBellNotifications();
+    }
+  }
+
+  function renderBellNotifications() {
+    const items = loadStoredBellList();
+    if (bellBadge) {
+      bellBadge.textContent = String(items.length);
+    }
+    if (bellStatus) {
+      const overdueCnt = items.filter(x => x.category === 'leave_2d').length;
+      bellStatus.textContent = overdueCnt > 0
+        ? `Real-time: ${overdueCnt} pending leave(s) 2+ days • Auto-clears on approve/reject`
+        : 'Real-time monitoring active • Auto-clears on approve/reject';
+    }
+
+    if (!items.length) {
+      bellList.innerHTML = `
+        <div class="bell-notif-item">
+          <div class="bell-notif-top">
+            <span class="bell-notif-title">No Pending Leave Alerts</span>
+            <span class="bell-notif-tag info">Live</span>
+          </div>
+          <p class="bell-notif-msg">Pending leave alerts appear here automatically and disappear once approved or rejected.</p>
+        </div>
+      `;
       return;
     }
 
     bellList.innerHTML = items.map(n => {
-      const isCron = (n.category || '').toLowerCase() === 'cron';
-      const tagClass = isCron ? 'bell-notif-tag cron' : 'bell-notif-tag';
-      const tagText = isCron ? 'Cron Job' : 'HR Alert';
-      const linkHtml = n.url ? `<a href="${escapeHtml(n.url)}" class="bell-notif-link">Open →</a>` : '';
+      const isLeave2d = (n.category || '') === 'leave_2d';
+      const tagClass = isLeave2d ? 'bell-notif-tag' : 'bell-notif-tag info';
+      const tagText = isLeave2d ? '2d+ Leave' : 'Live HR';
+      const linkHtml = n.url ? `<a href="${escapeHtml(n.url)}" class="bell-notif-link">Review →</a>` : '';
 
       return `
         <div class="bell-notif-item">
           <div class="bell-notif-top">
-            <span class="bell-notif-title">${escapeHtml(n.title || 'Notification')}</span>
+            <span class="bell-notif-title">${escapeHtml(n.title || 'HR Notification')}</span>
             <span class="${tagClass}">${tagText}</span>
           </div>
           <p class="bell-notif-msg">${escapeHtml(n.message || '')}</p>
           <div class="bell-notif-meta">
-            <span>${escapeHtml(n.time || '')}</span>
+            <span>${escapeHtml(formatRelativeTime(n.created_at))}</span>
             ${linkHtml}
           </div>
         </div>
       `;
     }).join('');
-  }
-
-  async function loadCronNotifications(runCron = false) {
-    try {
-      const qs = runCron ? '?action=run_cron&_ts=' + Date.now() : '?action=list&_ts=' + Date.now();
-      const res = await fetch('/api/hr_cron_notifications.php' + qs, { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && Array.isArray(data.notifications)) {
-        renderBellNotifications(data.notifications);
-      }
-      if (runCron && typeof refreshDashboardStats === 'function') {
-        refreshDashboardStats();
-      }
-    } catch (_) {}
   }
 
   bellBtn?.addEventListener('click', (e) => {
@@ -823,17 +906,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bellWin.classList.toggle('is-open', opening);
     bellBtn.setAttribute('aria-expanded', String(opening));
     if (opening) {
-      loadCronNotifications(false);
+      renderBellNotifications();
     }
-  });
-
-  runCronBtn?.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    runCronBtn.disabled = true;
-    runCronBtn.textContent = 'Running...';
-    await loadCronNotifications(true);
-    runCronBtn.disabled = false;
-    runCronBtn.textContent = '▶ Run Cron';
   });
 
   document.addEventListener('click', (e) => {
@@ -842,6 +916,8 @@ document.addEventListener('DOMContentLoaded', () => {
       bellBtn.setAttribute('aria-expanded', 'false');
     }
   });
+
+  renderBellNotifications();
 
   // 1. Employee Overview Donut Chart
   const overviewCtx = document.getElementById('employeeOverviewChart').getContext('2d');
@@ -957,16 +1033,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const badgeEl       = document.getElementById('sse-badge');
   const statusEl      = document.getElementById('sse-status-text');
-  const datePicker    = document.getElementById('attendance-date-picker');
-  const exportLink    = document.getElementById('download-day-report');
-  const tbodyEl       = document.getElementById('daily-attendance-tbody');
-  const headingEl     = document.getElementById('daily-attendance-heading');
   const presentChipEl = document.getElementById('kpi-present-chip');
   const presentTitle  = document.getElementById('kpi-present-title');
   const donutDayLabel = document.getElementById('donut-day-label');
   const searchInput   = document.getElementById('top-dashboard-search');
 
-  let cachedDailyRows = [];
   let activeFetchController = null;
 
   const statsEndpoints = [
@@ -990,14 +1061,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  function describeSelectedDate(ymd) {
-    const today = formatYmd(0);
-    const yesterday = formatYmd(-1);
-    if (ymd === today) return 'Today';
-    if (ymd === yesterday) return 'Yesterday';
-    return ymd;
-  }
-
   function applyTrendChartData(trendObj, fallbackTotalEmployees, fallbackPresentCount, fallbackLeaveCount = 0) {
     const labels  = Array.isArray(trendObj?.labels) && trendObj.labels.length > 0 ? trendObj.labels : null;
     const present = Array.isArray(trendObj?.present) && trendObj.present.length > 0 ? trendObj.present : null;
@@ -1014,7 +1077,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? (fallbackTotalEmployees > 0 ? Math.min(100, Math.round((fallbackLeaveCount / fallbackTotalEmployees) * 1000) / 10) : 0)
             : 0);
     } else {
-      const base = new Date((datePicker.value || formatYmd(0)) + 'T00:00:00');
+      const base = new Date(formatYmd(0) + 'T00:00:00');
       const generatedLabels = [];
       const generatedPresent = [];
       const generatedAbsent = [];
@@ -1057,50 +1120,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('trend-leave-rating').textContent   = `Leave: ${Number(lRate).toFixed(1)}%`;
   }
 
-  function renderDailyAttendance(rows) {
-    const query = (searchInput?.value || '').trim().toLowerCase();
-    const filtered = query
-      ? (rows || []).filter(r =>
-          String(r.employee_id ?? '').toLowerCase().includes(query) ||
-          String(r.employee_name ?? '').toLowerCase().includes(query) ||
-          String(r.position_name ?? '').toLowerCase().includes(query) ||
-          String(r.department_name ?? '').toLowerCase().includes(query) ||
-          String(r.day_status ?? '').toLowerCase().includes(query)
-        )
-      : (rows || []);
-
-    if (!Array.isArray(filtered) || filtered.length === 0) {
-      tbodyEl.innerHTML = `<tr><td colspan="8" style="padding:14px 8px;color:#94a3b8;">No employee records found for this date.</td></tr>`;
-      return;
-    }
-
-    tbodyEl.innerHTML = filtered.map(r => {
-      const status = r.day_status || 'Absent';
-      let badgeColor = '#f87171';
-      if (status === 'Active') badgeColor = '#34d399';
-      else if (status === 'Present') badgeColor = '#60a5fa';
-      else if (status === 'On Leave') badgeColor = '#fbbf24';
-
-      return `
-        <tr style="border-bottom:1px solid rgba(148,163,184,0.12);">
-          <td style="padding:10px 8px;"><strong>#${escapeHtml(r.employee_id ?? '')}</strong></td>
-          <td style="padding:10px 8px;"><strong style="color:#f8fafc;">${escapeHtml(r.employee_name || ('Employee #' + (r.employee_id ?? '')))}</strong></td>
-          <td style="padding:10px 8px;">${escapeHtml(r.position_name || 'Unassigned')}</td>
-          <td style="padding:10px 8px;">${escapeHtml(r.department_name || 'Unassigned')}</td>
-          <td style="padding:10px 8px;">
-            <span style="display:inline-flex;align-items:center;gap:6px;font-weight:600;color:${badgeColor};">
-              <span style="width:7px;height:7px;border-radius:50%;background:${badgeColor};"></span>
-              ${escapeHtml(status)}
-            </span>
-          </td>
-          <td style="padding:10px 8px;">${escapeHtml(r.time_in || '—')}</td>
-          <td style="padding:10px 8px;">${escapeHtml(r.time_out || '—')}</td>
-          <td style="padding:10px 8px;"><strong>${r.workhours !== null && r.workhours !== undefined && r.workhours !== '' ? escapeHtml(r.workhours) + ' hrs' : '—'}</strong></td>
-        </tr>
-      `;
-    }).join('');
-  }
-
   async function fetchStatsJson(selectedDate, signal) {
     const candidates = resolvedStatsEndpoint
       ? [resolvedStatsEndpoint, ...statsEndpoints.filter(u => u !== resolvedStatsEndpoint)]
@@ -1118,22 +1137,16 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(`HTTP ${res.status}`);
       }
       resolvedStatsEndpoint = baseUrl;
-      exportLink.href = `${baseUrl}?export=csv&date=${encodeURIComponent(selectedDate)}`;
       return await res.json();
     }
     throw new Error(`HTTP ${lastStatus}`);
   }
 
   async function refreshDashboardStats(overrideDate = null) {
-    const selectedDate = overrideDate || datePicker.value || formatYmd(0);
-    datePicker.value = selectedDate;
-
-    const label = describeSelectedDate(selectedDate);
-    headingEl.textContent     = `Employee Attendance (${label})`;
-    presentChipEl.textContent = label;
-    presentTitle.textContent  = selectedDate === formatYmd(0) ? 'Present Today' : `Present (${label})`;
-    donutDayLabel.textContent = label;
-    exportLink.href = `${resolvedStatsEndpoint || '/api/hr_dashboard_stats.php'}?export=csv&date=${encodeURIComponent(selectedDate)}`;
+    const selectedDate = overrideDate || formatYmd(0);
+    presentChipEl.textContent = 'Today';
+    presentTitle.textContent  = 'Present Today';
+    donutDayLabel.textContent = 'Today';
 
     if (activeFetchController) {
       activeFetchController.abort();
@@ -1144,9 +1157,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await fetchStatsJson(selectedDate, activeFetchController.signal);
       if (!data || !data.kpis) {
         applyTrendChartData(null, <?= (int)$employeeCount ?>, <?= (int)$activeEmployeeCount ?>, <?= (int)$onLeaveCount ?>);
-        tbodyEl.innerHTML = `<tr><td colspan="8" style="padding:14px 8px;color:#f87171;">Invalid response from attendance API.</td></tr>`;
         return;
       }
+
+      syncPendingLeaveIdsFromStats(data);
 
       const total   = Number(data.kpis.total_employees ?? 0);
       const active  = Number(data.overview?.active_today ?? data.kpis.present_today ?? 0);
@@ -1158,8 +1172,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('kpi-on-leave').textContent         = leave.toLocaleString();
       document.getElementById('kpi-pending-requests').textContent = pending.toLocaleString();
 
-      document.getElementById('top-notif-badge').textContent = String(pending);
-      document.getElementById('top-msg-badge').textContent   = String(active);
+      document.getElementById('top-msg-badge').textContent = String(active);
 
       document.getElementById('donut-total').textContent     = (active + leave).toLocaleString();
       document.getElementById('legend-active').textContent   = active.toLocaleString();
@@ -1169,33 +1182,46 @@ document.addEventListener('DOMContentLoaded', () => {
       overviewChart.update();
 
       applyTrendChartData(data.attendance_trend, total, active, leave);
-
-      cachedDailyRows = Array.isArray(data.daily_attendance) ? data.daily_attendance : [];
-      renderDailyAttendance(cachedDailyRows);
     } catch (err) {
       if (err && err.name === 'AbortError') return;
       applyTrendChartData(null, <?= (int)$employeeCount ?>, <?= (int)$activeEmployeeCount ?>, <?= (int)$onLeaveCount ?>);
-      tbodyEl.innerHTML = `<tr><td colspan="8" style="padding:14px 8px;color:#f87171;">Failed to load records (${escapeHtml(err?.message || 'Error')}). Make sure hr_dashboard_stats.php exists in /api/.</td></tr>`;
     }
   }
 
-  document.getElementById('btn-day-today').addEventListener('click', () => refreshDashboardStats(formatYmd(0)));
-  document.getElementById('btn-day-yesterday').addEventListener('click', () => refreshDashboardStats(formatYmd(-1)));
-  datePicker.addEventListener('change', () => refreshDashboardStats(datePicker.value || formatYmd(0)));
-  searchInput?.addEventListener('input', () => renderDailyAttendance(cachedDailyRows));
+  searchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const q = (searchInput.value || '').trim().toLowerCase();
+      if (!q) return;
+      if (q.includes('leave')) window.location.href = '/hr/leave_management.php';
+      else if (q.includes('emp') || q.includes('add')) window.location.href = '/hr/add_employee.php';
+      else if (q.includes('rep') || q.includes('audit')) window.location.href = '/hr/report.php';
+      else if (q.includes('dept') || q.includes('set')) window.location.href = '/hr/department.php';
+    }
+  });
 
-  function prependActivity(text, timeLabel) {
+  function prependActivity(text, createdMs = Date.now()) {
     const listEl = document.getElementById('live-activities-list');
     const row = document.createElement('div');
     row.className = 'activity-row-item';
+    row.dataset.createdAt = String(Number(createdMs) || Date.now());
     row.innerHTML = `
       <span><span class="dot teal" style="display:inline-block;margin-right:8px;"></span>${escapeHtml(text)}</span>
-      <small class="muted">${escapeHtml(timeLabel)}</small>
+      <small class="muted activity-rel-time">${escapeHtml(formatRelativeTime(createdMs))}</small>
     `;
     listEl.prepend(row);
     while (listEl.children.length > 5) {
       listEl.removeChild(listEl.lastElementChild);
     }
+  }
+
+  function refreshAllRelativeTimestamps() {
+    renderBellNotifications();
+    document.querySelectorAll('#live-activities-list .activity-row-item[data-created-at]').forEach(row => {
+      const timeEl = row.querySelector('.activity-rel-time');
+      if (timeEl) {
+        timeEl.textContent = formatRelativeTime(Number(row.dataset.createdAt));
+      }
+    });
   }
 
   async function fetchRealtimeToken() {
@@ -1224,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
       wsInstance.onopen = () => {
         setLiveState(true, 'Live • WebSocket');
         refreshDashboardStats();
+        renderBellNotifications();
       };
 
       wsInstance.onmessage = (msg) => {
@@ -1231,22 +1258,51 @@ document.addEventListener('DOMContentLoaded', () => {
           const packet = JSON.parse(msg.data);
           if (packet.type === 'event' && packet.event) {
             const ev = packet.event;
+            const eventMs = ev.timestamp
+              ? (typeof ev.timestamp === 'number' ? (ev.timestamp < 1e12 ? ev.timestamp * 1000 : ev.timestamp) : Date.parse(ev.timestamp) || Date.now())
+              : Date.now();
             refreshDashboardStats();
-            loadCronNotifications(false);
-            if (ev.type === 'attendance.time_in') {
-              prependActivity(`${ev.employee || 'An employee'} timed in`, 'Just now');
+            if (ev.type === 'leave.reminder') {
+              const reqId = Number(ev.request_id || ev.id || 0);
+              const emp = ev.employee || 'Employee';
+              const days = ev.days_pending || ev.days || '2+';
+              storeBellNotification({
+                id: `ws_reminder_${reqId || Date.now()}_r${ev.reminder_count || 1}`,
+                request_id: reqId,
+                category: 'leave_2d',
+                title: `Unprocessed Leave (${days}d): ${emp}`,
+                message: ev.message || `Leave request #${reqId} is still pending approval/rejection.`,
+                created_at: eventMs,
+                url: '/hr/leave_management.php'
+              });
+              prependActivity(`Reminder: ${emp}'s leave #${reqId} pending (${days}d)`, eventMs);
+            } else if (ev.type === 'attendance.time_in') {
+              prependActivity(`${ev.employee || 'An employee'} timed in`, eventMs);
             } else if (ev.type === 'attendance.time_out') {
-              prependActivity(`${ev.employee || 'An employee'} timed out (${ev.workhours ?? ''} hrs)`, 'Just now');
+              prependActivity(`${ev.employee || 'An employee'} timed out (${ev.workhours ?? ''} hrs)`, eventMs);
             } else if (ev.type === 'attendance.break_time') {
-              prependActivity(`${ev.employee || 'An employee'} went on break`, 'Just now');
+              prependActivity(`${ev.employee || 'An employee'} went on break`, eventMs);
             } else if (ev.type === 'leave.filed') {
-              prependActivity(`${ev.employee || 'An employee'} filed a leave request`, 'Just now');
+              const reqId = Number(ev.request_id || ev.id || 0);
+              storeBellNotification({
+                id: `ws_filed_${reqId || Date.now()}`,
+                request_id: reqId,
+                category: 'live',
+                title: `New Leave Request: ${ev.employee || 'Employee'}`,
+                message: ev.message || 'An employee filed a new leave request awaiting HR review.',
+                created_at: eventMs,
+                url: '/hr/leave_management.php'
+              });
+              prependActivity(`${ev.employee || 'An employee'} filed a leave request`, eventMs);
             } else if (ev.type === 'leave.approved') {
-              prependActivity(`${ev.employee || 'An employee'}'s leave was approved`, 'Just now');
+              removeLeaveNotificationByRequestId(ev.request_id || ev.id);
+              prependActivity(`${ev.employee || 'An employee'}'s leave was approved`, eventMs);
             } else if (ev.type === 'leave.rejected') {
-              prependActivity(`${ev.employee || 'An employee'}'s leave was rejected`, 'Just now');
+              removeLeaveNotificationByRequestId(ev.request_id || ev.id);
+              prependActivity(`${ev.employee || 'An employee'}'s leave was rejected`, eventMs);
             } else if (ev.type === 'leave.cancelled') {
-              prependActivity(`${ev.employee || 'An employee'} cancelled a leave request`, 'Just now');
+              removeLeaveNotificationByRequestId(ev.request_id || ev.id);
+              prependActivity(`${ev.employee || 'An employee'} cancelled a leave request`, eventMs);
             }
           }
         } catch (_) {}
@@ -1270,9 +1326,12 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshDashboardStats();
   }, 10000);
 
+  setInterval(() => {
+    refreshAllRelativeTimestamps();
+  }, 15000);
+
+  applyTrendChartData(null, <?= (int)$employeeCount ?>, <?= (int)$activeEmployeeCount ?>, <?= (int)$onLeaveCount ?>);
   refreshDashboardStats(formatYmd(0));
-  loadCronNotifications(false);
   connectWebSocket();
 });
 </script>
-```[cite: 3, 5, 6, 8, 9, 10]
