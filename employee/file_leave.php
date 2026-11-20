@@ -9,6 +9,11 @@ require_once __DIR__ . '/../classes/LeaveAuditLog.php';
 
 date_default_timezone_set('Asia/Manila');
 
+$gateHelper = __DIR__ . '/../includes/onboarding_gate.php';
+if (is_file($gateHelper)) {
+    require_once $gateHelper;
+}
+
 // Logged in, account still active, employee portal, allowed to file leave
 require_once __DIR__ . '/../authentication/guard.php';
 require_access('leave_requests', 'submit', 'own', ['employee']);
@@ -51,6 +56,22 @@ $message = '';
 $error = '';
 // employees has first/last name columns; the rest of this page uses 'name'
 $employeeData['name'] = trim(($employeeData['first_name'] ?? '') . ' ' . ($employeeData['last_name'] ?? ''));
+
+$orientationGate = function_exists('hris_is_orientation_locked_for_employee')
+    ? hris_is_orientation_locked_for_employee($pdo, $employeeId, (string)$email, (string)$employeeData['name'])
+    : ['locked' => false, 'message' => ''];
+
+if (isset($_GET['api']) && $_GET['api'] === 'orientation_lock_status') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    echo json_encode([
+        'ok'         => true,
+        'locked'     => (bool)$orientationGate['locked'],
+        'message'    => (string)$orientationGate['message'],
+        'serverTime' => date('h:i:s A'),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 $defaultLeaveTypes = [
     [
@@ -172,8 +193,9 @@ if (
 ) {
     $formAction = $_POST['form_action'] ?? 'submit';
 
-
-    if ($formAction === 'continue') {
+    if (!empty($orientationGate['locked'])) {
+        $error = (string)$orientationGate['message'];
+    } elseif ($formAction === 'continue') {
     } elseif (!$canSubmit) {
         $error = "Daily limit reached: You can only file 1 leave request every 24 hours. Next request available on {$nextAvailableTimeFormatted} (in {$hoursLeft}h {$minutesLeft}m).";
     } else {
@@ -294,8 +316,6 @@ if (
 
                     $pdo->commit();
 
-                    // Audit trail: record who filed it (after commit so a log
-                    // failure can never roll back the request itself).
                     (new LeaveAuditLog($pdo))->log(
                         $newRequestId,
                         $employeeId,
@@ -381,7 +401,6 @@ try {
 }
 
 try {
-    // `leave` is a reserved word in MySQL, so it must be quoted with backticks
     $stmtLeaveBal = $pdo->prepare("
         SELECT annual_leave, sick_leave, personal_leave
         FROM `leave`
@@ -420,6 +439,8 @@ $user = [
     'status'    => htmlspecialchars($employeeData['status'] ?? 'Active Employee', ENT_QUOTES, 'UTF-8'),
     'avatar'    => 'https://ui-avatars.com/api/?name=' . urlencode($employeeData['name'] ?? 'User') . '&background=4763ff&color=fff'
 ];
+
+$formBlocked = !$canSubmit || !empty($orientationGate['locked']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -431,7 +452,6 @@ $user = [
     <?php require __DIR__ . '/../templates/employeeTemplates/tailwind.php'; ?>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Master application layout: shared HRIS design system (sidebar, topbar, tokens) -->
     <link rel="stylesheet" href="../assets/css/hris-base.css">
 
     <style>
@@ -439,7 +459,6 @@ $user = [
             font-family: 'Inter', sans-serif;
         }
         .accent-text { color: #76f5e8; }
-        /* Let the shared .main wrapper own the scroll; Tailwind content sits inside it */
         .emp-leave-content { padding: 0; }
     </style>
 </head>
@@ -447,18 +466,29 @@ $user = [
 <body class="hris-app page-file_leave">
 
 <?php
-    // Master layout shell (shared sidebar + topbar) — identical to every other
-    // employee page. The leave content + its JS stay on Tailwind inside .content.
     $title = 'Leave Management';
     $eyebrow = 'EMPLOYEE PORTAL';
     $subtitle = 'Submit and monitor leave requests with instant updates';
-    $pageCss = '';            // CSS already linked above; skip per-page include
-    $realtime = true;         // shared header renders the badge, shared footer loads realtime.js
+    $pageCss = '';
+    $realtime = true;
     $topbarExtra = '<a href="/employee/leave_history.php" class="primary-button" title="View your leave history">Leave History</a>';
     require __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
 
         <div class="emp-leave-content max-w-[1400px] w-full mx-auto space-y-6">
+
+            <div id="fileLeaveOrientationBanner">
+                <?php if (!empty($orientationGate['locked'])): ?>
+                    <div class="bg-rose-950/80 border border-rose-500 text-rose-300 px-5 py-4 rounded-xl flex items-center shadow-lg">
+                        <svg class="w-5 h-5 mr-3 shrink-0 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <p class="text-sm font-medium"><?= e((string)$orientationGate['message']) ?></p>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
 
             <!-- Flash Notifications -->
             <?php if ($message !== ''): ?>
@@ -528,7 +558,6 @@ $user = [
                 <form method="POST" action="file_leave.php" id="leaveForm" class="space-y-5">
                     <input type="hidden" name="action" value="request_leave">
 
-                    <!-- 24-Hour Cooldown Banner if active -->
                     <?php if (!$canSubmit): ?>
                         <div id="cooldownAlertBox" class="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 flex items-start space-x-3.5 shadow-md">
                             <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
@@ -562,8 +591,9 @@ $user = [
                             id="leave_type_id"
                             name="leave_type_id"
                             required
+                            <?= $formBlocked ? 'disabled' : '' ?>
                             onchange="handleLeaveTypeChange(this.value)"
-                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <option value="">-- Select Leave Type --</option>
 
                             <?php foreach ($leaveTypes as $type): ?>
@@ -580,7 +610,6 @@ $user = [
                         </select>
                     </div>
 
-                    <!-- Custom Leave Type Input -->
                     <div id="other_leave_wrapper" class="<?= $showOtherLeaveType ? '' : 'hidden' ?> transition-all">
                         <label for="other_leave_type" class="block text-xs text-textmuted mb-1.5 font-medium">
                             Custom Leave Type Name <span class="text-rose-400">*</span>
@@ -591,13 +620,13 @@ $user = [
                             id="other_leave_type"
                             name="other_leave_type"
                             maxlength="150"
+                            <?= $formBlocked ? 'disabled' : '' ?>
                             value="<?= e($otherLeaveType) ?>"
                             placeholder="e.g. Sabbatical Leave, Bereavement Extension, etc."
-                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <p class="text-[11px] text-textmuted mt-1">This will be registered under <code class="text-cyan-300">leave_types</code> upon submission.</p>
                     </div>
 
-                    <!-- Date Range Selection -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div>
                             <label for="start_date" class="block text-xs text-textmuted mb-1.5 font-medium">
@@ -610,9 +639,10 @@ $user = [
                                 name="start_date"
                                 min="<?= date('Y-m-d') ?>"
                                 required
+                                <?= $formBlocked ? 'disabled' : '' ?>
                                 value="<?= e($startDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         </div>
 
                         <div>
@@ -626,13 +656,13 @@ $user = [
                                 name="end_date"
                                 min="<?= date('Y-m-d') ?>"
                                 required
+                                <?= $formBlocked ? 'disabled' : '' ?>
                                 value="<?= e($endDate) ?>"
                                 onchange="calculateDays()"
-                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors">
+                                class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl px-4 py-3 focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         </div>
                     </div>
 
-                    <!-- Calculated Duration Badge -->
                     <div id="days_preview" class="hidden p-3 bg-[#0e1430] border border-cardborder rounded-xl flex items-center justify-between text-xs">
                         <span class="text-textmuted">Requested Duration:</span>
                         <span id="days_count" class="font-bold text-cyan-400 text-sm">0 calendar day(s)</span>
@@ -648,8 +678,9 @@ $user = [
                             name="reason"
                             rows="3"
                             required
+                            <?= $formBlocked ? 'disabled' : '' ?>
                             placeholder="Please provide details about your leave application..."
-                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors"><?= e($reason) ?></textarea>
+                            class="w-full bg-[#0a0e20] text-sm text-white border border-cardborder rounded-xl p-3 focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><?= e($reason) ?></textarea>
                     </div>
 
                     <div class="pt-2 flex items-center space-x-4">
@@ -658,18 +689,19 @@ $user = [
                             id="submitLeaveBtn"
                             name="form_action"
                             value="submit"
-                            <?= !$canSubmit ? 'disabled' : '' ?>
-                            class="<?= !$canSubmit ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center">
+                            <?= $formBlocked ? 'disabled' : '' ?>
+                            class="<?= $formBlocked ? 'bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed' : 'bg-accent hover:bg-accenthover text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' ?> font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                             </svg>
-                            <span id="submitBtnText"><?= !$canSubmit ? 'Locked (1 Request / 24h)' : 'Submit Leave Application' ?></span>
+                            <span id="submitBtnText"><?= !empty($orientationGate['locked']) ? 'Locked (Awaiting Orientation Present)' : (!$canSubmit ? 'Locked (1 Request / 24h)' : 'Submit Leave Application') ?></span>
                         </button>
 
                         <button
                             type="reset"
                             onclick="resetFormUI()"
-                            class="text-xs text-textmuted hover:text-white px-4 py-3 transition-colors">
+                            <?= $formBlocked ? 'disabled' : '' ?>
+                            class="text-xs text-textmuted hover:text-white px-4 py-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                             Clear Form
                         </button>
                     </div>
@@ -788,13 +820,19 @@ $user = [
         </div><!-- /.emp-leave-content -->
 
     <script>
+        let eoOrientationLocked = <?= !empty($orientationGate['locked']) ? 'true' : 'false' ?>;
+        let eoOrientationLockMsg = <?= json_encode((string)$orientationGate['message'], JSON_UNESCAPED_UNICODE) ?>;
+        let cooldownRemaining = <?= (int)$cooldownSecondsRemaining ?>;
+
         function handleLeaveTypeChange(val) {
             const wrapper = document.getElementById('other_leave_wrapper');
             const input = document.getElementById('other_leave_type');
             if (val === 'other') {
                 wrapper.classList.remove('hidden');
-                input.setAttribute('required', 'required');
-                input.focus();
+                if (!eoOrientationLocked && cooldownRemaining <= 0) {
+                    input.setAttribute('required', 'required');
+                    input.focus();
+                }
             } else {
                 wrapper.classList.add('hidden');
                 input.removeAttribute('required');
@@ -832,13 +870,51 @@ $user = [
             document.getElementById('days_preview').classList.add('hidden');
         }
 
-        // 24-Hour Cooldown Countdown Timer
-        let cooldownRemaining = <?= (int)$cooldownSecondsRemaining ?>;
+        function escHtml(v) {
+            return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function syncLeaveFormLock() {
+            const blocked = eoOrientationLocked || cooldownRemaining > 0;
+            const form = document.getElementById('leaveForm');
+            const submitBtn = document.getElementById('submitLeaveBtn');
+            const submitBtnText = document.getElementById('submitBtnText');
+            const bannerHost = document.getElementById('fileLeaveOrientationBanner');
+
+            if (form) {
+                form.querySelectorAll('input, select, textarea').forEach(el => {
+                    if (el.name === 'action') return;
+                    el.disabled = blocked;
+                });
+            }
+
+            if (submitBtn) {
+                submitBtn.disabled = blocked;
+                submitBtn.className = blocked
+                    ? "bg-gray-700/60 border border-gray-600/40 text-gray-400 cursor-not-allowed font-semibold text-sm py-3 px-8 rounded-xl transition-all flex items-center"
+                    : "bg-accent hover:bg-accenthover text-white font-semibold text-sm py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all flex items-center";
+            }
+
+            if (submitBtnText) {
+                if (eoOrientationLocked) {
+                    submitBtnText.textContent = "Locked (Awaiting Orientation Present)";
+                } else if (cooldownRemaining > 0) {
+                    submitBtnText.textContent = "Locked (1 Request / 24h)";
+                } else {
+                    submitBtnText.textContent = "Submit Leave Application";
+                }
+            }
+
+            if (bannerHost) {
+                bannerHost.innerHTML = eoOrientationLocked
+                    ? `<div class="bg-rose-950/80 border border-rose-500 text-rose-300 px-5 py-4 rounded-xl flex items-center shadow-lg"><svg class="w-5 h-5 mr-3 shrink-0 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><div><p class="text-sm font-medium">${escHtml(eoOrientationLockMsg)}</p></div></div>`
+                    : '';
+            }
+        }
+
         if (cooldownRemaining > 0) {
             const countdownBadge = document.getElementById('cooldownCountdownBadge');
             const alertBox = document.getElementById('cooldownAlertBox');
-            const submitBtn = document.getElementById('submitLeaveBtn');
-            const submitBtnText = document.getElementById('submitBtnText');
 
             const cooldownInterval = setInterval(function() {
                 if (cooldownRemaining <= 0) {
@@ -846,13 +922,7 @@ $user = [
                     if (alertBox) {
                         alertBox.classList.add('hidden');
                     }
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.className = "bg-accent hover:bg-accenthover text-white font-semibold text-sm py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all flex items-center";
-                    }
-                    if (submitBtnText) {
-                        submitBtnText.textContent = "Submit Leave Application";
-                    }
+                    syncLeaveFormLock();
                     return;
                 }
 
@@ -868,13 +938,47 @@ $user = [
             }, 1000);
         }
 
-        // Initialize on page load in case values are preserved
+        (function () {
+            async function pollOrientationLock() {
+                try {
+                    const res = await fetch(`?api=orientation_lock_status&_=${Date.now()}`, { cache: 'no-store' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data && data.ok) {
+                        const nextLocked = Boolean(data.locked);
+                        const nextMsg = data.message || '';
+                        if (nextLocked !== eoOrientationLocked || nextMsg !== eoOrientationLockMsg) {
+                            eoOrientationLocked = nextLocked;
+                            eoOrientationLockMsg = nextMsg;
+                            syncLeaveFormLock();
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            (function connectWS() {
+                const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                let ws;
+                try {
+                    ws = new WebSocket(`${proto}//${window.location.hostname}:8090/ws`);
+                    ws.onmessage = () => pollOrientationLock();
+                    ws.onclose = () => setTimeout(connectWS, 3000);
+                } catch (_) {}
+            })();
+
+            setInterval(() => { if (!document.hidden) pollOrientationLock(); }, 1500);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) pollOrientationLock();
+            });
+        })();
+
         document.addEventListener('DOMContentLoaded', function() {
             const leaveTypeSelect = document.getElementById('leave_type_id');
             if (leaveTypeSelect && leaveTypeSelect.value === 'other') {
                 handleLeaveTypeChange('other');
             }
             calculateDays();
+            syncLeaveFormLock();
         });
     </script>
 <?php require __DIR__ . '/../templates/employeeTemplates/footer.php'; ?>
