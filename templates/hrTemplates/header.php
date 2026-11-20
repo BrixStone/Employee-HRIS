@@ -18,6 +18,7 @@ $isManager = $navRole === 'manager';
 $pageTitles = [
   'dashboard' => $isManager ? 'Manager Dashboard' : 'HR Dashboard',
   'employees' => 'Employee Management',
+  'attendance' => $isManager ? 'Team Attendance' : 'Employee Attendance',
   'add_employee' => 'Add Employee',
   'edit_employee' => 'Edit Employee',
   'view_employee' => 'Employee Profile',
@@ -35,7 +36,6 @@ $pageTitles = [
   'permissions' => 'System Settings',
   'team' => 'My Team',
   'leave_requests' => 'Team Leave Requests',
-  'attendance' => 'Team Attendance'
 ];
 $pageTitle = $pageTitles[$currentPage] ?? 'Human Resources';
 $cssPage = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
@@ -47,6 +47,7 @@ $isOnboardingGroupActive = in_array($currentPage, ['onboarding', 'onboarding_doc
 $navItems = [
   ['/hr/dashboard.php', 'Dashboard', '▦', ['dashboard'], $isHrSide && $navCan('dashboard', 'view', 'all')],
   ['/hr/employees.php', 'Employees', '♙', ['employees', 'add_employee', 'edit_employee', 'view_employee', 'employee_deactivate'], $isHrSide && $navCan('employee_records', 'view', 'all')],
+  ['/hr/attendance.php', 'Attendance', '◷', ['attendance'], $isHrSide && $navCan('employee_records', 'view', 'all')],
   ['/hr/recruitment.php', 'Recruitment', '❖', ['recruitment'], $isHrSide && $navCan('employee_records', 'view', 'all')],
   ['/hr/leave_management.php', 'Leave Management', '◷', ['leave_management'], $isHrSide && $navCan('leave_requests', 'edit', 'all')],
   ['/hr/onboarding.php', 'Onboarding', '✦', ['onboarding', 'onboarding_documents'], $canViewOnboarding],
