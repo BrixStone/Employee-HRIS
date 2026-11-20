@@ -146,7 +146,7 @@ function hris_check_payout_due(PDO $pdo): array {
     return ['due' => false, 'key' => '', 'label' => ''];
 }
 
-function hris_run_automated_checks(PDO $pdo, array &$store, bool $force = false): void {
+function hris_run_automated_checks(PDO $pdo, array &$store, string $storeFile, bool $force = false): void {
     $now = time();
     if (!$force && ($now - (int)($store['last_auto_check'] ?? 0)) < 15) {
         return;
@@ -262,7 +262,7 @@ if ($audience === 'hr' && !$isHrOrAdmin) {
 }
 
 $store = hris_load_store($storeFile);
-hris_run_automated_checks($pdo, $store, $action === 'run_cron');
+hris_run_automated_checks($pdo, $store, $storeFile, $action === 'run_cron');
 
 $notifications = [];
 $unreadCount = 0;
