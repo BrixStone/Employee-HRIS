@@ -186,6 +186,96 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
     html, body {
       overflow-x: hidden;
     }
+    
+/* =========================================
+   ADMIN SIDEBAR - RESPONSIVE OVERLAY FIX
+========================================= */
+
+.sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(var(--sidebar-width), 85vw);
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 300;
+    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+}
+
+.sidebar.hidden {
+    transform: translateX(-100%);
+}
+
+.sidebar:not(.hidden) {
+    transform: translateX(0);
+}
+
+.sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+}
+
+.main {
+    margin-left: 0 !important;
+    width: 100%;
+    min-width: 0;
+}
+
+.topbar {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.topbar-title {
+    min-width: 0;
+}
+
+.topbar-actions {
+    min-width: 0;
+}
+
+.content {
+    min-width: 0;
+    width: 100%;
+}
+
+@media (max-width: 760px) {
+    .sidebar {
+        position: fixed !important;
+        width: min(264px, 85vw);
+        height: 100dvh;
+        padding: 20px 14px;
+    }
+
+    .nav-list {
+        display: grid;
+        overflow: visible;
+    }
+
+    .sidebar-footer {
+        display: block;
+    }
+
+    .topbar {
+        padding: 12px 16px;
+    }
+
+    .topbar-actions {
+        display: none;
+    }
+}
+
+html,
+body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
   </style>
 </head>
 
@@ -236,7 +326,6 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
   <main class="main">
     <header class="topbar">
       <div class="topbar-title">
-        <span class="eyebrow">ADMINISTRATION</span>
         <div class="title-row">
           <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
             <span class="hb-line"></span>
