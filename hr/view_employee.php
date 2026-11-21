@@ -5,6 +5,7 @@ require_access('employee_records', 'view', 'all');
 
 require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../classes/Employee.php';
+require_once __DIR__ . '/../config/helpers.php';
 
 $employeeModel = new Employee($pdo);
 
@@ -63,6 +64,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
     <strong><?= v($emp['employee_id']) ?></strong>
     <?= v($fullname) ?>
     <em><?= v($emp['employment_status']) ?></em>
+    <?= rank_badge($emp['rank'] ?? 'employee') ?>
 </p>
 
 <h2>Personal Information</h2>
@@ -79,6 +81,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
 <ul>
     <li>Department:      <?= v($emp['department_name']?? null) ?></li>
     <li>Postion:         <?= v($emp['position_title'] ?? null) ?></li>
+    <li>Rank:            <?= v(rank_label($emp['rank'] ?? 'employee')) ?></li>
     <li>Date Hired:      <?= v($hired) ?></li>
     <li>Employment Type: <?= v($emp['employment_type'] ?? null) ?></li>
     <li>Status:          <?= v($emp['employment_status'] ?? null) ?></li>

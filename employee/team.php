@@ -142,6 +142,7 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
                 <th>Employee ID</th>
                 <th>Name</th>
                 <th>Position</th>
+                <th>Rank</th>
                 <th>Department</th>
                 <th>Email</th>
                 <th>Phone</th>
@@ -152,7 +153,7 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
         <tbody>
             <?php if (empty($members)): ?>
                 <tr>
-                    <td colspan="7">
+                    <td colspan="8">
                         <div class="empty-state">
                             No employees were found in your department.
                         </div>
@@ -186,6 +187,10 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
 
                         <td>
                             <?= h($member['position_title'] ?? '—') ?>
+                        </td>
+
+                        <td>
+                            <?= rank_badge($member['rank'] ?? 'employee') ?>
                         </td>
 
                         <td>

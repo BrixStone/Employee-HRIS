@@ -326,7 +326,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ── Update Payslip Status ─────────────────────────────────────────────────
   elseif ($form === 'update_payslip_status') {
     $payslipId = (int)($_POST['payslip_id'] ?? 0);
-    $status    = $_POST['status']            ?? '';
+    $status    = trim($_POST['status'] ?? '');
     $periodId  = (int)($_POST['period_id']   ?? 0);
     $allowedTransitions = [
       'Draft' => ['Finalized'],
@@ -760,7 +760,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
   <?php if ($selPeriod): ?>
 
     <!-- Generate payslips -->
-    <?php if (in_array($selPeriod['status'], ['Draft', 'Processed'], true)): ?>
+    <?php if ($selPeriod['status'] === 'Draft'): ?>
       <div class="card">
         <h3>Generate / Refresh Payslips</h3>
         <p class="muted" style="margin-bottom:12px">
@@ -768,7 +768,7 @@ require __DIR__ . '/../templates/hrTemplates/header.php';
           for <strong><?= htmlspecialchars($selPeriod['period_name']) ?></strong>
           (<?= htmlspecialchars($selPeriod['start_date']) ?> →
           <?= htmlspecialchars($selPeriod['end_date']) ?>).
-          Running again will update existing drafts.
+          Running again will update existing Draft payslips (finalized ones are kept).
         </p>
         <form method="post">
           <input type="hidden" name="form" value="generate_payslips">

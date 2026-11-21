@@ -174,6 +174,14 @@ function require_access(?string $module = null, string $ability = 'view', ?strin
     }
     $role = $account['role'];
 
+    // Stamp last_activity — powers the "currently online" widget (15-min window)
+    try {
+        $pdo->prepare("UPDATE users SET last_activity = NOW() WHERE id = ?")
+            ->execute([$account['user_id']]);
+    } catch (Throwable $e) {
+        error_log('guard last_activity update failed: ' . $e->getMessage());
+    }
+
     if ($roles !== null && !in_array($role, array_map([Rbac::class, 'normalizeRole'], $roles), true)) {
         guard_forbidden($role);
     }

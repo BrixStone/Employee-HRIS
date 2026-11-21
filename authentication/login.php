@@ -50,7 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 e.id AS emp_id,
                 e.email AS emp_email,
                 e.first_name,
-                e.last_name
+                e.last_name,
+                e.employment_status
             FROM users u
             LEFT JOIN employees e ON e.id = u.employee_id
             WHERE (
@@ -73,60 +74,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$user) {
                 AuditLogger::logFailedLogin($identifier);
                 $error = 'Invalid credentials.';
-            } elseif (strcasecmp((string) $user['status'], 'Active') !== 0) {
-                AuditLogger::logFailedLogin($identifier);
-                $error = 'Account is inactive. Contact an admin.';
             } elseif (!password_verify($password, $user['password_hash'])) {
                 AuditLogger::logFailedLogin($identifier);
                 $error = 'Invalid credentials.';
             } else {
-                // Clear old session data and regenerate the session ID.
-                $_SESSION = [];
+                $userForCheck = [
+                    'id'          => $user['user_id'] ?? null,
+                    'username'    => $user['username'] ?? '',
+                    'role'        => $user['role'] ?? '',
+                    'status'      => $user['status'] ?? '',
+                    'employee_id' => $user['employee_id'] ?? null,
+                ];
 
-                session_regenerate_id(true);
+                $access = function_exists('hris_can_user_login')
+                    ? hris_can_user_login($pdo, $userForCheck)
+                    : ['allowed' => true, 'reason' => ''];
 
-                $_SESSION['user_id'] = (int) $user['user_id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['role'] = $user['role'];
-                $_SESSION['employee_id'] = !empty($user['employee_id'])
-                    ? (int) $user['employee_id']
-                    : null;
-                $_SESSION['email'] = $user['emp_email'] ?? null;
+                $empStatus = strtolower(trim((string)($user['employment_status'] ?? '')));
+                if (!$access['allowed'] || ($empStatus !== '' && $empStatus !== 'active')) {
+                    AuditLogger::logFailedLogin($identifier);
+                    $error = !$access['allowed']
+                        ? $access['reason']
+                        : 'Account is inactive or suspended. Contact HR or an admin.';
+                } else {
+                    // Clear old session data and regenerate the session ID.
+                    $_SESSION = [];
 
-                // Redirect according to the user's role.
-                switch ($user['role']) {
-                    case 'admin':
-                        $destination = '/admin/users.php';
-                        break;
+                    session_regenerate_id(true);
 
-                    case 'hr':
-                        $destination = '/hr/dashboard.php';
-                        break;
+                    $_SESSION['user_id'] = (int) $user['user_id'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['employee_id'] = !empty($user['employee_id'])
+                        ? (int) $user['employee_id']
+                        : null;
+                    $_SESSION['email'] = $user['emp_email'] ?? null;
 
-                    case 'payroll':
-                        $destination = '/hr/dashboard.php';
-                        break;
+                    // Redirect according to the user's role.
+                    switch ($user['role']) {
+                        case 'admin':
+                            $destination = '/admin/users.php';
+                            break;
 
-                    case 'manager':
-                        $destination = '/manager/dashboard.php';
-                        break;
+                        case 'hr':
+                            $destination = '/hr/dashboard.php';
+                            break;
 
-                    case 'employee':
-                        $destination = '/employee/dashboard.php';
-                        break;
+                        case 'payroll':
+                            $destination = '/hr/dashboard.php';
+                            break;
 
-                    default:
-                        $destination = '/';
-                        break;
+                        case 'manager':
+                            $destination = '/manager/dashboard.php';
+                            break;
+
+                        case 'employee':
+                            $destination = '/employee/dashboard.php';
+                            break;
+
+                        default:
+                            $destination = '/';
+                            break;
+                    }
+
+                    AuditLogger::log('login', 'user', (int) $user['user_id'], [
+                        'username' => $user['username'],
+                        'role'     => $user['role'],
+                    ]);
+
+                    header('Location: ' . $destination);
+                    exit;
                 }
-
-                AuditLogger::log('login', 'user', (int) $user['user_id'], [
-                    'username' => $user['username'],
-                    'role'     => $user['role'],
-                ]);
-
-                header('Location: ' . $destination);
-                exit;
             }
         } catch (PDOException $e) {
             // Log the technical error without exposing database details.
