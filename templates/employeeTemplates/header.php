@@ -156,6 +156,7 @@ function emp_nav_active($page, $current): string
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/hris-base.css">
+  <link rel="stylesheet" href="../assets/css/pages/employee-sidebar.css">
   <!-- Pocket Profile modal styles loaded in <head> so the overlay is hidden on
      first paint (prevents a flash of the modal during page load/navigation). -->
   <link rel="stylesheet" href="../assets/css/pocket-profile.css">
@@ -163,11 +164,15 @@ function emp_nav_active($page, $current): string
   <?php if ($cssPage !== ''): ?>
     <link rel="stylesheet" href="../assets/css/pages/<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?>.css">
   <?php endif; ?>
+ <script src="/templates/employeeTemplates/sidebar.js" defer></script>
 </head>
 
 <body class="hris-app page-<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?><?= $embedded ? ' is-embedded' : '' ?>">
   <?php if (!$embedded): ?>
-    <aside class="sidebar">
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <?php endif; ?>
+  <?php if (!$embedded): ?>
+    <aside class="sidebar hidden" id="employeeSidebar">
       <a class="logo-group" href="/employee/dashboard.php" aria-label="Employee dashboard">
         <span class="logo-mark">H</span><span class="logo-text"><strong>HRIS</strong><small>Employee Portal</small></span>
       </a>
@@ -257,15 +262,49 @@ function emp_nav_active($page, $current): string
     <?php if (!$embedded): ?>
       <header class="topbar">
         <div class="topbar-title">
-          <span class="eyebrow"><?= htmlspecialchars($eyebrowText, ENT_QUOTES, 'UTF-8') ?></span>
-          <strong><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></strong>
-          <?php if ($subtitleText !== ''): ?><span class="muted" style="font-size:12px"><?= htmlspecialchars($subtitleText, ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
-        </div>
-        <div class="topbar-actions">
-          <span id="live-datetime" class="system-status" style="font-variant-numeric:tabular-nums"></span>
-          <?php if (!empty($realtime)): ?>
-            <span class="system-status" data-realtime-status><span class="status-dot" style="background:var(--muted);box-shadow:none"></span> Offline</span>
+          <span class="eyebrow">
+            <?= htmlspecialchars($eyebrowText, ENT_QUOTES, 'UTF-8') ?>
+          </span>
+
+          <div class="title-row">
+            <button
+              type="button"
+              class="sidebar-toggle"
+              id="sidebarToggle"
+              aria-label="Open navigation"
+              aria-expanded="false"
+              aria-controls="employeeSidebar">
+
+              <span class="hb-line"></span>
+              <span class="hb-line"></span>
+              <span class="hb-line"></span>
+            </button>
+
+            <strong>
+              <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?>
+            </strong>
+          </div>
+
+          <?php if ($subtitleText !== ''): ?>
+            <span class="muted" style="font-size:12px">
+              <?= htmlspecialchars($subtitleText, ENT_QUOTES, 'UTF-8') ?>
+            </span>
           <?php endif; ?>
+        </div>
+
+        <div class="topbar-actions">
+          <span id="live-datetime"
+            class="system-status"
+            style="font-variant-numeric:tabular-nums"></span>
+
+          <?php if (!empty($realtime)): ?>
+            <span class="system-status" data-realtime-status>
+              <span class="status-dot"
+                style="background:var(--muted);box-shadow:none"></span>
+              Offline
+            </span>
+          <?php endif; ?>
+
           <?= $topbarExtra ?? '' ?>
         </div>
       </header>
