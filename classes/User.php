@@ -504,101 +504,100 @@ class User
 
 
     public function createPasswordResetToken(int $userId): string
-{
-    $token = bin2hex(random_bytes(32));
-    $tokenHash = hash('sha256', $token);
+    {
+        $token = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $token);
 
-    try {
-        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->beginTransaction();
 
-        // Lock the user row to prevent simultaneous reset requests.
-        $st = $this->pdo->prepare(
-            "SELECT id
+            // Lock the user row to prevent simultaneous reset requests.
+            $st = $this->pdo->prepare(
+                "SELECT id
              FROM users
              WHERE id = :id
              AND status = 'Active'
              AND setup_completed = 1
              FOR UPDATE"
-        );
+            );
 
-        $st->execute(['id' => $userId]);
+            $st->execute(['id' => $userId]);
 
-        if (!$st->fetch()) {
-            throw new RuntimeException('Account is not eligible.');
-        }
+            if (!$st->fetch()) {
+                throw new RuntimeException('Account is not eligible.');
+            }
 
-        // Enforce a 60-second reset request cooldown.
-        $st = $this->pdo->prepare(
-            "SELECT created_at
+            // Enforce a 60-second reset request cooldown.
+            $st = $this->pdo->prepare(
+                "SELECT created_at
              FROM password_reset_tokens
              WHERE user_id = :id
              ORDER BY created_at DESC
              LIMIT 1"
-        );
+            );
 
-        $st->execute(['id' => $userId]);
+            $st->execute(['id' => $userId]);
 
-        $lastRequest = $st->fetchColumn();
+            $lastRequest = $st->fetchColumn();
 
-        if ($lastRequest !== false) {
-            $lastRequestTime = strtotime($lastRequest);
+            if ($lastRequest !== false) {
+                $lastRequestTime = strtotime($lastRequest);
 
-            if (
-                $lastRequestTime !== false &&
-                (time() - $lastRequestTime) < 60
-            ) {
-                throw new RuntimeException(
-                    'Password reset request cooldown.'
-                );
+                if (
+                    $lastRequestTime !== false &&
+                    (time() - $lastRequestTime) < 60
+                ) {
+                    throw new RuntimeException(
+                        'Password reset request cooldown.'
+                    );
+                }
             }
-        }
 
-        // Invalidate previous reset links.
-        $st = $this->pdo->prepare(
-            "UPDATE password_reset_tokens
+            // Invalidate previous reset links.
+            $st = $this->pdo->prepare(
+                "UPDATE password_reset_tokens
              SET used_at = NOW()
              WHERE user_id = :id
              AND used_at IS NULL"
-        );
+            );
 
-        $st->execute(['id' => $userId]);
+            $st->execute(['id' => $userId]);
 
-        // Create a new token valid for 10 minutes.
-        $st = $this->pdo->prepare(
-            "INSERT INTO password_reset_tokens
+            // Create a new token valid for 10 minutes.
+            $st = $this->pdo->prepare(
+                "INSERT INTO password_reset_tokens
              (user_id, token_hash, expires_at)
              VALUES (
                 :id,
                 :hash,
                 DATE_ADD(NOW(), INTERVAL 10 MINUTE)
              )"
-        );
+            );
 
-        $st->execute([
-            'id' => $userId,
-            'hash' => $tokenHash
-        ]);
+            $st->execute([
+                'id' => $userId,
+                'hash' => $tokenHash
+            ]);
 
-        $this->pdo->commit();
+            $this->pdo->commit();
 
-        return $token;
+            return $token;
+        } catch (Throwable $e) {
 
-    } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
 
-        if ($this->pdo->inTransaction()) {
-            $this->pdo->rollBack();
+            throw $e;
         }
-
-        throw $e;
     }
-}
 
     public function findValidPasswordResetToken(string $token): ?array
-{
-    $hash = hash('sha256', $token);
+    {
+        $hash = hash('sha256', $token);
 
-    $st = $this->pdo->prepare(
-        "SELECT
+        $st = $this->pdo->prepare(
+            "SELECT
             t.id AS token_id,
             t.user_id,
             u.username
@@ -611,93 +610,307 @@ class User
            AND u.status = 'Active'
            AND u.setup_completed = 1
          LIMIT 1"
-    );
+        );
 
-    $st->execute(['hash' => $hash]);
+        $st->execute(['hash' => $hash]);
 
-    return $st->fetch(PDO::FETCH_ASSOC) ?: null;
-}
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
 
     public function completePasswordReset(
-    int $tokenId,
-    int $userId,
-    string $passwordHash
-): bool {
+        int $tokenId,
+        int $userId,
+        string $passwordHash
+    ): bool {
 
-    try {
-        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->beginTransaction();
 
-        // Lock the reset token.
-        $st = $this->pdo->prepare(
-            "SELECT id
+            // Lock the reset token.
+            $st = $this->pdo->prepare(
+                "SELECT id
              FROM password_reset_tokens
              WHERE id = :token_id
                AND user_id = :user_id
                AND used_at IS NULL
                AND expires_at > NOW()
              FOR UPDATE"
-        );
+            );
 
-        $st->execute([
-            'token_id' => $tokenId,
-            'user_id' => $userId
-        ]);
+            $st->execute([
+                'token_id' => $tokenId,
+                'user_id' => $userId
+            ]);
 
-        if (!$st->fetch()) {
-            $this->pdo->rollBack();
-            return false;
-        }
+            if (!$st->fetch()) {
+                $this->pdo->rollBack();
+                return false;
+            }
 
-        // Update the password of an eligible account.
-        $st = $this->pdo->prepare(
-            "UPDATE users
+            // Update the password of an eligible account.
+            $st = $this->pdo->prepare(
+                "UPDATE users
              SET password = :password,
                  updated_at = NOW()
              WHERE id = :id
                AND status = 'Active'
                AND setup_completed = 1"
-        );
+            );
 
-        $st->execute([
-            'password' => $passwordHash,
-            'id' => $userId
-        ]);
+            $st->execute([
+                'password' => $passwordHash,
+                'id' => $userId
+            ]);
 
-        if ($st->rowCount() !== 1) {
-            $this->pdo->rollBack();
-            return false;
-        }
+            if ($st->rowCount() !== 1) {
+                $this->pdo->rollBack();
+                return false;
+            }
 
-        // Mark the current reset token as used.
-        $st = $this->pdo->prepare(
-            "UPDATE password_reset_tokens
+            // Mark the current reset token as used.
+            $st = $this->pdo->prepare(
+                "UPDATE password_reset_tokens
              SET used_at = NOW()
              WHERE id = :id"
-        );
+            );
 
-        $st->execute(['id' => $tokenId]);
+            $st->execute(['id' => $tokenId]);
 
-        // Invalidate all other outstanding reset links.
-        $st = $this->pdo->prepare(
-            "UPDATE password_reset_tokens
+            // Invalidate all other outstanding reset links.
+            $st = $this->pdo->prepare(
+                "UPDATE password_reset_tokens
              SET used_at = NOW()
              WHERE user_id = :id
                AND used_at IS NULL"
+            );
+
+            $st->execute(['id' => $userId]);
+
+            $this->pdo->commit();
+
+            return true;
+        } catch (Throwable $e) {
+
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
+    }
+
+
+    public function updateAccount(
+        int $userId,
+        string $username,
+        string $role,
+        string $status,
+        ?string $rank
+    ): bool {
+        try {
+            // Validate account data.
+            $role = Rbac::normalizeRole($role);
+
+            if (!in_array($role, Rbac::ROLES, true)) {
+                throw new InvalidArgumentException('Invalid user role.');
+            }
+
+            if (!in_array($status, ['Active', 'Inactive'], true)) {
+                throw new InvalidArgumentException('Invalid account status.');
+            }
+
+            $username = trim($username);
+
+            if ($username === '' || strlen($username) < 3) {
+                throw new InvalidArgumentException('Invalid username.');
+            }
+
+            $this->pdo->beginTransaction();
+
+            // Lock the target account.
+            $st = $this->pdo->prepare(
+                "SELECT id, employee_id, role, status
+             FROM users
+             WHERE id = :id
+             FOR UPDATE"
+            );
+
+            $st->execute(['id' => $userId]);
+            $user = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            // Prevent duplicate usernames.
+            $st = $this->pdo->prepare(
+                "SELECT id
+             FROM users
+             WHERE LOWER(username) = LOWER(:username)
+               AND id <> :id
+             LIMIT 1"
+            );
+
+            $st->execute([
+                'username' => $username,
+                'id' => $userId
+            ]);
+
+            if ($st->fetch()) {
+                throw new InvalidArgumentException('Username already exists.');
+            }
+
+            // Employee and HR accounts require an employee record.
+            if (
+                in_array($role, ['employee', 'hr'], true)
+                && $user['employee_id'] === null
+            ) {
+                throw new InvalidArgumentException(
+                    'This role requires a linked employee record.'
+                );
+            }
+
+            // Never remove the last active administrator.
+            $wasActiveAdmin =
+                Rbac::normalizeRole($user['role']) === 'admin'
+                && strcasecmp($user['status'], 'Active') === 0;
+
+            if (
+                $wasActiveAdmin
+                && ($role !== 'admin' || $status !== 'Active')
+            ) {
+                $st = $this->pdo->prepare(
+                    "SELECT COUNT(*)
+                 FROM users
+                 WHERE LOWER(role) = 'admin'
+                   AND status = 'Active'
+                   AND id <> :id"
+                );
+
+                $st->execute(['id' => $userId]);
+
+                if ((int)$st->fetchColumn() === 0) {
+                    throw new RuntimeException(
+                        'Cannot remove the last active administrator.'
+                    );
+                }
+            }
+
+            // Update account details.
+            $st = $this->pdo->prepare(
+                "UPDATE users
+             SET username = :username,
+                 role = :role,
+                 status = :status,
+                 updated_at = NOW()
+             WHERE id = :id"
+            );
+
+            $st->execute([
+                'username' => $username,
+                'role' => $role,
+                'status' => $status,
+                'id' => $userId
+            ]);
+
+            // Update employee rank when applicable.
+            if ($user['employee_id'] !== null && $rank !== null) {
+                if (!in_array($rank, Rbac::RANKS, true)) {
+                    throw new InvalidArgumentException('Invalid employee rank.');
+                }
+
+                $st = $this->pdo->prepare(
+                    "UPDATE employees
+                 SET `rank` = :rank,
+                     updated_at = NOW()
+                 WHERE id = :id"
+                );
+
+                $st->execute([
+                    'rank' => $rank,
+                    'id' => $user['employee_id']
+                ]);
+            }
+
+            $this->pdo->commit();
+
+            return true;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
+    }
+
+
+    public function getAccountDetails(int $userId): ?array
+    {
+        $st = $this->pdo->prepare(
+            "SELECT
+            u.id,
+            u.username,
+            u.role,
+            u.status,
+            u.setup_completed,
+            u.created_at,
+            u.last_activity,
+            u.employee_id,
+
+            e.employee_id AS employee_no,
+            e.first_name,
+            e.middle_name,
+            e.last_name,
+            e.suffix,
+            e.email,
+            e.phone,
+            e.address,
+            e.date_hired,
+            e.employment_type,
+            e.employment_status,
+            e.`rank`,
+
+            d.name AS department_name,
+            p.title AS position_title
+
+         FROM users u
+         LEFT JOIN employees e ON e.id = u.employee_id
+         LEFT JOIN departments d ON d.id = e.department_id
+         LEFT JOIN positions p ON p.id = e.position_id
+
+         WHERE u.id = :id
+         LIMIT 1"
         );
 
         $st->execute(['id' => $userId]);
 
-        $this->pdo->commit();
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
 
-        return true;
-
-    } catch (Throwable $e) {
-
-        if ($this->pdo->inTransaction()) {
-            $this->pdo->rollBack();
+    public function setAccountStatus(
+        int $userId,
+        string $status
+    ): bool {
+        if (!in_array($status, ['Active', 'Inactive'], true)) {
+            return false;
         }
 
-        throw $e;
+        $st = $this->pdo->prepare(
+            "UPDATE users
+         SET status = :status,
+             updated_at = NOW()
+         WHERE id = :id
+           AND status <> :status_check"
+        );
+
+        $st->execute([
+            'status' => $status,
+            'status_check' => $status,
+            'id' => $userId
+        ]);
+
+        return $st->rowCount() === 1;
     }
-}
 }

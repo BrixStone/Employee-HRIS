@@ -1,605 +1,821 @@
 <?php
-// admin/users.php: user accounts, their role and their status.
+// admin/users.php
+// User directory, account details, account editing, and soft deactivation.
+
 require_once __DIR__ . '/../authentication/guard.php';
 $account = require_access('user_management', 'view', 'all');
+
 require_once __DIR__ . '/../classes/AuditLogger.php';
-
-
-require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()
+require_once __DIR__ . '/../config/helpers.php';
 require_once __DIR__ . '/../classes/User.php';
 
-$canEdit  = Rbac::can($pdo, $account['role'], 'user_management', 'edit');
-$roles    = Rbac::ROLES;
+$canEdit = Rbac::can($pdo, $account['role'], 'user_management', 'edit');
+$isAdmin = Rbac::normalizeRole($account['role']) === 'admin';
+$roles = Rbac::ROLES;
 $ranks = Rbac::RANKS;
 $statuses = ['Active', 'Inactive'];
-$message  = '';
-$error    = '';
-
-if (!empty($_SESSION['user_management_message'])) {
-  $message = $_SESSION['user_management_message'];
-  unset($_SESSION['user_management_message']);
-}
-
-if (!empty($_SESSION['user_management_error'])) {
-  $error = $_SESSION['user_management_error'];
-  unset($_SESSION['user_management_error']);
-}
-
-if (isset($_SESSION['user_message'])) {
-  $message = $_SESSION['user_message'];
-  unset($_SESSION['user_message']);
-}
-
-if (isset($_SESSION['user_error'])) {
-  $error = $_SESSION['user_error'];
-  unset($_SESSION['user_error']);
-}
-
-if (empty($_SESSION['csrf_token'])) {
-  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-  if (!$canEdit) {
-    guard_forbidden($account['role']);
-  }
-  csrf_check($account['role']);
-
-  $targetId  = (int)($_POST['user_id'] ?? 0);
-  $newRole = Rbac::normalizeRole($_POST['role'] ?? '');
-  $newRank = Rbac::normalizeRank($_POST['rank'] ?? 'employee');
-  $newStatus = (string)($_POST['status'] ?? '');
-
-  $st = $pdo->prepare('SELECT
-    u.id,
-    u.username,
-    u.role,
-    u.status,
-    u.employee_id,
-    e.rank
-FROM users u
-LEFT JOIN employees e
-    ON e.id = u.employee_id
-WHERE u.id = :id
-LIMIT 1');
-  $st->execute(['id' => $targetId]);
-  $target = $st->fetch(PDO::FETCH_ASSOC);
-
-  if (!$target) {
-    $error = 'That user no longer exists.';
-  } elseif ($targetId === $account['user_id']) {
-    $error = 'You cannot change your own role or status. Ask another admin.';
-  } elseif (!in_array($newRole, $roles, true)) {
-    $error = 'Unknown role.';
-  } elseif (!in_array($newRank, $ranks, true)) {
-    $error = 'Unknown rank.';
-  } elseif (!in_array($newStatus, $statuses, true)) {
-    $error = 'Unknown status.';
-  } elseif (in_array($newRole, ['employee', 'manager'], true) && $target['employee_id'] === null) {
-    $error = "The {$newRole} role needs a linked employee record, and this account has none.";
-  } else {
-    // Never leave the system without an active admin.
-    $wasActiveAdmin = Rbac::normalizeRole($target['role']) === 'admin'
-      && strcasecmp((string)$target['status'], 'Active') === 0;
-    if ($wasActiveAdmin && ($newRole !== 'admin' || $newStatus !== 'Active')) {
-      $c = $pdo->prepare("SELECT COUNT(*) FROM users WHERE LOWER(role) = 'admin' AND status = 'Active' AND id <> :id");
-      $c->execute(['id' => $targetId]);
-      if ((int)$c->fetchColumn() === 0) {
-        $error = 'This is the last active admin. Make another admin first.';
-      }
-    }
-  }
-
-  if ($error === '') {
-    $up = $pdo->prepare(
-      'UPDATE users
-     SET role = :r,
-         status = :s,
-         updated_at = NOW()
-     WHERE id = :id'
-    );
-
-    $up->execute([
-      'r' => $newRole,
-      's' => $newStatus,
-      'id' => $targetId
-    ]);
-
-    if ($target['employee_id'] !== null) {
-      $rankUpdate = $pdo->prepare(
-        'UPDATE employees
-         SET `rank` = :rank,
-             updated_at = NOW()
-         WHERE id = :employee_id'
-      );
-
-      $rankUpdate->execute([
-        'rank' => $newRank,
-        'employee_id' => $target['employee_id']
-      ]);
-    }
-        AuditLogger::log('user.update', 'user', $targetId, [
-        'username'   => $target['username'],
-        'old_role'   => $target['role'],
-        'new_role'   => $newRole,
-        'old_rank'   => $target['rank'] ?? 'employee',
-        'new_rank'   => $newRank,
-        'old_status' => $target['status'],
-        'new_status' => $newStatus,
-    ]);
-
-    $message = "Saved {$target['username']}: role {$newRole}, rank {$newRank}, status {$newStatus}. "
-      . 'If they are signed in, the change applies on their next click.';
-  }
-}
-
+$currentUserId = (int)($account['user_id'] ?? $account['id'] ?? 0);
+/** @var User $userModel */
 $userModel = new User($pdo);
+
+// Flash messages (supports the keys used by the existing invitation handlers).
+$message = '';
+$error = '';
+foreach (['user_management_message', 'user_message'] as $key) {
+    if (isset($_SESSION[$key]) && $_SESSION[$key] !== '') {
+        $message = (string)$_SESSION[$key];
+        unset($_SESSION[$key]);
+    }
+}
+foreach (['user_management_error', 'user_error'] as $key) {
+    if (isset($_SESSION[$key]) && $_SESSION[$key] !== '') {
+        $error = (string)$_SESSION[$key];
+        unset($_SESSION[$key]);
+    }
+}
+
+// Handle account edits and account activation/deactivation.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    if (!$canEdit) {
+        guard_forbidden($account['role']);
+    }
+
+    csrf_check($account['role']);
+
+    $action = (string)($_POST['action'] ?? '');
+    $targetId = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+    $postError = '';
+
+    if (!$targetId || $targetId < 1) {
+        $postError = 'Please select a valid account.';
+    } else {
+        try {
+            $pdo->beginTransaction();
+
+            // Lock the target row while validating and updating it.
+            $find = $pdo->prepare(
+                'SELECT u.id, u.username, u.role, u.status, u.employee_id,
+                        u.setup_completed, e.`rank`
+                 FROM users u
+                 LEFT JOIN employees e ON e.id = u.employee_id
+                 WHERE u.id = :id
+                 LIMIT 1 FOR UPDATE'
+            );
+            $find->execute(['id' => $targetId]);
+            $target = $find->fetch(PDO::FETCH_ASSOC);
+
+            if (!$target) {
+                $postError = 'That account no longer exists.';
+            } elseif ((int)$target['id'] === $currentUserId) {
+                $postError = 'You cannot change your own account role or status.';
+            } elseif ((int)$target['setup_completed'] !== 1) {
+                $postError = 'Pending accounts must be managed through the invitation actions.';
+            } elseif (Rbac::normalizeRole($target['role']) === 'admin' && !$isAdmin) {
+                $postError = 'Only an administrator can edit an administrator account.';
+            } elseif (!in_array($action, ['save_account', 'change_status'], true)) {
+                $postError = 'Invalid account action.';
+            } else {
+                $newUsername = trim((string)($target['username'] ?? ''));
+                $newRole = Rbac::normalizeRole($target['role'] ?? '');
+                $newRank = Rbac::normalizeRank($target['rank'] ?? 'employee');
+                $newStatus = (string)$target['status'];
+
+                if ($action === 'save_account') {
+                    $newUsername = trim((string)($_POST['username'] ?? ''));
+                    $newRole = Rbac::normalizeRole($_POST['role'] ?? '');
+                    $newRank = Rbac::normalizeRank($_POST['rank'] ?? 'employee');
+                    $newStatus = (string)($_POST['status'] ?? '');
+
+                    if ($newUsername === '' || strlen($newUsername) > 100) {
+                        $postError = 'Username is required and must be 100 characters or fewer.';
+                    } elseif (!in_array($newRole, $roles, true)) {
+                        $postError = 'Please select a valid system role.';
+                    } elseif ($newRole === 'admin' && !$isAdmin) {
+                        $postError = 'Only an administrator can assign the Admin role.';
+                    } elseif (!in_array($newRank, $ranks, true)) {
+                        $postError = 'Please select a valid employee rank.';
+                    } elseif (!in_array($newStatus, $statuses, true)) {
+                        $postError = 'Please select a valid account status.';
+                    } elseif (
+                        in_array($newRole, ['employee', 'hr'], true)
+                        && $target['employee_id'] === null
+                    ) {
+                        $postError = "The {$newRole} role requires a linked employee record.";
+                    }
+                } else {
+                    $requestedStatus = (string)($_POST['status'] ?? '');
+                    if (!in_array($requestedStatus, $statuses, true)) {
+                        $postError = 'Invalid account status.';
+                    } else {
+                        $newStatus = $requestedStatus;
+                    }
+                }
+
+                // Prevent the system from being left without an active administrator.
+                $wasActiveAdmin = Rbac::normalizeRole($target['role']) === 'admin'
+                    && strcasecmp((string)$target['status'], 'Active') === 0;
+                $willRemainActiveAdmin = $newRole === 'admin'
+                    && strcasecmp($newStatus, 'Active') === 0;
+
+                if ($postError === '' && $wasActiveAdmin && !$willRemainActiveAdmin) {
+                    $admins = $pdo->query(
+                        "SELECT id FROM users
+                         WHERE LOWER(role) = 'admin' AND status = 'Active'
+                         FOR UPDATE"
+                    )->fetchAll(PDO::FETCH_COLUMN);
+
+                    if (count($admins) <= 1) {
+                        $postError = 'This is the last active administrator. Make another administrator first.';
+                    }
+                }
+
+                if ($postError === '') {
+                    $update = $pdo->prepare(
+                        'UPDATE users
+                         SET username = :username,
+                             role = :role,
+                             status = :status,
+                             updated_at = NOW()
+                         WHERE id = :id'
+                    );
+                    $update->execute([
+                        'username' => $newUsername,
+                        'role' => $newRole,
+                        'status' => $newStatus,
+                        'id' => $targetId,
+                    ]);
+
+                    if ($target['employee_id'] !== null && $action === 'save_account') {
+                        $rankUpdate = $pdo->prepare(
+                            'UPDATE employees
+                             SET `rank` = :rank, updated_at = NOW()
+                             WHERE id = :employee_id'
+                        );
+                        $rankUpdate->execute([
+                            'rank' => $newRank,
+                            'employee_id' => $target['employee_id'],
+                        ]);
+                    }
+
+                    // Deactivation invalidates outstanding password reset links.
+                    if (strcasecmp($newStatus, 'Inactive') === 0
+                        && strcasecmp((string)$target['status'], 'Inactive') !== 0) {
+                        $invalidate = $pdo->prepare(
+                            'UPDATE password_reset_tokens
+                             SET used_at = NOW()
+                             WHERE user_id = :id AND used_at IS NULL'
+                        );
+                        $invalidate->execute(['id' => $targetId]);
+                    }
+
+                    $pdo->commit();
+
+                    AuditLogger::log(
+                        $action === 'change_status' ? 'user.status_change' : 'user.update',
+                        'user',
+                        $targetId,
+                        [
+                            'username' => $target['username'],
+                            'new_username' => $newUsername,
+                            'old_role' => $target['role'],
+                            'new_role' => $newRole,
+                            'old_rank' => $target['rank'] ?? 'employee',
+                            'new_rank' => $newRank,
+                            'old_status' => $target['status'],
+                            'new_status' => $newStatus,
+                        ]
+                    );
+
+                    $_SESSION['user_management_message'] = $action === 'change_status'
+                        ? "Account status changed to {$newStatus}."
+                        : 'Account details were successfully updated.';
+                }
+            }
+
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            if ($postError !== '') {
+                $_SESSION['user_management_error'] = $postError;
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('User management update failed: ' . $e->getMessage());
+            $_SESSION['user_management_error'] = 'The account could not be updated. Check the server error log.';
+        }
+    }
+
+    $queryString = http_build_query($_GET);
+    header('Location: /admin/users.php' . ($queryString !== '' ? '?' . $queryString : ''));
+    exit;
+}
+
+// Fetch accounts and department names using the existing User model.
 $users = $userModel->getAll();
-
-// Get departments for filtering.
-$deptStmt = $pdo->query("
-    SELECT id, code, name
-    FROM departments
-    WHERE status = 'Active'
-    ORDER BY name ASC
-");
-
+$deptStmt = $pdo->query(
+    "SELECT id, code, name FROM departments WHERE status = 'Active' ORDER BY name ASC"
+);
 $departments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Search and filters.
-$search = trim($_GET['search'] ?? '');
+// Search, filtering, and sorting.
+$search = trim((string)($_GET['search'] ?? ''));
 $departmentFilter = (string)($_GET['department'] ?? '');
 $statusFilter = (string)($_GET['account_status'] ?? 'all');
 $sort = (string)($_GET['sort'] ?? 'newest');
-
-// Validate sort options.
-$allowedSorts = [
-  'newest',
-  'name_asc',
-  'name_desc',
-  'username_asc',
-  'department_asc'
-];
-
+$allowedSorts = ['newest', 'oldest', 'name_asc', 'name_desc', 'username_asc', 'department_asc', 'department_desc'];
 if (!in_array($sort, $allowedSorts, true)) {
-  $sort = 'newest';
+    $sort = 'newest';
 }
 
-// Filter users.
-$filteredUsers = array_filter($users, function ($u) use (
-  $search,
-  $departmentFilter,
-  $statusFilter
-) {
-  $completed = (int)$u['setup_completed'] === 1;
-  $active = strcasecmp((string)$u['status'], 'Active') === 0;
+$filteredUsers = array_values(array_filter($users, function (array $u) use ($search, $departmentFilter, $statusFilter): bool {
+    $completed = (int)($u['setup_completed'] ?? 1) === 1;
+    $active = strcasecmp((string)($u['status'] ?? ''), 'Active') === 0;
 
-  // Search.
-  if ($search !== '') {
-    $searchable = [
-      $u['username'] ?? '',
-      $u['employee_no'] ?? '',
-      $u['first_name'] ?? '',
-      $u['middle_name'] ?? '',
-      $u['last_name'] ?? ''
-    ];
-
-    $found = false;
-
-    foreach ($searchable as $value) {
-      if (stripos((string)$value, $search) !== false) {
-        $found = true;
-        break;
-      }
+    if ($search !== '') {
+        $searchable = [
+            $u['username'] ?? '', $u['employee_no'] ?? '',
+            $u['first_name'] ?? '', $u['middle_name'] ?? '', $u['last_name'] ?? '',
+        ];
+        $found = false;
+        foreach ($searchable as $value) {
+            if (stripos((string)$value, $search) !== false) {
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) return false;
     }
 
-    if (!$found) {
-      return false;
+    if ($departmentFilter !== '' && (string)($u['department_id'] ?? '') !== $departmentFilter) {
+        return false;
     }
-  }
+    if ($statusFilter === 'pending' && $completed) return false;
+    if ($statusFilter === 'active' && (!$completed || !$active)) return false;
+    if ($statusFilter === 'inactive' && (!$completed || $active)) return false;
+    return true;
+}));
 
-  // Department filter.
-  if ($departmentFilter !== '') {
-    if ((string)($u['department_id'] ?? '') !== $departmentFilter) {
-      return false;
+usort($filteredUsers, function (array $a, array $b) use ($sort): int {
+    $nameA = trim(($a['last_name'] ?? '') . ' ' . ($a['first_name'] ?? ''));
+    $nameB = trim(($b['last_name'] ?? '') . ' ' . ($b['first_name'] ?? ''));
+    switch ($sort) {
+        case 'oldest': return (int)$a['id'] <=> (int)$b['id'];
+        case 'name_asc': return strcasecmp($nameA, $nameB);
+        case 'name_desc': return strcasecmp($nameB, $nameA);
+        case 'username_asc': return strcasecmp((string)$a['username'], (string)$b['username']);
+        case 'department_asc': return strcasecmp((string)($a['department_name'] ?? ''), (string)($b['department_name'] ?? ''));
+        case 'department_desc': return strcasecmp((string)($b['department_name'] ?? ''), (string)($a['department_name'] ?? ''));
+        default: return (int)$b['id'] <=> (int)$a['id'];
     }
-  }
-
-  // Account status filter.
-  if ($statusFilter === 'pending' && $completed) {
-    return false;
-  }
-
-  if ($statusFilter === 'active' && (!$completed || !$active)) {
-    return false;
-  }
-
-  if ($statusFilter === 'inactive' && (!$completed || $active)) {
-    return false;
-  }
-
-  return true;
 });
 
-// Sorting.
-$filteredUsers = array_values($filteredUsers);
-
-usort($filteredUsers, function ($a, $b) use ($sort) {
-  switch ($sort) {
-    case 'name_asc':
-      return strcasecmp(
-        ($a['last_name'] ?? '') . ($a['first_name'] ?? ''),
-        ($b['last_name'] ?? '') . ($b['first_name'] ?? '')
-      );
-
-    case 'name_desc':
-      return strcasecmp(
-        ($b['last_name'] ?? '') . ($b['first_name'] ?? ''),
-        ($a['last_name'] ?? '') . ($a['first_name'] ?? '')
-      );
-
-    case 'username_asc':
-      return strcasecmp($a['username'], $b['username']);
-
-    case 'department_asc':
-      return strcasecmp(
-        $a['department_name'] ?? '',
-        $b['department_name'] ?? ''
-      );
-
-    default:
-      return 0;
-  }
-});
-
-// Use filtered users for display.
-$displayUsers = $filteredUsers;
-
-// Lightweight counts for the metric strip.
-// Account metrics.
+// Account totals are based on all accounts, not just the filtered results.
 $totalUsers = count($users);
-$activeUsers = 0;
-$inactiveUsers = 0;
-$pendingUsers = 0;
-
+$activeUsers = $inactiveUsers = $pendingUsers = 0;
 foreach ($users as $u) {
-
-  $completed = (int)$u['setup_completed'] === 1;
-
-  $active = strcasecmp(
-    (string)$u['status'],
-    'Active'
-  ) === 0;
-
-  if (!$completed) {
-    $pendingUsers++;
-  } elseif ($active) {
-    $activeUsers++;
-  } else {
-    $inactiveUsers++;
-  }
+    if ((int)($u['setup_completed'] ?? 1) !== 1) {
+        $pendingUsers++;
+    } elseif (strcasecmp((string)($u['status'] ?? ''), 'Active') === 0) {
+        $activeUsers++;
+    } else {
+        $inactiveUsers++;
+    }
 }
+
+// Ten records per page.
+$perPage = 10;
+$totalFiltered = count($filteredUsers);
+$totalPages = max(1, (int)ceil($totalFiltered / $perPage));
+$page = max(1, min($totalPages, (int)($_GET['page'] ?? 1)));
+$offset = ($page - 1) * $perPage;
+$displayUsers = array_slice($filteredUsers, $offset, $perPage);
+$paginationParams = $_GET;
+unset($paginationParams['page']);
+
 require __DIR__ . '/../templates/adminTemplates/header.php';
 ?>
 
-<section class="page-head">
-  <div class="ph-text">
-    <p class="eyebrow">ACCESS CONTROL</p>
-    <h1>User Management</h1>
-    <p>Create and review the login accounts that can access the HRIS.</p>
-  </div>
-  <div class="ph-actions">
-    <?php if ($canEdit): ?>
-      <a class="primary-button" href="/admin/create_user.php">＋ Create User</a>
-    <?php endif; ?>
-    <a class="button" href="/admin/permissions.php">View permissions</a>
-  </div>
-</section>
+<style>
+/* User Management page layout */
 
-<?php if ($message !== ''): ?>
-  <div class="alert" style="margin-bottom:20px;border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12);color:#c7f9e5"><?= h($message) ?></div>
-<?php endif; ?>
-<?php if ($error !== ''): ?>
-  <div class="alert error" style="margin-bottom:20px"><?= h($error) ?></div>
-<?php endif; ?>
+.user-management {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding: 0 20px 30px;
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
 
-<div class="metric-strip">
-  <article class="metric-card metric-teal">
-    <div class="metric-top"><span class="metric-ico">◉</span><span class="metric-chip">All</span></div>
-    <span class="metric-title">Total Users</span>
-    <strong class="metric-number teal"><?= number_format($totalUsers) ?></strong>
-  </article>
-  <article class="metric-card metric-green">
-    <div class="metric-top"><span class="metric-ico">✓</span></div>
-    <span class="metric-title">Active</span>
-    <strong class="metric-number green"><?= number_format($activeUsers) ?></strong>
-  </article>
-  <article class="metric-card metric-violet">
-    <div class="metric-top">
-      <span class="metric-ico">◷</span>
+.user-management,
+.user-management * {
+    box-sizing: border-box;
+}
+
+.user-management *, .user-management *::before, .user-management *::after { box-sizing: border-box; }
+.um-heading {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 18px; flex-wrap: wrap; padding: 4px 2px 2px;
+}
+.um-heading h1 { margin: 5px 0 6px; font-size: clamp(25px, 3vw, 32px); line-height: 1.15; }
+.um-heading p:not(.um-eyebrow) { margin: 0; color: var(--muted, #aaa0b2); font-size: 13px; }
+.um-eyebrow { margin: 0; color: #8da8ff; font-size: 10px; letter-spacing: .14em; font-weight: 800; }
+.um-heading-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.um-heading-actions .button, .um-heading-actions .primary-button { min-height:38px; padding:9px 13px; }
+
+/* Compact statistic cards */
+.um-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.um-metric {
+    position:relative; min-width:0; padding:15px 17px;
+    border:1px solid var(--border,rgba(255,255,255,.08)); border-radius:13px;
+    background:linear-gradient(145deg,rgba(26,35,71,.78),rgba(16,22,48,.72));
+}
+.um-metric span { display:block; color:var(--muted,#aaa0b2); font-size:12px; }
+.um-metric strong { display:block; margin-top:7px; font-size:25px; line-height:1.1; font-weight:750; }
+
+/* Search and filters */
+.um-filters {
+    display:grid;
+    grid-template-columns:minmax(230px,1.7fr) repeat(3,minmax(145px,1fr)) auto;
+    gap:10px; align-items:end; padding:14px;
+    border:1px solid var(--border,rgba(255,255,255,.08)); border-radius:13px;
+    background:rgba(20,27,55,.72);
+}
+.um-filters > div { min-width:0; }
+.um-filters label, .um-modal label {
+    display:block; margin:0 0 6px; color:var(--muted,#aaa0b2);
+    font-size:11px; font-weight:650;
+}
+.um-filters input, .um-filters select, .um-modal input, .um-modal select { width:100%; min-width:0; }
+.um-filters input, .um-filters select { height:39px; padding:8px 11px; font-size:12px; }
+.um-filter-actions { display:flex; gap:6px; }
+.um-filter-actions .button, .um-filter-actions .primary-button { height:39px; padding:8px 12px; font-size:12px; }
+
+/* Account table */
+.um-table-wrap { width:100%; overflow-x:auto; }
+.um-table {
+    width: 100%;
+    min-width: 900px;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+.um-table col.col-employee { width:22%; }
+.um-table col.col-username { width:12%; }
+.um-table col.col-department { width:13%; }
+.um-table col.col-role { width:12%; }
+.um-table col.col-rank { width:12%; }
+.um-table col.col-status { width:13%; }
+.um-table col.col-actions { width:16%; }
+.um-table th, .um-table td {
+    padding:11px 13px; text-align:left; vertical-align:middle;
+    border-bottom:1px solid var(--border,rgba(255,255,255,.07));
+}
+.um-table th {
+    color:var(--muted,#aaa0b2); background:rgba(255,255,255,.018);
+    font-size:10px; font-weight:750; letter-spacing:.065em;
+    text-transform:uppercase; white-space:nowrap;
+}
+.um-table td { font-size:12px; line-height:1.4; overflow-wrap:anywhere; }
+.um-table tbody tr { transition:background .15s ease; }
+.um-table tbody tr:hover { background:rgba(126,151,255,.045); }
+.um-table tbody tr:last-child td { border-bottom:0; }
+.um-employee-name { display:block; color:var(--text,#f4f5ff); font-size:12px; font-weight:700; }
+.um-subtext { display:block; margin-top:3px; color:var(--muted,#aaa0b2); font-size:11px; }
+.um-pill { display:inline-flex; align-items:center; white-space:nowrap; border-radius:999px; padding:4px 8px; font-size:10px; font-weight:750; background:rgba(148,163,184,.12); color:#cbd5e1; }
+.um-pill.active { background:rgba(52,211,153,.12); color:#6ee7b7; }
+.um-pill.inactive { background:rgba(248,113,113,.12); color:#fca5a5; }
+.um-pill.pending { background:rgba(251,191,36,.12); color:#fcd34d; }
+.um-actions { display:flex; align-items:center; gap:5px; flex-wrap:nowrap; white-space:nowrap; }
+.um-actions form { display:inline-flex; flex:0 0 auto; margin:0; }
+.um-small { min-height:30px; padding:5px 8px; font-size:10px; line-height:1.2; border-radius:7px; }
+
+/* Table heading and pagination */
+.user-management .table-card { min-width:0; overflow:hidden; border-radius:14px; }
+.user-management .table-card .panel-head { min-height:54px; padding:14px 17px; }
+.user-management .table-card .panel-head h2 { margin:0; font-size:14px; }
+.user-management .table-card .panel-head .muted { font-size:11px; }
+.um-pagination {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap; padding:12px 16px;
+    border-top:1px solid var(--border,rgba(255,255,255,.08));
+}
+.um-pagination > span { color:var(--muted,#aaa0b2); font-size:11px; }
+.um-page-links { display:flex; align-items:center; gap:5px; }
+.um-page-links a, .um-page-links span {
+    display:inline-flex; min-width:31px; height:31px; align-items:center; justify-content:center;
+    padding:0 9px; border:1px solid var(--border,rgba(255,255,255,.1));
+    border-radius:7px; color:var(--text,#f4f5ff); font-size:11px; text-decoration:none;
+}
+.um-page-links a:hover { background:rgba(255,255,255,.07); }
+.um-page-links .current { border-color:transparent; background:linear-gradient(110deg,#62e8dc,#438bff); color:#101525; font-weight:800; }
+.um-page-links .disabled { opacity:.4; }
+
+/* Alerts and modals */
+.um-alert { padding:11px 14px; border-radius:10px; font-size:12px; }
+.um-alert.success { background:rgba(52,211,153,.1); color:#a7f3d0; border:1px solid rgba(52,211,153,.25); }
+.um-alert.error { background:rgba(248,113,113,.1); color:#fecaca; border:1px solid rgba(248,113,113,.25); }
+.user-modal { position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(8,7,12,.76); backdrop-filter:blur(5px); }
+.user-modal.is-open { display:flex; }
+.um-modal { width:min(720px,100%); max-height:90vh; overflow:auto; border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:15px; background:#171d36; color:#f4eff8; box-shadow:0 24px 80px rgba(0,0,0,.48); }
+.um-modal-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; padding:18px 20px; border-bottom:1px solid rgba(255,255,255,.08); }
+.um-modal-head h2 { margin:0 0 5px; font-size:19px; }
+.um-modal-body { padding:19px 20px; }
+.um-modal-foot { display:flex; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid rgba(255,255,255,.08); }
+.um-close { border:0; background:transparent; color:#c9bfd2; font-size:24px; cursor:pointer; }
+.um-detail-grid, .um-edit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.um-detail { min-width:0; padding:11px; border:1px solid rgba(255,255,255,.08); border-radius:9px; }
+.um-detail small { display:block; margin-bottom:5px; color:#aaa0b2; font-size:10px; }
+.um-detail strong { font-size:12px; overflow-wrap:anywhere; }
+.um-section-title { margin:18px 0 9px; color:#aebeff; font-size:12px; }
+
+@media(max-width:1150px) {
+    .um-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .um-filter-actions { grid-column:1/-1; }
+}
+@media(max-width:850px) {
+    .um-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:560px) {
+    .user-management { gap:13px; }
+    .um-heading { align-items:flex-start; }
+    .um-heading-actions { width:100%; }
+    .um-heading-actions > a { flex:1; text-align:center; }
+    .um-filters, .um-edit-grid, .um-detail-grid { grid-template-columns:1fr; }
+    .um-filter-actions { grid-column:auto; }
+    .um-filter-actions > * { flex:1; text-align:center; }
+    .um-metrics { gap:8px; }
+    .um-metric { padding:12px; }
+    .um-metric strong { font-size:22px; }
+    .um-pagination { align-items:flex-start; flex-direction:column; }
+    .um-page-links { max-width:100%; flex-wrap:wrap; }
+    .um-modal { max-height:95vh; }
+}
+/* Hide scrollbar but keep scrolling */
+.um-table-wrap,
+.user-management {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+}
+
+.um-table-wrap::-webkit-scrollbar,
+.user-management::-webkit-scrollbar {
+    display: none; /* Chrome, Safari */
+}
+</style>
+
+<div class="user-management">
+  <section class="um-heading">
+    <div>
+      <p class="um-eyebrow">ACCESS CONTROL</p>
+      <h1>User Management</h1>
+      <p class="muted">View employee accounts and manage access to the HRIS.</p>
     </div>
+    <div class="um-heading-actions">
+      <?php if ($canEdit): ?>
+        <a class="primary-button" href="/admin/create_user.php">＋ Create User</a>
+      <?php endif; ?>
+      <a class="button" href="/admin/permissions.php">View permissions</a>
+    </div>
+  </section>
 
-    <span class="metric-title">Pending Setup</span>
+  <?php if ($message !== ''): ?><div class="um-alert success"><?= h($message) ?></div><?php endif; ?>
+  <?php if ($error !== ''): ?><div class="um-alert error"><?= h($error) ?></div><?php endif; ?>
 
-    <strong class="metric-number purple">
-      <?= number_format($pendingUsers) ?>
-    </strong>
-  </article>
-  <article class="metric-card metric-blue">
-    <div class="metric-top"><span class="metric-ico">✕</span></div>
-    <span class="metric-title">Inactive</span>
-    <strong class="metric-number blue"><?= number_format($inactiveUsers) ?></strong>
-  </article>
-</div>
+  <section class="um-metrics">
+    <article class="um-metric"><span>Total Users</span><strong><?= number_format($totalUsers) ?></strong></article>
+    <article class="um-metric"><span>Active</span><strong><?= number_format($activeUsers) ?></strong></article>
+    <article class="um-metric"><span>Pending Setup</span><strong><?= number_format($pendingUsers) ?></strong></article>
+    <article class="um-metric"><span>Inactive</span><strong><?= number_format($inactiveUsers) ?></strong></article>
+  </section>
 
-<form method="GET" class="user-filters">
+  <form method="get" class="um-filters">
+    <div>
+      <label for="um-search">Search users</label>
+      <input id="um-search" type="search" name="search" value="<?= h($search) ?>" placeholder="Name, username, employee no...">
+    </div>
+    <div>
+      <label for="um-department">Department</label>
+      <select id="um-department" name="department">
+        <option value="">All departments</option>
+        <?php foreach ($departments as $dept): ?>
+          <option value="<?= (int)$dept['id'] ?>" <?= $departmentFilter === (string)$dept['id'] ? 'selected' : '' ?>><?= h($dept['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div>
+      <label for="um-status">Account status</label>
+      <select id="um-status" name="account_status">
+        <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All accounts</option>
+        <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Active</option>
+        <option value="inactive" <?= $statusFilter === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+        <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>Pending setup</option>
+      </select>
+    </div>
+    <div>
+      <label for="um-sort">Sort by</label>
+      <select id="um-sort" name="sort">
+        <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>Newest first</option>
+        <option value="oldest" <?= $sort === 'oldest' ? 'selected' : '' ?>>Oldest first</option>
+        <option value="name_asc" <?= $sort === 'name_asc' ? 'selected' : '' ?>>Name A–Z</option>
+        <option value="name_desc" <?= $sort === 'name_desc' ? 'selected' : '' ?>>Name Z–A</option>
+        <option value="username_asc" <?= $sort === 'username_asc' ? 'selected' : '' ?>>Username A–Z</option>
+        <option value="department_asc" <?= $sort === 'department_asc' ? 'selected' : '' ?>>Department A–Z</option>
+        <option value="department_desc" <?= $sort === 'department_desc' ? 'selected' : '' ?>>Department Z–A</option>
+      </select>
+    </div>
+    <div class="um-filter-actions">
+      <button type="submit" class="primary-button">Apply</button>
+      <a class="button" href="/admin/users.php">Reset</a>
+    </div>
+  </form>
 
-  <div class="filter-search">
-    <label for="search">Search Users</label>
-
-    <input
-      type="search"
-      id="search"
-      name="search"
-      placeholder="Search username, name, employee number..."
-      value="<?= h($search) ?>">
-  </div>
-
-  <div>
-    <label for="department">Department</label>
-
-    <select name="department" id="department">
-      <option value="">All Departments</option>
-
-      <?php foreach ($departments as $dept): ?>
-        <option
-          value="<?= (int)$dept['id'] ?>"
-          <?= $departmentFilter === (string)$dept['id']
-            ? 'selected'
-            : '' ?>>
-
-          <?= h($dept['name']) ?>
-
-        </option>
-      <?php endforeach; ?>
-    </select>
-  </div>
-
-  <div>
-    <label for="account_status">Account Status</label>
-
-    <select name="account_status" id="account_status">
-      <option value="all">All Accounts</option>
-      <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>
-        Pending Setup
-      </option>
-      <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>
-        Active
-      </option>
-      <option value="inactive" <?= $statusFilter === 'inactive' ? 'selected' : '' ?>>
-        Inactive
-      </option>
-    </select>
-  </div>
-
-  <div>
-    <label for="sort">Sort By</label>
-
-    <select name="sort" id="sort">
-      <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>
-        Newest First
-      </option>
-      <option value="name_asc" <?= $sort === 'name_asc' ? 'selected' : '' ?>>
-        Name A-Z
-      </option>
-      <option value="name_desc" <?= $sort === 'name_desc' ? 'selected' : '' ?>>
-        Name Z-A
-      </option>
-      <option value="username_asc" <?= $sort === 'username_asc' ? 'selected' : '' ?>>
-        Username A-Z
-      </option>
-      <option value="department_asc" <?= $sort === 'department_asc' ? 'selected' : '' ?>>
-        Department A-Z
-      </option>
-    </select>
-  </div>
-
-  <div class="filter-actions">
-    <button type="submit" class="primary-button">
-      Apply Filters
-    </button>
-
-    <a href="/admin/users.php" class="button">
-      Reset
-    </a>
-  </div>
-
-</form>
-
-<div class="panel table-card">
-  <div class="panel-head">
-    <h2>Accounts</h2>
-    <span class="muted"><?= number_format($totalUsers) ?> user<?= $totalUsers === 1 ? '' : 's' ?></span>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Username</th>
-        <th>Role</th>
-        <th>Rank</th>
-        <th>Status</th>
-        <th>Employee</th>
-        <th>Department</th>
-        <?php if ($canEdit): ?><th>Change</th><?php endif; ?>
-      </tr>
-    </thead>
-    <tbody>
-      <?php if (empty($displayUsers)): ?>
-        <tr>
-          <td colspan="<?= $canEdit ? 7 : 6 ?>">
-            <div class="empty-state">
-              <span class="es-ico">◉</span>
-              No users found.
-            </div>
-          </td>
-        </tr>
-        <?php else: foreach ($displayUsers as $u): ?>
-          <?php
-          $isActive = strcasecmp((string)($u['status'] ?? ''), 'Active') === 0;
-          $isPending = (int)($u['setup_completed'] ?? 1) === 0;
-          $pillClass = $isActive ? 'pill-active' : (($u['status'] ?? '') !== '' ? 'pill-inactive' : 'pill-neutral');
-          $isMe  = (int)$u['id'] === $account['user_id'];
-          $uRole = Rbac::normalizeRole($u['role']);
-          ?>
+  <section class="panel table-card">
+    <div class="panel-head">
+      <h2>Employee Accounts</h2>
+      <span class="muted"><?= number_format($totalFiltered) ?> result<?= $totalFiltered === 1 ? '' : 's' ?></span>
+    </div>
+    <div class="um-table-wrap">
+      <table class="um-table">
+        <colgroup>
+          <col class="col-employee">
+          <col class="col-username">
+          <col class="col-department">
+          <col class="col-role">
+          <col class="col-rank">
+          <col class="col-status">
+          <col class="col-actions">
+        </colgroup>
+        <thead>
           <tr>
-            <td><strong><?= h($u['username']) ?></strong></td>
-            <td>
-              <span class="pill pill-neutral">
-                <?= h(ucfirst((string)$u['role'])) ?>
-              </span>
-            </td>
-
-            <td>
-              <span class="pill pill-neutral">
-                <?= h(
-                  ucwords(
-                    str_replace('_', ' ', $u['rank'] ?? 'employee')
-                  )
-                ) ?>
-              </span>
-            </td>
-
-            <td>
-
-              <?php if ((int)$u['setup_completed'] === 0): ?>
-
-                <span class="pill pill-pending">
-                  Pending Setup
-                </span>
-
-              <?php elseif (strcasecmp($u['status'], 'Active') === 0): ?>
-
-                <span class="pill pill-active">
-                  Active
-                </span>
-
-              <?php else: ?>
-
-                <span class="pill pill-inactive">
-                  Inactive
-                </span>
-
-              <?php endif; ?>
-            </td>
-            <td>
-              <?php if ($u['employee_id']): ?>
-                <strong><?= h($u['employee_no']) ?></strong> — <?= h(fullName($u)) ?>
-              <?php else: ?>
-                <span class="muted">—</span>
-              <?php endif; ?>
-            </td>
-            <td>
-              <?php if (!empty($u['department_name'])): ?>
-                <?= h($u['department_name']) ?>
-              <?php else: ?>
-                <span class="muted">—</span>
-              <?php endif; ?>
-            </td>
-            <?php if ($canEdit): ?>
-              <td>
-                <?php if ((int)$u['setup_completed'] === 0): ?>
-
-                  <span class="pill pill-pending">
-                    Awaiting Password
-                  </span>
-
-                  <form method="post" action="/admin/resend_invitation.php"
-                    style="margin-top:8px">
-
-                    <?= csrf_field() ?>
-
-                    <input
-                      type="hidden"
-                      name="user_id"
-                      value="<?= (int)$u['id'] ?>">
-
-                    <button type="submit" class="primary-button">
-                      Resend Invitation
-                    </button>
-
-                  </form>
-
-                <?php elseif ($isMe): ?>
-
-                  <span class="muted">Your own account</span>
-
-                <?php else: ?>
-                  <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
-                    <select name="role" aria-label="Role for <?= h($u['username']) ?>">
-                      <?php foreach ($roles as $r): ?>
-                        <option value="<?= h($r) ?>" <?= $r === $uRole ? 'selected' : '' ?>><?= h($r) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                    <select
-                      name="rank"
-                      aria-label="Rank for <?= h($u['username']) ?>">
-
-                      <?php foreach ($ranks as $rank): ?>
-                        <option
-                          value="<?= h($rank) ?>"
-                          <?= ($rank === ($u['rank'] ?? 'employee'))
-                            ? 'selected'
-                            : '' ?>>
-
-                          <?= h(
-                            ucwords(str_replace('_', ' ', $rank))
-                          ) ?>
-                        </option>
-                      <?php endforeach; ?>
-
-                    </select>
-
-                    <select name="status" aria-label="Status for <?= h($u['username']) ?>">
-                      <?php foreach ($statuses as $s): ?>
-                        <option value="<?= h($s) ?>" <?= $isActive === ($s === 'Active') ? 'selected' : '' ?>><?= h($s) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                    <button class="primary-button" type="submit">Save</button>
-                  </form>
-
-                  <?php if ($isPending): ?>
-
-                    <form
-                      method="post"
-                      action="/admin/delete_pending_account.php"
-                      style="margin-top:8px"
-                      onsubmit="return confirm('Are you sure you want to permanently delete this pending account?');">
-
-                      <?= csrf_field() ?>
-
-                      <input
-                        type="hidden"
-                        name="user_id"
-                        value="<?= (int)$u['id'] ?>">
-
-                      <button
-                        type="submit"
-                        class="button"
-                        style="background:#991b1b;color:white;border-color:#991b1b">
-                        Delete Pending Account
-                      </button>
-
-                    </form>
-
-                  <?php endif; ?>
-
-                <?php endif; ?>
-              </td>
-            <?php endif; ?>
+            <th>Employee</th>
+            <th>Username</th>
+            <th>Department</th>
+            <th>System role</th>
+            <th>Rank</th>
+            <th>Account status</th>
+            <th>Actions</th>
           </tr>
-      <?php endforeach;
-      endif; ?>
-    </tbody>
-  </table>
+        </thead>
+        <tbody>
+          <?php if (!$displayUsers): ?>
+            <tr><td colspan="7"><div class="empty-state">No users found.</div></td></tr>
+          <?php else: ?>
+            <?php foreach ($displayUsers as $u): ?>
+              <?php
+                $isPending = (int)($u['setup_completed'] ?? 1) !== 1;
+                $isActive = strcasecmp((string)($u['status'] ?? ''), 'Active') === 0;
+                $isMe = (int)$u['id'] === $currentUserId;
+                $fullName = trim(implode(' ', array_filter([
+                    $u['first_name'] ?? '', $u['middle_name'] ?? '', $u['last_name'] ?? ''
+                ], static fn($part) => trim((string)$part) !== '')));
+                $rankLabel = ucwords(str_replace('_', ' ', (string)($u['rank'] ?? 'employee')));
+                $details = $userModel->getAccountDetails((int)$u['id']) ?? $u;
+                $detailsJson = json_encode($details, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+              ?>
+              <tr>
+                <td>
+                  <span class="um-employee-name"><?= h($fullName !== '' ? $fullName : 'Unlinked account') ?></span>
+                  <span class="um-subtext"><?= h($u['employee_no'] ?? 'No employee record') ?></span>
+                </td>
+                <td><?= h($u['username']) ?></td>
+                <td><?= h($u['department_name'] ?? '—') ?></td>
+                <td><span class="um-pill"><?= h(ucfirst((string)$u['role'])) ?></span></td>
+                <td><?= h($rankLabel) ?></td>
+                <td>
+                  <?php if ($isPending): ?>
+                    <span class="um-pill pending">Pending setup</span>
+                  <?php elseif ($isActive): ?>
+                    <span class="um-pill active">Active</span>
+                  <?php else: ?>
+                    <span class="um-pill inactive">Inactive</span>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <div class="um-actions">
+                    <button type="button" class="button um-small" data-view-user data-user="<?= h($detailsJson ?: '{}') ?>">View</button>
+                    <?php if ($canEdit && !$isMe && !$isPending): ?>
+                      <button type="button" class="primary-button um-small" data-edit-user data-user="<?= h($detailsJson ?: '{}') ?>">Edit</button>
+                      <form method="post" onsubmit="return confirm('<?= $isActive ? 'Deactivate' : 'Activate' ?> this account?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="change_status">
+                        <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                        <input type="hidden" name="status" value="<?= $isActive ? 'Inactive' : 'Active' ?>">
+                        <button type="submit" class="button um-small"><?= $isActive ? 'Deactivate' : 'Activate' ?></button>
+                      </form>
+                    <?php elseif ($canEdit && $isPending && !$isMe): ?>
+                      <form method="post" action="/admin/resend_invitation.php">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                        <button type="submit" class="button um-small">Resend invite</button>
+                      </form>
+                      <form method="post" action="/admin/delete_pending_account.php" onsubmit="return confirm('Permanently delete this pending account?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                        <button type="submit" class="button um-small">Delete pending</button>
+                      </form>
+                    <?php elseif ($isMe): ?>
+                      <span class="um-subtext">Your account</span>
+                    <?php endif; ?>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+    <div class="um-pagination">
+      <span class="muted">Showing <?= $totalFiltered === 0 ? 0 : $offset + 1 ?>–<?= min($offset + $perPage, $totalFiltered) ?> of <?= number_format($totalFiltered) ?></span>
+      <div class="um-page-links">
+        <?php if ($page > 1): ?>
+          <a href="?<?= h(http_build_query(array_merge($paginationParams, ['page' => $page - 1]))) ?>">Previous</a>
+        <?php endif; ?>
+        <?php for ($p = max(1, $page - 2); $p <= min($totalPages, $page + 2); $p++): ?>
+          <?php if ($p === $page): ?><span class="current"><?= $p ?></span>
+          <?php else: ?><a href="?<?= h(http_build_query(array_merge($paginationParams, ['page' => $p]))) ?>"><?= $p ?></a><?php endif; ?>
+        <?php endfor; ?>
+        <?php if ($page < $totalPages): ?>
+          <a href="?<?= h(http_build_query(array_merge($paginationParams, ['page' => $page + 1]))) ?>">Next</a>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
 </div>
+
+<!-- View account modal -->
+<div class="user-modal" id="viewUserModal" aria-hidden="true">
+  <section class="um-modal" role="dialog" aria-modal="true" aria-labelledby="viewModalTitle">
+    <header class="um-modal-head">
+      <div><h2 id="viewModalTitle">Account details</h2><p class="muted" id="viewModalSubtitle">Employee account information</p></div>
+      <button type="button" class="um-close" data-close-modal aria-label="Close">&times;</button>
+    </header>
+    <div class="um-modal-body">
+      <h3 class="um-section-title">Account information</h3>
+      <div class="um-detail-grid">
+        <div class="um-detail"><small>Username</small><strong data-detail="username">—</strong></div>
+        <div class="um-detail"><small>System role</small><strong data-detail="role">—</strong></div>
+        <div class="um-detail"><small>Account status</small><strong data-detail="status">—</strong></div>
+        <div class="um-detail"><small>Password setup</small><strong data-detail="setup">—</strong></div>
+        <div class="um-detail"><small>Created</small><strong data-detail="created_at">—</strong></div>
+        <div class="um-detail"><small>Last activity</small><strong data-detail="last_activity">—</strong></div>
+      </div>
+      <h3 class="um-section-title">Employee information</h3>
+      <div class="um-detail-grid">
+        <div class="um-detail"><small>Employee number</small><strong data-detail="employee_no">—</strong></div>
+        <div class="um-detail"><small>Full name</small><strong data-detail="full_name">—</strong></div>
+        <div class="um-detail"><small>Email</small><strong data-detail="email">—</strong></div>
+        <div class="um-detail"><small>Phone</small><strong data-detail="phone">—</strong></div>
+        <div class="um-detail"><small>Department</small><strong data-detail="department_name">—</strong></div>
+        <div class="um-detail"><small>Position</small><strong data-detail="position_title">—</strong></div>
+        <div class="um-detail"><small>Rank</small><strong data-detail="rank">—</strong></div>
+        <div class="um-detail"><small>Date hired</small><strong data-detail="date_hired">—</strong></div>
+        <div class="um-detail"><small>Employment type</small><strong data-detail="employment_type">—</strong></div>
+        <div class="um-detail"><small>Employment status</small><strong data-detail="employment_status">—</strong></div>
+      </div>
+    </div>
+    <footer class="um-modal-foot"><button type="button" class="button" data-close-modal>Close</button></footer>
+  </section>
+</div>
+
+<?php if ($canEdit): ?>
+<div class="user-modal" id="editUserModal" aria-hidden="true">
+  <section class="um-modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <form method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="save_account">
+      <input type="hidden" name="user_id" id="edit_user_id" value="">
+      <header class="um-modal-head">
+        <div><h2 id="editModalTitle">Edit account</h2><p class="muted" id="editModalSubtitle">Update account information and system access</p></div>
+        <button type="button" class="um-close" data-close-modal aria-label="Close">&times;</button>
+      </header>
+      <div class="um-modal-body">
+        <h3 class="um-section-title">Account information</h3>
+        <div class="um-edit-grid">
+          <div><label for="edit_username">Username</label><input type="text" id="edit_username" name="username" maxlength="100" required></div>
+          <div><label for="edit_status">Account status</label><select id="edit_status" name="status"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+        </div>
+        <h3 class="um-section-title">System access</h3>
+        <div class="um-edit-grid">
+          <div><label for="edit_role">System role</label><select id="edit_role" name="role" required>
+            <?php foreach ($roles as $r): ?>
+              <?php if ($r !== 'admin' || $isAdmin): ?><option value="<?= h($r) ?>"><?= h(ucfirst($r)) ?></option><?php endif; ?>
+            <?php endforeach; ?>
+          </select></div>
+          <div><label for="edit_rank">Employee rank</label><select id="edit_rank" name="rank" required>
+            <?php foreach ($ranks as $rank): ?><option value="<?= h($rank) ?>"><?= h(ucwords(str_replace('_', ' ', $rank))) ?></option><?php endforeach; ?>
+          </select></div>
+        </div>
+        <p class="um-subtext">Employee department, position, and employment information are managed in Employee Management.</p>
+      </div>
+      <footer class="um-modal-foot">
+        <button type="button" class="button" data-close-modal>Cancel</button>
+        <button type="submit" class="primary-button">Save changes</button>
+      </footer>
+    </form>
+  </section>
+</div>
+<?php endif; ?>
+
+<script>
+(() => {
+  const viewModal = document.getElementById('viewUserModal');
+  const editModal = document.getElementById('editUserModal');
+
+  const safeText = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    return String(value);
+  };
+
+  const openModal = (modal) => {
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeModal = (modal) => {
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (!document.querySelector('.user-modal.is-open')) {
+      document.body.style.overflow = '';
+    }
+  };
+
+  document.querySelectorAll('[data-view-user]').forEach((button) => {
+    button.addEventListener('click', () => {
+      let user;
+      try { user = JSON.parse(button.dataset.user || '{}'); }
+      catch (error) { console.error('Could not read account details:', error); return; }
+
+      const fullName = [user.first_name, user.middle_name, user.last_name, user.suffix]
+        .filter(Boolean).join(' ');
+      const values = {
+        username: user.username,
+        role: user.role,
+        status: user.status,
+        setup: Number(user.setup_completed) === 1 ? 'Completed' : 'Pending setup',
+        created_at: user.created_at,
+        last_activity: user.last_activity,
+        employee_no: user.employee_no,
+        full_name: fullName,
+        email: user.email,
+        phone: user.phone,
+        department_name: user.department_name,
+        position_title: user.position_title,
+        rank: user.rank ? String(user.rank).replaceAll('_', ' ') : '',
+        date_hired: user.date_hired,
+        employment_type: user.employment_type,
+        employment_status: user.employment_status,
+      };
+
+      Object.entries(values).forEach(([key, value]) => {
+        const node = viewModal?.querySelector(`[data-detail="${key}"]`);
+        if (node) node.textContent = safeText(value);
+      });
+      const subtitle = document.getElementById('viewModalSubtitle');
+      if (subtitle) subtitle.textContent = fullName || user.username || 'Employee account information';
+      openModal(viewModal);
+    });
+  });
+
+  document.querySelectorAll('[data-edit-user]').forEach((button) => {
+    button.addEventListener('click', () => {
+      let user;
+      try { user = JSON.parse(button.dataset.user || '{}'); }
+      catch (error) { console.error('Could not read account details:', error); return; }
+
+      document.getElementById('edit_user_id').value = user.id || '';
+      document.getElementById('edit_username').value = user.username || '';
+      document.getElementById('edit_status').value = user.status || 'Active';
+      document.getElementById('edit_role').value = user.role || 'employee';
+      document.getElementById('edit_rank').value = user.rank || 'employee';
+      const subtitle = document.getElementById('editModalSubtitle');
+      if (subtitle) subtitle.textContent = `Editing ${user.username || 'account'}`;
+      openModal(editModal);
+    });
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach((button) => {
+    button.addEventListener('click', () => {
+      closeModal(button.closest('.user-modal'));
+    });
+  });
+
+  document.querySelectorAll('.user-modal').forEach((modal) => {
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeModal(modal);
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      document.querySelectorAll('.user-modal.is-open').forEach(closeModal);
+    }
+  });
+})();
+</script>
