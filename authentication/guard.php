@@ -33,10 +33,9 @@ function role_home(?string $role): string
     switch (Rbac::normalizeRole($role)) {
 
         case 'admin':
-            return '/admin/users.php';
+            return '/admin/dashboard.php';
 
         case 'hr':
-            return '/hr/dashboard.php';
 
         case 'employee':
             return '/employee/dashboard.php';

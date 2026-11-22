@@ -20,6 +20,7 @@
 require_once __DIR__ . '/../../classes/Rbac.php';
 
 $employeeRank = 'employee';
+$employeeRole = Rbac::normalizeRole($_SESSION['role'] ?? 'employee');
 
 if (
   isset($pdo) &&
@@ -35,7 +36,7 @@ if (
     );
 
     $rankStatement->execute([
-      'id' => (int)$_SESSION['employee_id']
+      'id' => $_SESSION['employee_id']
     ]);
 
     $employeeRank = Rbac::normalizeRank(
@@ -53,6 +54,38 @@ $isSupervisor = in_array(
 );
 
 $isDepartmentManager = $employeeRank === 'manager';
+
+/*
+ * Permission helpers for employee navigation.
+ * Rank overrides are evaluated before system-role permissions.
+ */
+$employeeCan = static function (
+  string $module,
+  string $ability
+) use ($pdo, $employeeRole, $employeeRank): bool {
+  return isset($pdo) &&
+    $pdo instanceof PDO &&
+    Rbac::can(
+      $pdo,
+      $employeeRole,
+      $module,
+      $ability,
+      $employeeRank
+    );
+};
+
+$employeeModuleEnabled = static function (
+  string $module
+) use ($pdo, $employeeRole, $employeeRank): bool {
+  return isset($pdo) &&
+    $pdo instanceof PDO &&
+    Rbac::moduleEnabled(
+      $pdo,
+      $employeeRole,
+      $module,
+      $employeeRank
+    );
+};
 
 $currentPage = basename($_SERVER['PHP_SELF'] ?? 'dashboard.php', '.php');
 
@@ -164,7 +197,7 @@ function emp_nav_active($page, $current): string
   <?php if ($cssPage !== ''): ?>
     <link rel="stylesheet" href="../assets/css/pages/<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?>.css">
   <?php endif; ?>
- <script src="/templates/employeeTemplates/sidebar.js" defer></script>
+  <script src="/templates/employeeTemplates/sidebar.js" defer></script>
 </head>
 
 <body class="hris-app page-<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?><?= $embedded ? ' is-embedded' : '' ?>">
@@ -184,37 +217,37 @@ function emp_nav_active($page, $current): string
         <a class="nav-item <?= emp_nav_active('payslips', $currentPage) ?>" href="/employee/payslips.php"><span class="nav-icon">▦</span><span>Payslips</span></a>
         <?php if ($isSupervisor): ?>
 
-          <a
-            class="nav-item <?= emp_nav_active('team', $currentPage) ?>"
-            href="/employee/team.php">
+          <?php if ($employeeCan('employee_records', 'view')): ?>
+            <a
+              class="nav-item <?= emp_nav_active('team', $currentPage) ?>"
+              href="/employee/team.php">
 
-            <span class="nav-icon">♙</span>
+              <span class="nav-icon">♙</span>
+              <span>
+                <?= $isDepartmentManager ? 'Department' : 'My Team' ?>
+              </span>
+            </a>
+          <?php endif; ?>
 
-            <span>
-              <?= $isDepartmentManager
-                ? 'Department'
-                : 'My Team' ?>
-            </span>
-          </a>
+          <?php if ($employeeCan('leave_requests', 'view')): ?>
+            <a
+              class="nav-item <?= emp_nav_active('team_leave', $currentPage) ?>"
+              href="/employee/team_leave.php">
 
-          <a
-            class="nav-item <?= emp_nav_active('team_leave', $currentPage) ?>"
-            href="/employee/team_leave.php">
+              <span class="nav-icon">◷</span>
+              <span>Team Leave</span>
+            </a>
+          <?php endif; ?>
 
-            <span class="nav-icon">◷</span>
-            <span>Team Leave</span>
-          </a>
+          <?php if ($employeeCan('promotion_management', 'approve')): ?>
+            <a
+              class="nav-item <?= emp_nav_active('promotion_requests', $currentPage) ?>"
+              href="/employee/promotion_requests.php">
 
-          <a
-            class="nav-item <?= emp_nav_active(
-                              'promotion_requests',
-                              $currentPage
-                            ) ?>"
-            href="/employee/promotion_requests.php">
-
-            <span class="nav-icon">↗</span>
-            <span>Promotions</span>
-          </a>
+              <span class="nav-icon">↗</span>
+              <span>Promotions</span>
+            </a>
+          <?php endif; ?>
 
         <?php endif; ?>
 
