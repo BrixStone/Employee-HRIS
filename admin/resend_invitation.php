@@ -2,12 +2,18 @@
 
 require_once __DIR__ . '/../authentication/guard.php';
 require_once __DIR__ . '/../classes/Mailer.php';
+require_once __DIR__ . '/../classes/AuditLogger.php';
+
 
 $account = require_access(
     'user_management',
     'edit',
     'all'
 );
+
+if (Rbac::normalizeRole($account['role']) !== 'admin') {
+    guard_forbidden($account['role']);
+}
 
 require_once __DIR__ . '/../classes/User.php';
 
@@ -33,11 +39,21 @@ try {
     $sent = $userModel->resendSetupInvitation($userId);
 
     if ($sent) {
-        $_SESSION['user_message'] =
-            'A new password setup invitation was successfully sent.';
+
+    AuditLogger::log(
+        'user.invitation_resent',
+        'user',
+        $userId,
+        [
+            'performed_by' => $account['user_id']
+        ]
+    );
+
+    $_SESSION['user_message'] =
+        'A new password setup invitation was successfully sent.';
     } else {
         $_SESSION['user_error'] =
-            'Please wait for the 10mins to Resend an Invitation';
+    'The invitation could not be sent. The account may not be pending, the resend cooldown may still be active, or the email configuration may need attention.';
     }
 
 } catch (Throwable $e) {

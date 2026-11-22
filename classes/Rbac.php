@@ -40,7 +40,6 @@ final class Rbac
     public const ROLES = [
         'admin',
         'hr',
-        'payroll',
         'employee'
     ];
 
@@ -75,43 +74,36 @@ final class Rbac
 
     /** The permission table from the HRIS roles design. */
     public const DEFAULTS = [
-        'admin' => [
-            'dashboard' => 'full',
-            'employee_records' => 'full',
-            'attendance' => 'full',
-            'leave_requests' => 'full',
-            'payslips' => 'full',
-            'user_management' => 'full',
-            'system_settings' => 'full',
-        ],
-        'hr' => [
-            'dashboard' => 'view',
-            'employee_records' => 'manage',
-            'attendance' => 'manage',
-            'leave_requests' => 'manage',
-            'payslips' => 'manage',
-            'user_management' => 'none',
-            'system_settings' => 'none',
-        ],
-        'manager' => [
-            'dashboard' => 'view',
-            'employee_records' => 'team',
-            'attendance' => 'team',
-            'leave_requests' => 'approve_team',
-            'payslips' => 'none',
-            'user_management' => 'none',
-            'system_settings' => 'none',
-        ],
-        'employee' => [
-            'dashboard' => 'view',
-            'employee_records' => 'own',
-            'attendance' => 'own',
-            'leave_requests' => 'submit_own',
-            'payslips' => 'own',
-            'user_management' => 'none',
-            'system_settings' => 'none',
-        ],
-    ];
+    'admin' => [
+        'dashboard' => 'full',
+        'employee_records' => 'full',
+        'attendance' => 'full',
+        'leave_requests' => 'full',
+        'payslips' => 'full',
+        'user_management' => 'full',
+        'system_settings' => 'full',
+    ],
+
+    'hr' => [
+        'dashboard' => 'view',
+        'employee_records' => 'manage',
+        'attendance' => 'manage',
+        'leave_requests' => 'manage',
+        'payslips' => 'manage',
+        'user_management' => 'none',
+        'system_settings' => 'none',
+    ],
+
+    'employee' => [
+        'dashboard' => 'view',
+        'employee_records' => 'own',
+        'attendance' => 'own',
+        'leave_requests' => 'submit_own',
+        'payslips' => 'own',
+        'user_management' => 'none',
+        'system_settings' => 'none',
+    ],
+];
 
     /** Modules an admin can never lose (lock-out protection). */
     private const ADMIN_ALWAYS = ['user_management', 'system_settings'];

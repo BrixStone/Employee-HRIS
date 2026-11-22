@@ -275,6 +275,20 @@ body {
     max-width: 100%;
     overflow-x: hidden;
 }
+html,
+body,
+.content,
+.sidebar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.content::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+    display: none;
+}
 
   </style>
 </head>

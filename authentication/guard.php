@@ -31,15 +31,16 @@ require_once __DIR__ . '/../classes/Rbac.php';
 function role_home(?string $role): string
 {
     switch (Rbac::normalizeRole($role)) {
+
         case 'admin':
             return '/admin/users.php';
+
         case 'hr':
-        case 'payroll':
             return '/hr/dashboard.php';
-        case 'manager':
-            return '/manager/dashboard.php';
+
         case 'employee':
             return '/employee/dashboard.php';
+
         default:
             return '/authentication/login.php';
     }
