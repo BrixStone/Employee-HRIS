@@ -509,7 +509,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
       <div class="form-actions">
 
         <button class="primary-button" type="submit">
-          Create User & Send Invitation
+          Create User & Send Invitations
         </button>
 
         <a class="button" href="/admin/users.php">
