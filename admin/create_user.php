@@ -5,9 +5,14 @@
 require_once __DIR__ . '/../authentication/guard.php';
 $account = require_access('user_management', 'edit', 'all');
 
+// Account creation and role assignment are administrator-only.
+if (Rbac::normalizeRole($account['role']) !== 'admin') {
+    guard_forbidden($account['role']);
+}
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/User.php';
 require_once __DIR__ . '/../classes/Mailer.php';
+require_once __DIR__ . '/../classes/AuditLogger.php';
 
 // Load email and application configuration.
 $mailConfig = require __DIR__ . '/../config/mail.php';
@@ -58,9 +63,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     : null;
 
   // Validate role.
-  if (!in_array($role, $roles, true)) {
+  // Validate role assignment.
+if (!in_array($role, $roles, true)) {
     $errors[] = 'Please choose a valid role.';
-  }
+}
+
+// Explicit admin-only protection for administrator assignment.
+if (
+    $role === 'admin'
+    && Rbac::normalizeRole($account['role']) !== 'admin'
+) {
+    $errors[] = 'Only administrators can create administrator accounts.';
+}
+
+// Validate account status.
+if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
+    $errors[] = 'Please choose a valid account status.';
+}
 
   // Validate username.
   if ($username === '' || strlen($username) < 3) {
@@ -143,6 +162,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'role' => $role,
         'status' => $status
       ]);
+      AuditLogger::log('user.create_pending', 'user', $userId, [
+    'username' => $username,
+    'role' => $role,
+    'status' => $status,
+    'employee_id' => $employee_id,
+    'created_by' => $account['user_id']
+]);
 
       // Generate one-time password setup token.
       $token = $userModel->createSetupToken($userId);
