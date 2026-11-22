@@ -1,79 +1,345 @@
-
 <?php
+
 // templates/hrTemplates/header.php
+
 require_once __DIR__ . '/../../classes/Rbac.php';
 
-$currentPage = basename($_SERVER['PHP_SELF'] ?? 'dashboard.php', '.php');
-$navRole = Rbac::normalizeRole($_SESSION['role'] ?? '');
-$navPdo  = (isset($pdo) && $pdo instanceof PDO) ? $pdo : null;
+$currentPage = basename(
+    $_SERVER['PHP_SELF'] ?? 'dashboard.php',
+    '.php'
+);
 
-$navCan = static function (string $module, string $ability, string $scope) use ($navPdo, $navRole): bool {
-    return $navPdo !== null
-        && Rbac::can($navPdo, $navRole, $module, $ability)
-        && Rbac::scope($navPdo, $navRole, $module) === $scope;
-};
+/*
+|--------------------------------------------------------------------------
+| Account information
+|--------------------------------------------------------------------------
+*/
+
+$navRole = Rbac::normalizeRole($_SESSION['role'] ?? '');
+
+$navRank = Rbac::normalizeRank($_SESSION['rank'] ?? 'employee');
+
+$navPdo = (isset($pdo) && $pdo instanceof PDO)
+    ? $pdo
+    : null;
 
 $isHrSide = in_array($navRole, ['admin', 'hr'], true);
-$isManager = $navRole === 'manager';
+
+$isManager = $navRole === 'employee'
+    && in_array($navRank, ['manager', 'team_leader'], true);
+
+/*
+|--------------------------------------------------------------------------
+| Permission helpers
+|--------------------------------------------------------------------------
+*/
+
+$navCan = static function (
+    string $module,
+    string $ability = 'view'
+) use ($navPdo, $navRole, $navRank): bool {
+
+    if ($navPdo === null) {
+        return false;
+    }
+
+    return Rbac::can(
+        $navPdo,
+        $navRole,
+        $module,
+        $ability,
+        $navRank
+    );
+};
+
+$navModuleEnabled = static function (
+    string $module
+) use ($navPdo, $navRole, $navRank): bool {
+
+    if ($navPdo === null) {
+        return false;
+    }
+
+    return Rbac::moduleEnabled(
+        $navPdo,
+        $navRole,
+        $module,
+        $navRank
+    );
+};
+
+/*
+|--------------------------------------------------------------------------
+| Page titles
+|--------------------------------------------------------------------------
+*/
 
 $pageTitles = [
-    'dashboard' => $isManager ? 'Manager Dashboard' : 'HR Dashboard',
+    'dashboard' => $isManager
+        ? ($navRank === 'manager' ? 'Manager Dashboard' : 'Team Leader Dashboard')
+        : ($isHrSide ? 'HR Dashboard' : 'Dashboard'),
+
     'employees' => 'Employee Management',
     'add_employee' => 'Add Employee',
     'edit_employee' => 'Edit Employee',
     'view_employee' => 'Employee Profile',
+
     'recruitment' => 'Recruitment',
     'onboarding' => 'Onboarding',
     'onboarding_documents' => 'Pre-Employment Documents',
+
     'department' => 'Department Management',
     'position' => 'Position Management',
+
     'leave_management' => 'Leave Management',
+    'leave_requests' => 'Team Leave Requests',
+
     'report' => 'Reports & Audits',
     'payroll' => 'Payroll Management',
     'payslip_view' => 'Payslip',
+
     'users' => 'User Management',
     'create_user' => 'Create User',
     'permissions' => 'System Settings',
+
     'team' => 'My Team',
-    'leave_requests' => 'Team Leave Requests',
     'attendance' => 'Team Attendance'
 ];
 
 $pageTitle = $pageTitles[$currentPage] ?? 'Human Resources';
-$cssPage = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
 
-$canViewOnboarding = $isHrSide && $navCan('employee_records', 'view', 'all');
-$isOnboardingGroupActive = in_array($currentPage, ['onboarding', 'onboarding_documents'], true);
+$cssPage = $cssPageOverride
+    ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
+
+/*
+|--------------------------------------------------------------------------
+| Onboarding
+|--------------------------------------------------------------------------
+*/
+
+$canViewOnboarding = $isHrSide
+    && $navModuleEnabled('employee_onboarding');
+
+$isOnboardingGroupActive = in_array(
+    $currentPage,
+    ['onboarding', 'onboarding_documents'],
+    true
+);
+
+/*
+|--------------------------------------------------------------------------
+| Sidebar navigation
+|--------------------------------------------------------------------------
+*/
 
 $navItems = [
-    ['/hr/dashboard.php', 'Dashboard', '▦', ['dashboard'], $isHrSide && $navCan('dashboard', 'view', 'all')],
-    ['/hr/employees.php', 'Employees', '♙', ['employees', 'add_employee', 'edit_employee', 'view_employee', 'employee_deactivate'], $isHrSide && $navCan('employee_records', 'view', 'all')],
-    ['/hr/recruitment.php', 'Recruitment', '❖', ['recruitment'], $isHrSide && $navCan('employee_records', 'view', 'all')],
-    ['/hr/leave_management.php', 'Leave Management', '◷', ['leave_management'], $isHrSide && $navCan('leave_requests', 'edit', 'all')],
-    ['/hr/onboarding.php', 'Onboarding', '✦', ['onboarding', 'onboarding_documents'], $canViewOnboarding],
-    ['/hr/department.php', 'Departments', '▤', ['department'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
-    ['/hr/position.php', 'Positions', '▣', ['position'], $isHrSide && $navCan('employee_records', 'edit', 'all')],
-    ['/hr/payroll.php', 'Payroll', '₱', ['payroll', 'payslip_view'], $isHrSide && $navCan('payslips', 'edit', 'all')],
-    ['/hr/promotion_requests.php', 'Promotion Approvals', '↗', ['promotion_requests'], $isHrSide && in_array($navRole, ['admin', 'hr'], true)],
-    ['/hr/report.php', 'Reports &amp; Audits', '▥', ['report'], $isHrSide && $navCan('employee_records', 'view', 'all')],
-    ['/admin/users.php', 'User Management', '☺', ['users', 'create_user'], $isHrSide && $navCan('user_management', 'view', 'all')],
-    ['/admin/permissions.php', 'System Settings', '⚙', ['permissions'], $isHrSide && $navCan('system_settings', 'view', 'all')],
-    ['/manager/dashboard.php', 'Dashboard', '▦', ['dashboard'], $isManager && $navCan('dashboard', 'view', 'all')],
-    ['/manager/team.php', 'My Team', '♙', ['team'], $isManager && $navCan('employee_records', 'view', 'team')],
-    ['/manager/leave_requests.php', 'Team Leave', '◷', ['leave_requests'], $isManager && $navCan('leave_requests', 'view', 'team')],
-    ['/manager/attendance.php', 'Team Attendance', '▥', ['attendance'], $isManager && $navCan('attendance', 'view', 'team')],
+
+    // HR / Admin
+    [
+        '/hr/dashboard.php',
+        'Dashboard',
+        '▦',
+        ['dashboard'],
+        $isHrSide && $navModuleEnabled('dashboard')
+    ],
+
+    [
+        '/hr/employees.php',
+        'Employees',
+        '♙',
+        ['employees', 'add_employee', 'edit_employee', 'view_employee', 'employee_deactivate'],
+        $isHrSide && $navModuleEnabled('employee_records')
+    ],
+
+    [
+        '/hr/recruitment.php',
+        'Recruitment',
+        '❖',
+        ['recruitment'],
+        $isHrSide && $navModuleEnabled('recruitment')
+    ],
+
+    [
+        '/hr/leave_management.php',
+        'Leave Management',
+        '◷',
+        ['leave_management'],
+        $isHrSide && $navCan('leave_requests', 'view')
+    ],
+
+    [
+        '/hr/onboarding.php',
+        'Onboarding',
+        '✦',
+        ['onboarding', 'onboarding_documents'],
+        $canViewOnboarding
+    ],
+
+    [
+        '/hr/department.php',
+        'Departments',
+        '▤',
+        ['department'],
+        $isHrSide && $navCan('employee_records', 'edit')
+    ],
+
+    [
+        '/hr/position.php',
+        'Positions',
+        '▣',
+        ['position'],
+        $isHrSide && $navCan('employee_records', 'edit')
+    ],
+
+    [
+        '/hr/payroll.php',
+        'Payroll',
+        '₱',
+        ['payroll', 'payslip_view'],
+        $isHrSide && $navModuleEnabled('payroll')
+    ],
+
+    [
+        '/hr/promotion_requests.php',
+        'Promotion Approvals',
+        '↗',
+        ['promotion_requests'],
+        $isHrSide && $navCan('promotion_management', 'approve')
+    ],
+
+    [
+        '/hr/report.php',
+        'Reports & Audits',
+        '▥',
+        ['report'],
+        $isHrSide && $navModuleEnabled('reports')
+    ],
+
+    [
+        '/admin/users.php',
+        'User Management',
+        '☺',
+        ['users', 'create_user'],
+        $isHrSide && $navModuleEnabled('user_management')
+    ],
+
+    [
+        '/admin/permissions.php',
+        'System Settings',
+        '⚙',
+        ['permissions'],
+        $isHrSide && $navModuleEnabled('system_settings')
+    ],
+
+    // Manager / Team Leader
+    [
+        '/manager/dashboard.php',
+        'Dashboard',
+        '▦',
+        ['dashboard'],
+        $isManager && $navModuleEnabled('dashboard')
+    ],
+
+    [
+        '/manager/team.php',
+        'My Team',
+        '♙',
+        ['team'],
+        $isManager && $navCan('employee_records', 'view')
+    ],
+
+    [
+        '/manager/leave_requests.php',
+        'Team Leave',
+        '◷',
+        ['leave_requests'],
+        $isManager && $navCan('leave_requests', 'view')
+    ],
+
+    [
+        '/manager/attendance.php',
+        'Team Attendance',
+        '▥',
+        ['attendance'],
+        $isManager && $navCan('attendance', 'view')
+    ],
 ];
+
+/*
+|--------------------------------------------------------------------------
+| Sidebar profile
+|--------------------------------------------------------------------------
+*/
 
 $roleLabels = [
-    'admin' => ['AD', 'Administrator', 'System Admin', 'ADMINISTRATION', 'Admin Workspace', 'Admin Control'],
-    'manager' => ['MG', 'Manager', 'Team Management', 'MANAGER PORTAL', 'Manager Workspace', 'Manager Portal'],
+    'admin' => [
+        'AD',
+        'Administrator',
+        'System Admin',
+        'ADMINISTRATION',
+        'Admin Workspace',
+        'Admin Control'
+    ],
+
+    'hr' => [
+        'HR',
+        'HR Administration',
+        'Human Resources',
+        'HUMAN RESOURCES',
+        'HR Workspace',
+        'HR Portal'
+    ],
+
+    'employee' => $navRank === 'manager'
+        ? [
+            'MG',
+            'Manager',
+            'Department Management',
+            'MANAGER PORTAL',
+            'Manager Workspace',
+            'Manager Portal'
+        ]
+        : ($navRank === 'team_leader'
+            ? [
+                'TL',
+                'Team Leader',
+                'Team Management',
+                'TEAM LEADER',
+                'Team Workspace',
+                'Team Portal'
+            ]
+            : [
+                'EM',
+                'Employee',
+                'Employee Workspace',
+                'EMPLOYEE',
+                'Employee Workspace',
+                'Employee Portal'
+            ])
 ];
 
-[$navInitials, $navName, $navSub, $navEyebrow, $navStatus, $navTagline] = $roleLabels[$navRole]
-    ?? ['HR', 'HR Administration', 'Human Resources', 'HUMAN RESOURCES', 'HR Workspace', 'Admin Control'];
+[
+    $navInitials,
+    $navName,
+    $navSub,
+    $navEyebrow,
+    $navStatus,
+    $navTagline
+] = $roleLabels[$navRole] ?? [
+    'HR',
+    'HR Administration',
+    'Human Resources',
+    'HUMAN RESOURCES',
+    'HR Workspace',
+    'HR Portal'
+];
 
-$navHome = function_exists('role_home') ? role_home($navRole) : '/hr/dashboard.php';
+$navHome = function_exists('role_home')
+    ? role_home($navRole)
+    : ($isManager ? '/manager/dashboard.php' : '/hr/dashboard.php');
+
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
