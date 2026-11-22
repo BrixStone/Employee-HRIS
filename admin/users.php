@@ -9,6 +9,11 @@ require_once __DIR__ . '/../config/helpers.php'; // h(), fullName()
 require_once __DIR__ . '/../classes/User.php';
 
 $canEdit  = Rbac::can($pdo, $account['role'], 'user_management', 'edit');
+$isAdmin = Rbac::normalizeRole($account['role']) === 'admin';
+
+// Role assignment is restricted to administrators,
+// regardless of the general user_management edit permission.
+$canAssignRoles = $isAdmin;
 $roles    = Rbac::ROLES;
 $ranks = Rbac::RANKS;
 $statuses = ['Active', 'Inactive'];
@@ -70,11 +75,19 @@ LIMIT 1');
     $error = 'You cannot change your own role or status. Ask another admin.';
   } elseif (!in_array($newRole, $roles, true)) {
     $error = 'Unknown role.';
+  } elseif (
+    $newRole !== Rbac::normalizeRole($target['role'])
+    && !$canAssignRoles
+  ) {
+    $error = 'Only administrators can assign or change user roles.';
   } elseif (!in_array($newRank, $ranks, true)) {
     $error = 'Unknown rank.';
   } elseif (!in_array($newStatus, $statuses, true)) {
     $error = 'Unknown status.';
-  } elseif (in_array($newRole, ['employee', 'manager'], true) && $target['employee_id'] === null) {
+  } elseif (
+    in_array($newRole, ['employee', 'hr'], true)
+    && $target['employee_id'] === null
+  ) {
     $error = "The {$newRole} role needs a linked employee record, and this account has none.";
   } else {
     // Never leave the system without an active admin.
@@ -117,14 +130,14 @@ LIMIT 1');
         'employee_id' => $target['employee_id']
       ]);
     }
-        AuditLogger::log('user.update', 'user', $targetId, [
-        'username'   => $target['username'],
-        'old_role'   => $target['role'],
-        'new_role'   => $newRole,
-        'old_rank'   => $target['rank'] ?? 'employee',
-        'new_rank'   => $newRank,
-        'old_status' => $target['status'],
-        'new_status' => $newStatus,
+    AuditLogger::log('user.update', 'user', $targetId, [
+      'username'   => $target['username'],
+      'old_role'   => $target['role'],
+      'new_role'   => $newRole,
+      'old_rank'   => $target['rank'] ?? 'employee',
+      'new_rank'   => $newRank,
+      'old_status' => $target['status'],
+      'new_status' => $newStatus,
     ]);
 
     $message = "Saved {$target['username']}: role {$newRole}, rank {$newRank}, status {$newStatus}. "
@@ -536,11 +549,26 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
                   <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <?= csrf_field() ?>
                     <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
-                    <select name="role" aria-label="Role for <?= h($u['username']) ?>">
-                      <?php foreach ($roles as $r): ?>
-                        <option value="<?= h($r) ?>" <?= $r === $uRole ? 'selected' : '' ?>><?= h($r) ?></option>
-                      <?php endforeach; ?>
-                    </select>
+                    <?php if ($canAssignRoles): ?>
+                      <select name="role"
+                        aria-label="Role for <?= h($u['username']) ?>">
+                        <?php foreach ($roles as $r): ?>
+                          <option value="<?= h($r) ?>"
+                            <?= $r === $uRole ? 'selected' : '' ?>>
+                            <?= h($r) ?>
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                    <?php else: ?>
+                      <input
+                        type="hidden"
+                        name="role"
+                        value="<?= h($uRole) ?>">
+
+                      <span class="pill pill-neutral">
+                        <?= h(ucfirst($uRole)) ?>
+                      </span>
+                    <?php endif; ?>
                     <select
                       name="rank"
                       aria-label="Rank for <?= h($u['username']) ?>">
