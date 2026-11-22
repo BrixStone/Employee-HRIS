@@ -15,6 +15,7 @@ $roles = Rbac::ROLES;
 $ranks = Rbac::RANKS;
 $statuses = ['Active', 'Inactive'];
 $currentUserId = (int)($account['user_id'] ?? $account['id'] ?? 0);
+/** @var User $userModel */
 $userModel = new User($pdo);
 
 // Flash messages (supports the keys used by the existing invitation handlers).
