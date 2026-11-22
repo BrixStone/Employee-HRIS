@@ -699,6 +699,7 @@ class User
         }
     }
 
+
     public function updateAccount(
         int $userId,
         string $username,
@@ -707,14 +708,33 @@ class User
         ?string $rank
     ): bool {
         try {
+            // Validate account data.
+            $role = Rbac::normalizeRole($role);
+
+            if (!in_array($role, Rbac::ROLES, true)) {
+                throw new InvalidArgumentException('Invalid user role.');
+            }
+
+            if (!in_array($status, ['Active', 'Inactive'], true)) {
+                throw new InvalidArgumentException('Invalid account status.');
+            }
+
+            $username = trim($username);
+
+            if ($username === '' || strlen($username) < 3) {
+                throw new InvalidArgumentException('Invalid username.');
+            }
+
             $this->pdo->beginTransaction();
 
+            // Lock the target account.
             $st = $this->pdo->prepare(
-                "SELECT employee_id
+                "SELECT id, employee_id, role, status
              FROM users
              WHERE id = :id
              FOR UPDATE"
             );
+
             $st->execute(['id' => $userId]);
             $user = $st->fetch(PDO::FETCH_ASSOC);
 
@@ -723,6 +743,61 @@ class User
                 return false;
             }
 
+            // Prevent duplicate usernames.
+            $st = $this->pdo->prepare(
+                "SELECT id
+             FROM users
+             WHERE LOWER(username) = LOWER(:username)
+               AND id <> :id
+             LIMIT 1"
+            );
+
+            $st->execute([
+                'username' => $username,
+                'id' => $userId
+            ]);
+
+            if ($st->fetch()) {
+                throw new InvalidArgumentException('Username already exists.');
+            }
+
+            // Employee and HR accounts require an employee record.
+            if (
+                in_array($role, ['employee', 'hr'], true)
+                && $user['employee_id'] === null
+            ) {
+                throw new InvalidArgumentException(
+                    'This role requires a linked employee record.'
+                );
+            }
+
+            // Never remove the last active administrator.
+            $wasActiveAdmin =
+                Rbac::normalizeRole($user['role']) === 'admin'
+                && strcasecmp($user['status'], 'Active') === 0;
+
+            if (
+                $wasActiveAdmin
+                && ($role !== 'admin' || $status !== 'Active')
+            ) {
+                $st = $this->pdo->prepare(
+                    "SELECT COUNT(*)
+                 FROM users
+                 WHERE LOWER(role) = 'admin'
+                   AND status = 'Active'
+                   AND id <> :id"
+                );
+
+                $st->execute(['id' => $userId]);
+
+                if ((int)$st->fetchColumn() === 0) {
+                    throw new RuntimeException(
+                        'Cannot remove the last active administrator.'
+                    );
+                }
+            }
+
+            // Update account details.
             $st = $this->pdo->prepare(
                 "UPDATE users
              SET username = :username,
@@ -739,7 +814,12 @@ class User
                 'id' => $userId
             ]);
 
+            // Update employee rank when applicable.
             if ($user['employee_id'] !== null && $rank !== null) {
+                if (!in_array($rank, Rbac::RANKS, true)) {
+                    throw new InvalidArgumentException('Invalid employee rank.');
+                }
+
                 $st = $this->pdo->prepare(
                     "UPDATE employees
                  SET `rank` = :rank,
@@ -754,14 +834,17 @@ class User
             }
 
             $this->pdo->commit();
+
             return true;
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
+
             throw $e;
         }
     }
+
 
     public function getAccountDetails(int $userId): ?array
     {
