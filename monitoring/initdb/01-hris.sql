@@ -135,11 +135,13 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR(30)  NOT NULL DEFAULT 'employee',
     status          VARCHAR(20)  NOT NULL DEFAULT 'Active',
     setup_completed TINYINT(1)   NOT NULL DEFAULT 0,
+    last_activity   DATETIME     DEFAULT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY users_username_key (username),
     KEY idx_users_employee (employee_id),
+    KEY idx_users_last_activity (last_activity),
     CONSTRAINT fk_user_employee
         FOREIGN KEY (employee_id) REFERENCES employees (id)
         ON DELETE SET NULL ON UPDATE CASCADE
@@ -204,6 +206,33 @@ CREATE TABLE IF NOT EXISTS promotion_requests (
         ON UPDATE CASCADE
 
 ) ENGINE=InnoDB
+
+CREATE TABLE holidays (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    holiday_name VARCHAR(150) NOT NULL,
+    holiday_date DATE NOT NULL,
+    holiday_type ENUM(
+        'Regular Holiday',
+        'Special Non-Working',
+        'Special Working'
+    ) NOT NULL,
+    description TEXT NULL,
+    coverage ENUM(
+        'Nationwide',
+        'Regional'
+    ) NOT NULL DEFAULT 'Nationwide',
+    region VARCHAR(100) NULL,
+    status ENUM(
+        'Active',
+        'Inactive'
+    ) NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_holiday_date (holiday_date),
+    INDEX idx_holiday_status (status)
+);
+
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_unicode_ci;
 

@@ -63,10 +63,10 @@ $hoursWorked = isset($ps['hours_worked']) && $ps['hours_worked'] !== null
              ? (float) $ps['hours_worked']
              : (float) $ps['hours_worked_calc'];
 
-$badgeClass = match(strtolower($ps['status'])) {
+$badgeClass = match(strtolower(trim($ps['status']))) {
     'paid'      => 'badge-paid',
     'finalized' => 'badge-finalized',
-    'generated' => 'badge-generated',
+    'draft'     => 'badge-draft',
     default     => 'badge-draft',
 };
 

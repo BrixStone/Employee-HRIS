@@ -1107,3 +1107,18 @@ small {
         font-size: 15px;
     }
 }
+/* Employee sidebar scrollbar behavior */
+html,
+body {
+    scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none;
+}
+
+/* Prevent background scrolling while sidebar is open */
+body.sidebar-open {
+    overflow: hidden;
+}
