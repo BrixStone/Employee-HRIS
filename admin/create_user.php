@@ -24,14 +24,18 @@ $mailer = new Mailer();
 $roles = Rbac::ROLES;
 $employees = $userModel->getEmployeesWithoutUsers();
 
-
-
 $errors = [];
 $success = '';
+$warning = '';
 
 if (isset($_SESSION['create_user_success'])) {
   $success = $_SESSION['create_user_success'];
   unset($_SESSION['create_user_success']);
+}
+
+if (isset($_SESSION['create_user_warning'])) {
+  $warning = $_SESSION['create_user_warning'];
+  unset($_SESSION['create_user_warning']);
 }
 
 $cleanupMessage = '';
@@ -67,9 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors[] = 'Username must be at least 3 characters.';
   }
 
-  // Employees and managers require employee records.
-  if (in_array($role, ['employee', 'manager'], true) && $employee_id === null) {
-    $errors[] = "The {$role} role needs a linked employee.";
+  // Employee accounts require an employee record. (Manager and team leader
+  // are employee ranks, set on the employee record, not account roles.)
+  if ($role === 'employee' && $employee_id === null) {
+    $errors[] = 'The employee role needs a linked employee.';
   }
 
   // Get employee email.
@@ -125,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   // Check application URL.
-  $appUrl = $mailConfig['app_url'] ?? '';
+  $appUrl = rtrim((string)($mailConfig['app_url'] ?? ''), '/');
 
   if (!$appUrl || !filter_var($appUrl, FILTER_VALIDATE_URL)) {
     $errors[] = 'Application URL is not configured correctly.';
@@ -232,13 +237,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         . "{$setupUrl}\n\n"
         . "This link expires after 10 minutes.";
 
-      // Send email.
-      $sent = $mailer->send(
-        $employeeEmail,
-        $subject,
-        $htmlBody,
-        $plainBody
-      );
+      // Send email without deleting the newly created account if SMTP fails.
+      $sent = false;
+      try {
+        $sent = $mailer->send(
+          $employeeEmail,
+          $subject,
+          $htmlBody,
+          $plainBody
+        );
+      } catch (Throwable $mailError) {
+        error_log(
+          "HRIS invitation email exception for user ID {$userId}: "
+            . $mailError->getMessage()
+        );
+        $sent = false;
+      }
 
       if ($sent) {
 
@@ -254,7 +268,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           "HRIS invitation email failed for user ID: {$userId}"
         );
 
-        $errors[] = 'The account was created, but the invitation email could not be sent. The account is still pending activation.';
+        $_SESSION['create_user_warning'] =
+          "Account created for {$username}, but the invitation email to {$employeeEmail} could not be sent. "
+          . "Use this setup link directly (expires in 10 minutes): {$setupUrl}";
+
+        header('Location: create_user.php');
+        exit;
       }
     } catch (Throwable $e) {
 
@@ -302,6 +321,15 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     <?php foreach ($errors as $e): ?>
       <div><?= htmlspecialchars($e) ?></div>
     <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<?php if ($warning): ?>
+  <div class="alert"
+    style="margin-bottom:20px;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.14);color:#fde68a;word-break:break-all">
+
+    <?= htmlspecialchars($warning) ?>
+
   </div>
 <?php endif; ?>
 
@@ -364,7 +392,7 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
         </select>
 
         <div class="muted" style="margin-top:6px">
-          Employee and manager accounts require an employee record.
+          Employee accounts require an employee record.
           Linked accounts receive their invitation at the employee's
           registered email address.
         </div>

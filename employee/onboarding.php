@@ -18,19 +18,44 @@ $empId = (int)($_SESSION['employee_id'] ?? 0);
 $role  = strtolower(trim((string)($_SESSION['role'] ?? 'employee')));
 $email = trim((string)($_SESSION['email'] ?? ''));
 $name  = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? ''));
+$rank  = '';
 
-if ($empId > 0 && ($email === '' || $name === '')) {
-    $eStmt = $pdo->prepare("SELECT `email`, TRIM(CONCAT(`first_name`, ' ', `last_name`)) AS full_name FROM `employees` WHERE `id` = ? LIMIT 1");
+if ($empId > 0) {
+    $eStmt = $pdo->prepare("
+        SELECT
+            `email`,
+            TRIM(CONCAT_WS(' ', NULLIF(TRIM(COALESCE(`first_name`, '')), ''), NULLIF(TRIM(COALESCE(`middle_name`, '')), ''), NULLIF(TRIM(COALESCE(`last_name`, '')), ''))) AS full_name,
+            COALESCE(`rank`, '') AS `rank`
+        FROM `employees`
+        WHERE `id` = ?
+        LIMIT 1
+    ");
     $eStmt->execute([$empId]);
     if ($eRow = $eStmt->fetch(PDO::FETCH_ASSOC)) {
-        if ($email === '') $email = trim((string)$eRow['email']);
-        if ($name === '')  $name  = trim((string)$eRow['full_name']);
+        if ($email === '') $email = trim((string)($eRow['email'] ?? ''));
+        if ($name === '')  $name  = trim((string)($eRow['full_name'] ?? ''));
+        $rank = strtolower(str_replace(['-', ' '], '_', trim((string)($eRow['rank'] ?? ''))));
     }
+}
+
+function hris_user_has_facilitator_access(string $role, string $rank): bool
+{
+    if (in_array($role, ['hr', 'admin', 'manager', 'facilitator'], true)) {
+        return true;
+    }
+    $normRank = strtolower(str_replace(['-', ' '], '_', trim($rank)));
+    return $normRank === 'team_leader';
 }
 
 if (!function_exists('hris_get_linked_onboarding_record')) {
     function hris_get_linked_onboarding_record(PDO $pdo, int $empId = 0, string $email = '', string $name = ''): ?array
     {
+        if ($empId > 0) {
+            $stmt = $pdo->prepare("SELECT * FROM `employee_onboarding` WHERE `employee_id` = ? ORDER BY `id` DESC LIMIT 1");
+            $stmt->execute([$empId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) return $row;
+        }
         if ($email !== '') {
             $stmt = $pdo->prepare("SELECT * FROM `employee_onboarding` WHERE LOWER(TRIM(`email`)) = LOWER(TRIM(?)) ORDER BY `id` DESC LIMIT 1");
             $stmt->execute([$email]);
@@ -69,9 +94,9 @@ if (!function_exists('hris_is_orientation_locked_for_employee')) {
     }
 }
 
-function hris_get_facilitator_assignments(PDO $pdo, int $empId, string $name, string $role = 'employee'): array
+function hris_get_facilitator_assignments(PDO $pdo, int $empId, string $name, string $role = 'employee', string $rank = ''): array
 {
-    if (!in_array($role, ['hr', 'admin', 'manager', 'facilitator'], true)) {
+    if (!hris_user_has_facilitator_access($role, $rank)) {
         return [];
     }
     if ($empId <= 0 && $name === '') {
@@ -125,10 +150,10 @@ function hris_notify_onboarding_realtime(array $payload): void
     }
 }
 
-function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email, string $name, string $role = 'employee'): array
+function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email, string $name, string $role = 'employee', string $rank = ''): array
 {
     $onb = hris_get_linked_onboarding_record($pdo, $empId, $email, $name);
-    $facilitatorQueue = hris_get_facilitator_assignments($pdo, $empId, $name, $role);
+    $facilitatorQueue = hris_get_facilitator_assignments($pdo, $empId, $name, $role, $rank);
     $gate = hris_is_orientation_locked_for_employee($pdo, $empId, $email, $name);
 
     return [
@@ -145,11 +170,11 @@ function hris_get_employee_onboarding_state(PDO $pdo, int $empId, string $email,
 if (isset($_GET['api']) && $_GET['api'] === 'live_state') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    echo json_encode(hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role), JSON_UNESCAPED_UNICODE);
+    echo json_encode(hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank), JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$initial = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
+$initial = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank);
 $onb     = $initial['onb'];
 
 $flashError   = '';
@@ -162,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'facilitator_mark_attended' || $action === 'facilitator_unmark_attended') {
         $targetId = (int)($_POST['target_onb_id'] ?? 0);
         if ($targetId > 0) {
-            $allowed = hris_get_facilitator_assignments($pdo, $empId, $name, $role);
+            $allowed = hris_get_facilitator_assignments($pdo, $empId, $name, $role, $rank);
             $isAssigned = false;
             foreach ($allowed as $item) {
                 if ((int)$item['id'] === $targetId) {
@@ -207,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'step_orientation' => $action === 'facilitator_mark_attended' ? 1 : 0,
                 ]);
 
-                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
+                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank);
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -225,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode([
                     'ok'      => true,
                     'message' => $msg,
-                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role),
+                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank),
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
             }
@@ -240,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode([
                     'ok'      => false,
                     'message' => $msg,
-                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role),
+                    'state'   => hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank),
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
             }
@@ -266,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'step_policy'   => 1,
                 ]);
 
-                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role);
+                $updated = hris_get_employee_onboarding_state($pdo, $empId, $email, $name, $role, $rank);
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -292,7 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$hasFacilitatorAccess = in_array($role, ['hr', 'admin', 'manager', 'facilitator'], true);
+$hasFacilitatorAccess = hris_user_has_facilitator_access($role, $rank);
 
 require_once __DIR__ . '/../templates/employeeTemplates/header.php';
 ?>
@@ -493,7 +518,7 @@ require_once __DIR__ . '/../templates/employeeTemplates/header.php';
     <div class="eo-fac-panel" id="eoFacilitatorPanel">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
         <div>
-          <h2 style="margin:0 0 3px; font-size:18px; color:#0f172a;">My Assigned Orientation Schedule (HR / Facilitator)</h2>
+          <h2 style="margin:0 0 3px; font-size:18px; color:#0f172a;">My Assigned Orientation Schedule (Team Leader / Facilitator)</h2>
           <p style="margin:0; font-size:13px; color:#475569;">
             New employees scheduled for orientation under <strong><?= htmlspecialchars($name !== '' ? $name : 'your account', ENT_QUOTES, 'UTF-8') ?></strong>. Verify their Name or Employee ID at the orientation room and mark attendance as Done.
           </p>
