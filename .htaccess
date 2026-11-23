@@ -1,0 +1,57 @@
+
+Options -Indexes
+
+RewriteEngine On
+
+# ==================================================
+# 1. BLOCK INTERNAL DIRECTORIES
+# ==================================================
+
+RewriteRule ^(classes|config|database|includes|monitoring|vendor|tests|terraform|cron|selenium|algorithms|src|templates|realtime|\.git|\.github|\.kiro)(/|$) - [F,L,NC]
+
+# ==================================================
+# 2. BLOCK SENSITIVE FILES
+# ==================================================
+
+# Block .env and .env.example files
+RewriteRule (^|/)\.env(\..*)?$ - [F,L,NC]
+
+# Block Git directories
+RewriteRule (^|/)\.git(/|$) - [F,L,NC]
+
+# Block database backups and log files
+RewriteRule \.(sql|bak|backup|log)$ - [F,L,NC]
+
+# Block common infrastructure configuration files
+RewriteRule ^(docker-compose\.ya?ml|Dockerfile|apache-vhost\.conf|prometheus\.yml)$ - [F,L,NC]
+
+# ==================================================
+# 3. APPLICATION DASHBOARD ROUTES
+# ==================================================
+
+# Redirect section root URLs internally to dashboard.php
+RewriteRule ^(admin|hr|employee|manager)/?$ $1/dashboard.php [L]
+
+# ==================================================
+# 4. REDIRECT PHP URLS TO CLEAN URLS
+# ==================================================
+
+# Example: /admin/dashboard.php -> /admin/dashboard
+RewriteCond %{THE_REQUEST} \s/+(.+?)\.php(?:[\s?]) [NC]
+RewriteRule ^(.+)\.php$ /$1 [R=302,L,NC]
+
+# ==================================================
+# 5. ALLOW EXISTING FILES AND DIRECTORIES
+# ==================================================
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ==================================================
+# 6. CLEAN URL REWRITING
+# ==================================================
+
+# Example: /admin/dashboard -> /admin/dashboard.php
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^(.+?)/?$ $1.php [L]
