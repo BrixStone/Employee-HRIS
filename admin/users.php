@@ -13,10 +13,13 @@ $canEdit = Rbac::can($pdo, $account['role'], 'user_management', 'edit');
 $isAdmin = Rbac::normalizeRole($account['role']) === 'admin';
 $roles = Rbac::ROLES;
 $ranks = Rbac::RANKS;
+$canCreateUser = $isAdmin;
 $statuses = ['Active', 'Inactive'];
 $currentUserId = (int)($account['user_id'] ?? $account['id'] ?? 0);
 /** @var User $userModel */
 $userModel = new User($pdo);
+$employees = $userModel->getEmployeesWithoutUsers();
+
 
 // Flash messages (supports the keys used by the existing invitation handlers).
 $message = '';
@@ -920,44 +923,46 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
   .user-management::-webkit-scrollbar {
     display: none;
   }
+
   .um-warning-box {
     padding: 13px;
     margin-bottom: 16px;
-    border: 1px solid rgba(248,113,113,.25);
+    border: 1px solid rgba(248, 113, 113, .25);
     border-radius: 9px;
-    background: rgba(248,113,113,.08);
-}
+    background: rgba(248, 113, 113, .08);
+  }
 
-.um-warning-box strong {
+  .um-warning-box strong {
     color: #fca5a5;
     font-size: 12px;
-}
+  }
 
-.um-warning-box p {
+  .um-warning-box p {
     margin: 6px 0 0;
     color: #d1c8d8;
     font-size: 12px;
     line-height: 1.5;
-}
+  }
 
-.danger-button {
+  .danger-button {
     background: #dc4545 !important;
     color: white !important;
     border-color: #dc4545 !important;
-}
-.um-modal > form {
+  }
+
+  .um-modal>form {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
     overflow: hidden;
-}
+  }
 
-.um-modal > form .um-modal-body {
+  .um-modal>form .um-modal-body {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-}
+  }
 </style>
 
 <div class="user-management">
@@ -969,7 +974,12 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     </div>
     <div class="um-heading-actions">
       <?php if ($canEdit): ?>
-        <a class="primary-button" href="/admin/create_user.php">＋ Create User</a>
+        <button
+          type="button"
+          class="primary-button"
+          id="openCreateUserModal">
+          ＋ Create User
+        </button>
       <?php endif; ?>
       <a class="button" href="/admin/permissions.php">View permissions</a>
     </div>
@@ -1146,6 +1156,148 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
     </div>
   </section>
 </div>
+<!-- Create User Modal -->
+<?php if ($canCreateUser): ?>
+  <div class="user-modal" id="createUserModal" aria-hidden="true">
+    <section
+      class="um-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="createUserModalTitle">
+
+      <form id="createUserForm" method="POST" action="/admin/create_user.php">
+
+        <?= csrf_field() ?>
+
+        <header class="um-modal-head">
+          <div>
+            <p class="um-eyebrow">ACCESS CONTROL</p>
+            <h2 id="createUserModalTitle">Create New User</h2>
+            <p class="muted">Create an account and send a password setup invitation.</p>
+          </div>
+
+          <button
+            type="button"
+            class="um-close"
+            data-close-modal
+            aria-label="Close">&times;</button>
+        </header>
+
+        <div class="um-modal-body">
+
+          <div id="createUserFeedback" hidden></div>
+
+          <h3 class="um-section-title">Account Information</h3>
+
+          <div class="um-edit-grid">
+            <div>
+              <label for="create_employee_id">Link Employee</label>
+
+              <select id="create_employee_id" name="employee_id">
+                <option value="">-- No employee linked --</option>
+
+                <?php foreach ($employees as $emp): ?>
+                  <?php
+                  $employeeCode = !empty($emp['employee_id'])
+                    ? '[' . $emp['employee_id'] . '] '
+                    : '';
+
+                  $employeeName = trim(
+                    ($emp['last_name'] ?? '') . ', ' .
+                      ($emp['first_name'] ?? '')
+                  );
+                  ?>
+
+                  <option value="<?= (int)$emp['id'] ?>">
+                    <?= h($employeeCode . $employeeName) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div>
+              <label for="create_username">Username</label>
+              <input
+                type="text"
+                id="create_username"
+                name="username"
+                minlength="3"
+                maxlength="100"
+                required
+                placeholder="Enter username">
+            </div>
+          </div>
+
+          <div style="margin-top:15px">
+            <label for="create_email">Invitation Email</label>
+            <input
+              type="email"
+              id="create_email"
+              name="email"
+              placeholder="employee@example.com">
+
+            <p class="um-subtext">
+              Linked employees will receive their invitation at their registered email address.
+            </p>
+          </div>
+
+          <h3 class="um-section-title">Access & Permissions</h3>
+
+          <div class="um-edit-grid">
+            <div>
+              <label for="create_role">System Role</label>
+
+              <select id="create_role" name="role" required>
+                <?php foreach ($roles as $role): ?>
+                  <option
+                    value="<?= h($role) ?>"
+                    <?= $role === 'employee' ? 'selected' : '' ?>>
+                    <?= h(ucfirst($role)) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div>
+              <label for="create_status">Account Status</label>
+
+              <select id="create_status" name="status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="um-detail" style="margin-top:18px">
+            <strong>Password Setup Invitation</strong>
+            <p class="um-subtext">
+              The user will receive an email with a one-time link
+              to create their own password. No password is required here.
+            </p>
+          </div>
+
+        </div>
+
+        <footer class="um-modal-foot">
+          <button
+            type="button"
+            class="button"
+            data-close-modal>
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="primary-button"
+            id="createUserSubmit">
+            Create User
+          </button>
+        </footer>
+
+      </form>
+    </section>
+  </div>
+<?php endif; ?>
 
 <!-- View account modal -->
 <div class="user-modal" id="viewUserModal" aria-hidden="true">
@@ -1230,251 +1382,332 @@ require __DIR__ . '/../templates/adminTemplates/header.php';
   </div>
 <?php endif; ?>
 <div class="user-modal" id="statusConfirmModal" aria-hidden="true">
-    <section class="um-modal" role="dialog" aria-modal="true">
+  <section class="um-modal" role="dialog" aria-modal="true">
 
-        <header class="um-modal-head">
-            <div>
-                <h2 id="statusModalTitle">Confirm Account Status</h2>
-                <p id="statusModalDescription"></p>
-            </div>
+    <header class="um-modal-head">
+      <div>
+        <h2 id="statusModalTitle">Confirm Account Status</h2>
+        <p id="statusModalDescription"></p>
+      </div>
 
-            <button type="button" class="um-close" data-close-modal>
-                &times;
-            </button>
-        </header>
+      <button type="button" class="um-close" data-close-modal>
+        &times;
+      </button>
+    </header>
 
-        <div class="um-modal-body">
-            <div class="um-warning-box">
-                <strong id="statusWarningTitle"></strong>
-                <p id="statusWarningMessage"></p>
-            </div>
+    <div class="um-modal-body">
+      <div class="um-warning-box">
+        <strong id="statusWarningTitle"></strong>
+        <p id="statusWarningMessage"></p>
+      </div>
 
-            <p>
-                Username:
-                <strong id="statusModalUsername"></strong>
-            </p>
-        </div>
+      <p>
+        Username:
+        <strong id="statusModalUsername"></strong>
+      </p>
+    </div>
 
-        <footer class="um-modal-foot">
-            <button type="button" class="button" data-close-modal>
-                Cancel
-            </button>
+    <footer class="um-modal-foot">
+      <button type="button" class="button" data-close-modal>
+        Cancel
+      </button>
 
-            <form method="post" id="statusConfirmForm">
-                <?= csrf_field() ?>
+      <form method="post" id="statusConfirmForm">
+        <?= csrf_field() ?>
 
-                <input type="hidden" name="action" value="change_status">
-                <input type="hidden" name="user_id" id="statusModalUserId">
-                <input type="hidden" name="status" id="statusModalValue">
+        <input type="hidden" name="action" value="change_status">
+        <input type="hidden" name="user_id" id="statusModalUserId">
+        <input type="hidden" name="status" id="statusModalValue">
 
-                <button type="submit" class="button" id="statusConfirmButton">
-                    Confirm
-                </button>
-            </form>
-        </footer>
+        <button type="submit" class="button" id="statusConfirmButton">
+          Confirm
+        </button>
+      </form>
+    </footer>
 
-    </section>
+  </section>
 </div>
 <script>
-  
-(() => {
+  (() => {
     const viewModal = document.getElementById('viewUserModal');
     const editModal = document.getElementById('editUserModal');
     const statusModal = document.getElementById('statusConfirmModal');
 
-    const safeText = (value) => {
-        if (value === null || value === undefined || value === '') {
-            return '—';
+    const createModal = document.getElementById('createUserModal');
+    const createButton = document.getElementById('openCreateUserModal');
+
+
+    const createForm = document.getElementById('createUserForm');
+    const createFeedback = document.getElementById('createUserFeedback');
+    const createSubmit = document.getElementById('createUserSubmit');
+
+    createForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      createFeedback.hidden = true;
+      createFeedback.replaceChildren();
+
+      createSubmit.disabled = true;
+      createSubmit.textContent = 'Creating...';
+
+      try {
+        const response = await fetch(createForm.action, {
+          method: 'POST',
+          body: new FormData(createForm),
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          }
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          createFeedback.className = 'um-alert error';
+          createFeedback.replaceChildren();
+
+          const message = document.createElement('p');
+          message.textContent = result.message || 'Please check the form.';
+          createFeedback.appendChild(message);
+
+          if (result.errors?.length) {
+            const list = document.createElement('ul');
+
+            result.errors.forEach(error => {
+              const item = document.createElement('li');
+              item.textContent = error;
+              list.appendChild(item);
+            });
+
+            createFeedback.appendChild(list);
+          }
+
+          createFeedback.hidden = false;
+          return;
         }
-        return String(value);
+
+        createFeedback.className = result.warning
+    ? 'um-alert error'
+    : 'um-alert success';
+
+        createFeedback.textContent = result.message;
+        createFeedback.hidden = false;
+
+        createForm.reset();
+
+        // Refresh the user table after showing the result.
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+
+      } catch (error) {
+        console.error('Create user error:', error);
+
+        createFeedback.className = 'um-alert error';
+        createFeedback.textContent =
+          'Something went wrong. Please try again.';
+        createFeedback.hidden = false;
+
+      } finally {
+        createSubmit.disabled = false;
+        createSubmit.textContent = 'Create User';
+      }
+    });
+
+
+    createButton?.addEventListener('click', () => {
+      openModal(createModal);
+    });
+    const safeText = (value) => {
+      if (value === null || value === undefined || value === '') {
+        return '—';
+      }
+      return String(value);
     };
 
     // OPEN MODAL
     const openModal = (modal) => {
-        if (!modal) return;
+      if (!modal) return;
 
-        modal.classList.add('is-open');
-        modal.setAttribute('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
     };
 
     // CLOSE MODAL
     const closeModal = (modal) => {
-        if (!modal) return;
+      if (!modal) return;
 
-        modal.classList.remove('is-open');
-        modal.setAttribute('aria-hidden', 'true');
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
 
-        if (!document.querySelector('.user-modal.is-open')) {
-            document.body.style.overflow = '';
-        }
+      if (!document.querySelector('.user-modal.is-open')) {
+        document.body.style.overflow = '';
+      }
     };
 
     // VIEW ACCOUNT
     document.querySelectorAll('[data-view-user]').forEach((button) => {
-        button.addEventListener('click', () => {
-            let user;
+      button.addEventListener('click', () => {
+        let user;
 
-            try {
-                user = JSON.parse(button.dataset.user || '{}');
-            } catch (error) {
-                console.error('Could not read account details:', error);
-                return;
-            }
+        try {
+          user = JSON.parse(button.dataset.user || '{}');
+        } catch (error) {
+          console.error('Could not read account details:', error);
+          return;
+        }
 
-            const fullName = [
-                user.first_name,
-                user.middle_name,
-                user.last_name,
-                user.suffix
-            ].filter(Boolean).join(' ');
+        const fullName = [
+          user.first_name,
+          user.middle_name,
+          user.last_name,
+          user.suffix
+        ].filter(Boolean).join(' ');
 
-            const values = {
-                username: user.username,
-                role: user.role,
-                status: user.status,
-                setup: Number(user.setup_completed) === 1
-                    ? 'Completed'
-                    : 'Pending setup',
-                created_at: user.created_at,
-                last_activity: user.last_activity,
-                employee_no: user.employee_no,
-                full_name: fullName,
-                email: user.email,
-                phone: user.phone,
-                department_name: user.department_name,
-                position_title: user.position_title,
-                rank: user.rank
-                    ? String(user.rank).replaceAll('_', ' ')
-                    : '',
-                date_hired: user.date_hired,
-                employment_type: user.employment_type,
-                employment_status: user.employment_status
-            };
+        const values = {
+          username: user.username,
+          role: user.role,
+          status: user.status,
+          setup: Number(user.setup_completed) === 1 ?
+            'Completed' : 'Pending setup',
+          created_at: user.created_at,
+          last_activity: user.last_activity,
+          employee_no: user.employee_no,
+          full_name: fullName,
+          email: user.email,
+          phone: user.phone,
+          department_name: user.department_name,
+          position_title: user.position_title,
+          rank: user.rank ?
+            String(user.rank).replaceAll('_', ' ') : '',
+          date_hired: user.date_hired,
+          employment_type: user.employment_type,
+          employment_status: user.employment_status
+        };
 
-            Object.entries(values).forEach(([key, value]) => {
-                const node = viewModal?.querySelector(
-                    `[data-detail="${key}"]`
-                );
+        Object.entries(values).forEach(([key, value]) => {
+          const node = viewModal?.querySelector(
+            `[data-detail="${key}"]`
+          );
 
-                if (node) {
-                    node.textContent = safeText(value);
-                }
-            });
-
-            const subtitle = document.getElementById('viewModalSubtitle');
-
-            if (subtitle) {
-                subtitle.textContent =
-                    fullName || user.username || 'Employee account information';
-            }
-
-            openModal(viewModal);
+          if (node) {
+            node.textContent = safeText(value);
+          }
         });
+
+        const subtitle = document.getElementById('viewModalSubtitle');
+
+        if (subtitle) {
+          subtitle.textContent =
+            fullName || user.username || 'Employee account information';
+        }
+
+        openModal(viewModal);
+      });
     });
 
     // EDIT ACCOUNT
     document.querySelectorAll('[data-edit-user]').forEach((button) => {
-        button.addEventListener('click', () => {
-            let user;
+      button.addEventListener('click', () => {
+        let user;
 
-            try {
-                user = JSON.parse(button.dataset.user || '{}');
-            } catch (error) {
-                console.error('Could not read account details:', error);
-                return;
-            }
+        try {
+          user = JSON.parse(button.dataset.user || '{}');
+        } catch (error) {
+          console.error('Could not read account details:', error);
+          return;
+        }
 
-            document.getElementById('edit_user_id').value = user.id || '';
-            document.getElementById('edit_username').value = user.username || '';
-            document.getElementById('edit_status').value = user.status || 'Active';
-            document.getElementById('edit_role').value = user.role || 'employee';
-            document.getElementById('edit_rank').value = user.rank || 'employee';
+        document.getElementById('edit_user_id').value = user.id || '';
+        document.getElementById('edit_username').value = user.username || '';
+        document.getElementById('edit_status').value = user.status || 'Active';
+        document.getElementById('edit_role').value = user.role || 'employee';
+        document.getElementById('edit_rank').value = user.rank || 'employee';
 
-            const subtitle = document.getElementById('editModalSubtitle');
+        const subtitle = document.getElementById('editModalSubtitle');
 
-            if (subtitle) {
-                subtitle.textContent = `Editing ${user.username || 'account'}`;
-            }
+        if (subtitle) {
+          subtitle.textContent = `Editing ${user.username || 'account'}`;
+        }
 
-            openModal(editModal);
-        });
+        openModal(editModal);
+      });
     });
 
     // ACTIVATE / DEACTIVATE ACCOUNT
     document.querySelectorAll('[data-status-user]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const userId = button.dataset.userId;
-            const username = button.dataset.username;
-            const newStatus = button.dataset.status;
+      button.addEventListener('click', () => {
+        const userId = button.dataset.userId;
+        const username = button.dataset.username;
+        const newStatus = button.dataset.status;
 
-            const isDeactivating = newStatus === 'Inactive';
+        const isDeactivating = newStatus === 'Inactive';
 
-            document.getElementById('statusModalTitle').textContent =
-                isDeactivating ? 'Deactivate Account?' : 'Activate Account?';
+        document.getElementById('statusModalTitle').textContent =
+          isDeactivating ? 'Deactivate Account?' : 'Activate Account?';
 
-            document.getElementById('statusModalDescription').textContent =
-                isDeactivating
-                    ? 'You are about to deactivate this account.'
-                    : 'You are about to reactivate this account.';
+        document.getElementById('statusModalDescription').textContent =
+          isDeactivating ?
+          'You are about to deactivate this account.' :
+          'You are about to reactivate this account.';
 
-            document.getElementById('statusWarningTitle').textContent =
-                isDeactivating
-                    ? 'Access will be disabled'
-                    : 'Access will be restored';
+        document.getElementById('statusWarningTitle').textContent =
+          isDeactivating ?
+          'Access will be disabled' :
+          'Access will be restored';
 
-            document.getElementById('statusWarningMessage').textContent =
-                isDeactivating
-                    ? 'This user will no longer be able to access the system.'
-                    : 'This user will be able to access the system again.';
+        document.getElementById('statusWarningMessage').textContent =
+          isDeactivating ?
+          'This user will no longer be able to access the system.' :
+          'This user will be able to access the system again.';
 
-            document.getElementById('statusModalUsername').textContent =
-                username;
+        document.getElementById('statusModalUsername').textContent =
+          username;
 
-            document.getElementById('statusModalUserId').value = userId;
-            document.getElementById('statusModalValue').value = newStatus;
+        document.getElementById('statusModalUserId').value = userId;
+        document.getElementById('statusModalValue').value = newStatus;
 
-            const confirmButton =
-                document.getElementById('statusConfirmButton');
+        const confirmButton =
+          document.getElementById('statusConfirmButton');
 
-            confirmButton.textContent = isDeactivating
-                ? 'Deactivate Account'
-                : 'Activate Account';
+        confirmButton.textContent = isDeactivating ?
+          'Deactivate Account' :
+          'Activate Account';
 
-            confirmButton.classList.toggle(
-                'danger-button',
-                isDeactivating
-            );
+        confirmButton.classList.toggle(
+          'danger-button',
+          isDeactivating
+        );
 
-            openModal(statusModal);
-        });
+        openModal(statusModal);
+      });
     });
 
     // CLOSE BUTTONS
     document.querySelectorAll('[data-close-modal]').forEach((button) => {
-        button.addEventListener('click', () => {
-            closeModal(button.closest('.user-modal'));
-        });
+      button.addEventListener('click', () => {
+        closeModal(button.closest('.user-modal'));
+      });
     });
 
     // CLOSE WHEN CLICKING OUTSIDE MODAL
     document.querySelectorAll('.user-modal').forEach((modal) => {
-        modal.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                closeModal(modal);
-            }
-        });
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+          closeModal(modal);
+        }
+      });
     });
 
     // CLOSE WITH ESCAPE KEY
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            document.querySelectorAll('.user-modal.is-open').forEach(
-                closeModal
-            );
-        }
+      if (event.key === 'Escape') {
+        document.querySelectorAll('.user-modal.is-open').forEach(
+          closeModal
+        );
+      }
     });
 
-})();
-
+  })();
 </script>
