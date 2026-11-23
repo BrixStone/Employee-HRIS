@@ -7,7 +7,7 @@ $account = require_access('user_management', 'edit', 'all');
 
 // Account creation and role assignment are administrator-only.
 if (Rbac::normalizeRole($account['role']) !== 'admin') {
-    guard_forbidden($account['role']);
+  guard_forbidden($account['role']);
 }
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/User.php';
@@ -19,6 +19,28 @@ $mailConfig = require __DIR__ . '/../config/mail.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
+}
+
+$isAjax = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+
+function sendJsonResponse(
+  bool $success,
+  string $message,
+  array $errors = [],
+  int $statusCode = 200,
+  bool $warning = false
+) {
+  http_response_code($statusCode);
+  header('Content-Type: application/json; charset=utf-8');
+
+  echo json_encode([
+    'success' => $success,
+    'message' => $message,
+    'errors' => $errors,
+    'warning' => $warning
+  ]);
+
+  exit;
 }
 
 $userModel = new User($pdo);
@@ -64,22 +86,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // Validate role.
   // Validate role assignment.
-if (!in_array($role, $roles, true)) {
+  if (!in_array($role, $roles, true)) {
     $errors[] = 'Please choose a valid role.';
-}
+  }
 
-// Explicit admin-only protection for administrator assignment.
-if (
+  // Explicit admin-only protection for administrator assignment.
+  if (
     $role === 'admin'
     && Rbac::normalizeRole($account['role']) !== 'admin'
-) {
+  ) {
     $errors[] = 'Only administrators can create administrator accounts.';
-}
+  }
 
-// Validate account status.
-if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
+  // Validate account status.
+  if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
     $errors[] = 'Please choose a valid account status.';
-}
+  }
 
   // Validate username.
   if ($username === '' || strlen($username) < 3) {
@@ -87,7 +109,8 @@ if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
   }
 
   // Employees and managers require employee records.
-  if (in_array($role, ['employee', 'manager'], true) && $employee_id === null) {
+  // Employee and HR accounts require an employee record.
+  if (in_array($role, ['employee', 'hr'], true) && $employee_id === null) {
     $errors[] = "The {$role} role needs a linked employee.";
   }
 
@@ -127,6 +150,15 @@ if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
   }
 
   // Check duplicate username.
+  // Return validation errors to the modal.
+  if ($errors && $isAjax) {
+    sendJsonResponse(
+      false,
+      'Please correct the following errors.',
+      $errors,
+      422
+    );
+  }
   if (!$errors) {
 
     $stmt = $pdo->prepare(
@@ -163,12 +195,12 @@ if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
         'status' => $status
       ]);
       AuditLogger::log('user.create_pending', 'user', $userId, [
-    'username' => $username,
-    'role' => $role,
-    'status' => $status,
-    'employee_id' => $employee_id,
-    'created_by' => $account['user_id']
-]);
+        'username' => $username,
+        'role' => $role,
+        'status' => $status,
+        'employee_id' => $employee_id,
+        'created_by' => $account['user_id']
+      ]);
 
       // Generate one-time password setup token.
       $token = $userModel->createSetupToken($userId);
@@ -265,12 +297,19 @@ if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
         $htmlBody,
         $plainBody
       );
-
       if ($sent) {
 
-        $_SESSION['create_user_success'] =
-          "Account created successfully for {$username}. "
+        $message = "Account created successfully for {$username}. "
           . "The password setup invitation was sent to {$employeeEmail}.";
+
+        if ($isAjax) {
+          sendJsonResponse(
+            true,
+            $message
+          );
+        }
+
+        $_SESSION['create_user_success'] = $message;
 
         header('Location: create_user.php');
         exit;
@@ -279,22 +318,44 @@ if (!in_array($_POST['status'] ?? 'Active', ['Active', 'Inactive'], true)) {
         error_log(
           "HRIS invitation email failed for user ID: {$userId}"
         );
+        $message = 'The account was created, but the invitation email could not be sent. The account is still pending activation.';
 
-        $errors[] = 'The account was created, but the invitation email could not be sent. The account is still pending activation.';
+        if ($isAjax) {
+          sendJsonResponse(
+            true,
+            $message,
+            [],
+            200,
+            true
+          );
+        }
+
+        $errors[] = $message;
       }
     } catch (Throwable $e) {
 
-      error_log(
+    error_log(
         'Create user invitation failed: '
-          . $e->getMessage()
-          . ' | File: '
-          . $e->getFile()
-          . ' | Line: '
-          . $e->getLine()
-      );
+            . $e->getMessage()
+            . ' | File: '
+            . $e->getFile()
+            . ' | Line: '
+            . $e->getLine()
+    );
 
-      $errors[] = 'Could not complete account creation. Please check the server logs.';
+    $message = 'Could not complete account creation. Please check the server logs.';
+
+    if ($isAjax) {
+        sendJsonResponse(
+            false,
+            $message,
+            [],
+            500
+        );
     }
+
+    $errors[] = $message;
+}
   }
 }
 
