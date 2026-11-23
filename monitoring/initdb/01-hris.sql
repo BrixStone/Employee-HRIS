@@ -946,6 +946,11 @@ ORDER BY
     m.sort_order,
     p.id;
 
+ALTER TABLE employees
+ADD COLUMN manager_id BIGINT DEFAULT NULL AFTER `rank`,
+ADD INDEX idx_employees_manager (manager_id),
+ADD CONSTRAINT fk_employee_manager FOREIGN KEY (manager_id) REFERENCES employees (id) ON DELETE SET NULL ON UPDATE CASCADE;
+
 -- ============================================================
 -- AUTO_INCREMENT VALUES
 -- ============================================================
