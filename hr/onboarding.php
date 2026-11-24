@@ -1,8 +1,14 @@
 <?php
 // hr/onboarding.php
 
+date_default_timezone_set('Asia/Manila');
+
 require_once __DIR__ . '/../authentication/guard.php';
 require_once __DIR__ . '/../config/database.php';
+
+try {
+    $pdo->exec("SET time_zone = '+08:00'");
+} catch (Throwable $e) {}
 
 $realtimeHelper = __DIR__ . '/../includes/realtime_push.php';
 if (is_file($realtimeHelper)) {
@@ -12,6 +18,37 @@ if (is_file($realtimeHelper)) {
 $hrActorName = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'HR'));
 if ($hrActorName === '') {
     $hrActorName = 'HR';
+}
+
+function hris_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            return false;
+        }
+        $stmt = $pdo->prepare("SHOW TABLES LIKE :t");
+        $stmt->execute([':t' => $table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function hris_table_columns(PDO $pdo, string $table): array
+{
+    try {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            return [];
+        }
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
+        $cols = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $cols[strtolower((string)$row['Field'])] = (string)$row['Field'];
+        }
+        return $cols;
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 function hris_ensure_onboarding_schema(PDO $pdo): void
@@ -38,6 +75,7 @@ function hris_ensure_onboarding_schema(PDO $pdo): void
             `orientation_attended_at` DATETIME NULL,
             `checked_in_by` VARCHAR(160) NULL,
             `policy_acknowledged_at` DATETIME NULL,
+            `orientation_email_sent_at` DATETIME NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -48,10 +86,11 @@ function hris_ensure_onboarding_schema(PDO $pdo): void
     ");
 
     $columnsToAdd = [
-        'facilitator_employee_id' => "ALTER TABLE `employee_onboarding` ADD COLUMN `facilitator_employee_id` INT UNSIGNED NULL AFTER `orientation_room`",
-        'orientation_attended_at' => "ALTER TABLE `employee_onboarding` ADD COLUMN `orientation_attended_at` DATETIME NULL AFTER `buddy_name`",
-        'checked_in_by'           => "ALTER TABLE `employee_onboarding` ADD COLUMN `checked_in_by` VARCHAR(160) NULL AFTER `orientation_attended_at`",
-        'policy_acknowledged_at'  => "ALTER TABLE `employee_onboarding` ADD COLUMN `policy_acknowledged_at` DATETIME NULL AFTER `checked_in_by`",
+        'facilitator_employee_id'   => "ALTER TABLE `employee_onboarding` ADD COLUMN `facilitator_employee_id` INT UNSIGNED NULL AFTER `orientation_room`",
+        'orientation_attended_at'   => "ALTER TABLE `employee_onboarding` ADD COLUMN `orientation_attended_at` DATETIME NULL AFTER `buddy_name`",
+        'checked_in_by'             => "ALTER TABLE `employee_onboarding` ADD COLUMN `checked_in_by` VARCHAR(160) NULL AFTER `orientation_attended_at`",
+        'policy_acknowledged_at'    => "ALTER TABLE `employee_onboarding` ADD COLUMN `policy_acknowledged_at` DATETIME NULL AFTER `checked_in_by`",
+        'orientation_email_sent_at' => "ALTER TABLE `employee_onboarding` ADD COLUMN `orientation_email_sent_at` DATETIME NULL AFTER `policy_acknowledged_at`",
     ];
 
     foreach ($columnsToAdd as $col => $sql) {
@@ -95,22 +134,121 @@ function hris_recompute_onboarding_status(PDO $pdo, int $onbId): string
     return $nextStatus;
 }
 
+function hris_resolve_onboarding_email(PDO $pdo, array $rec): string
+{
+    $email = trim((string)($rec['email'] ?? ''));
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return $email;
+    }
+
+    try {
+        $empCols = hris_table_columns($pdo, 'employees');
+        if (!isset($empCols['email'])) {
+            return $email;
+        }
+        if (!empty($rec['employee_id']) && isset($empCols['id'])) {
+            $stmt = $pdo->prepare("SELECT `email` FROM `employees` WHERE `id` = ? LIMIT 1");
+            $stmt->execute([(int)$rec['employee_id']]);
+            $found = trim((string)($stmt->fetchColumn() ?: ''));
+            if (filter_var($found, FILTER_VALIDATE_EMAIL)) {
+                return $found;
+            }
+        }
+        if (!empty($rec['employee_code']) && isset($empCols['employee_id'])) {
+            $stmt = $pdo->prepare("SELECT `email` FROM `employees` WHERE `employee_id` = ? LIMIT 1");
+            $stmt->execute([(string)$rec['employee_code']]);
+            $found = trim((string)($stmt->fetchColumn() ?: ''));
+            if (filter_var($found, FILTER_VALIDATE_EMAIL)) {
+                return $found;
+            }
+        }
+    } catch (Throwable $e) {}
+
+    return $email;
+}
+
+function hris_build_employee_select_sql(PDO $pdo, string $whereSql = '', string $orderSql = 'ORDER BY `e`.`id` ASC'): string
+{
+    $empCols = hris_table_columns($pdo, 'employees');
+    $pkCol = isset($empCols['id']) ? '`e`.`id`' : 'NULL';
+    $codeCol = isset($empCols['employee_id']) ? "COALESCE(`e`.`employee_id`, '')" : "''";
+    $emailCol = isset($empCols['email']) ? "COALESCE(`e`.`email`, '')" : "''";
+
+    $deptJoin = '';
+    if (isset($empCols['department']) && isset($empCols['department_id']) && hris_table_exists($pdo, 'departments')) {
+        $deptCols = hris_table_columns($pdo, 'departments');
+        $dNameCol = $deptCols['name'] ?? ($deptCols['department_name'] ?? ($deptCols['title'] ?? null));
+        if ($dNameCol !== null) {
+            $deptJoin = "LEFT JOIN `departments` `d` ON `d`.`id` = `e`.`department_id`";
+            $deptExpr = "COALESCE(NULLIF(TRIM(`e`.`department`), ''), NULLIF(TRIM(`d`.`{$dNameCol}`), ''), 'General')";
+        } else {
+            $deptExpr = "COALESCE(NULLIF(TRIM(`e`.`department`), ''), 'General')";
+        }
+    } elseif (isset($empCols['department_id']) && hris_table_exists($pdo, 'departments')) {
+        $deptCols = hris_table_columns($pdo, 'departments');
+        $dNameCol = $deptCols['name'] ?? ($deptCols['department_name'] ?? ($deptCols['title'] ?? null));
+        if ($dNameCol !== null) {
+            $deptJoin = "LEFT JOIN `departments` `d` ON `d`.`id` = `e`.`department_id`";
+            $deptExpr = "COALESCE(NULLIF(TRIM(`d`.`{$dNameCol}`), ''), 'General')";
+        } else {
+            $deptExpr = "COALESCE(CAST(`e`.`department_id` AS CHAR), 'General')";
+        }
+    } elseif (isset($empCols['department'])) {
+        $deptExpr = "COALESCE(NULLIF(TRIM(`e`.`department`), ''), 'General')";
+    } else {
+        $deptExpr = "'General'";
+    }
+
+    $posJoin = '';
+    if (isset($empCols['job_title']) && isset($empCols['position_id']) && hris_table_exists($pdo, 'positions')) {
+        $posCols = hris_table_columns($pdo, 'positions');
+        $pTitleCol = $posCols['title'] ?? ($posCols['name'] ?? ($posCols['position_name'] ?? null));
+        if ($pTitleCol !== null) {
+            $posJoin = "LEFT JOIN `positions` `p` ON `p`.`id` = `e`.`position_id`";
+            $jobExpr = "COALESCE(NULLIF(TRIM(`e`.`job_title`), ''), NULLIF(TRIM(`p`.`{$pTitleCol}`), ''), 'New Hire')";
+        } else {
+            $jobExpr = "COALESCE(NULLIF(TRIM(`e`.`job_title`), ''), 'New Hire')";
+        }
+    } elseif (isset($empCols['position_id']) && hris_table_exists($pdo, 'positions')) {
+        $posCols = hris_table_columns($pdo, 'positions');
+        $pTitleCol = $posCols['title'] ?? ($posCols['name'] ?? ($posCols['position_name'] ?? null));
+        if ($pTitleCol !== null) {
+            $posJoin = "LEFT JOIN `positions` `p` ON `p`.`id` = `e`.`position_id`";
+            $jobExpr = "COALESCE(NULLIF(TRIM(`p`.`{$pTitleCol}`), ''), 'New Hire')";
+        } else {
+            $jobExpr = "COALESCE(CAST(`e`.`position_id` AS CHAR), 'New Hire')";
+        }
+    } elseif (isset($empCols['job_title'])) {
+        $jobExpr = "COALESCE(NULLIF(TRIM(`e`.`job_title`), ''), 'New Hire')";
+    } elseif (isset($empCols['position'])) {
+        $jobExpr = "COALESCE(NULLIF(TRIM(`e`.`position`), ''), 'New Hire')";
+    } else {
+        $jobExpr = "'New Hire'";
+    }
+
+    return "
+        SELECT
+            {$pkCol} AS `id`,
+            {$codeCol} AS `employee_code`,
+            TRIM(CONCAT_WS(' ', NULLIF(TRIM(COALESCE(`e`.`first_name`, '')), ''), NULLIF(TRIM(COALESCE(`e`.`middle_name`, '')), ''), NULLIF(TRIM(COALESCE(`e`.`last_name`, '')), ''))) AS `full_name`,
+            {$emailCol} AS `email`,
+            {$deptExpr} AS `department`,
+            {$jobExpr} AS `job_title`
+        FROM `employees` `e`
+        {$deptJoin}
+        {$posJoin}
+        {$whereSql}
+        {$orderSql}
+    ";
+}
+
 function hris_sync_and_fetch_onboarding(PDO $pdo): array
 {
     hris_ensure_onboarding_schema($pdo);
 
     try {
-        $empStmt = $pdo->query("
-            SELECT
-                `id`,
-                `employee_code`,
-                TRIM(CONCAT(COALESCE(`first_name`, ''), ' ', COALESCE(`last_name`, ''))) AS full_name,
-                COALESCE(`email`, '') AS email,
-                COALESCE(`department`, 'General') AS department,
-                COALESCE(`job_title`, COALESCE(`position`, 'New Hire')) AS job_title
-            FROM `employees`
-            ORDER BY `id` ASC
-        ");
+        $sql = hris_build_employee_select_sql($pdo, '', 'ORDER BY `e`.`id` ASC');
+        $empStmt = $pdo->query($sql);
         $employees = $empStmt ? $empStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $insStmt = $pdo->prepare("
@@ -144,6 +282,12 @@ function hris_sync_and_fetch_onboarding(PDO $pdo): array
 
     $rows = $pdo->query("SELECT * FROM `employee_onboarding` ORDER BY `id` ASC")->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
+        if (trim((string)($r['email'] ?? '')) === '') {
+            $resolved = hris_resolve_onboarding_email($pdo, $r);
+            if ($resolved !== '') {
+                $r['email'] = $resolved;
+            }
+        }
         $steps = (int)($r['step_info'] ?? 0)
             + (int)($r['step_documents'] ?? 0)
             + (int)($r['step_orientation'] ?? 0)
@@ -164,19 +308,211 @@ function hris_sync_and_fetch_onboarding(PDO $pdo): array
 function hris_fetch_staff_options(PDO $pdo): array
 {
     try {
-        $stmt = $pdo->query("
-            SELECT
-                `id`,
-                TRIM(CONCAT(COALESCE(`first_name`, ''), ' ', COALESCE(`last_name`, ''))) AS full_name,
-                COALESCE(`department`, '') AS department,
-                COALESCE(`job_title`, COALESCE(`position`, '')) AS job_title
-            FROM `employees`
+        $empCols = hris_table_columns($pdo, 'employees');
+        if (empty($empCols) || !isset($empCols['rank'])) {
+            return [];
+        }
+
+        $pkCol = isset($empCols['id']) ? '`e`.`id`' : 'NULL';
+        $emailCol = isset($empCols['email']) ? "COALESCE(`e`.`email`, '')" : "''";
+
+        $deptJoin = '';
+        if (isset($empCols['department_id']) && hris_table_exists($pdo, 'departments')) {
+            $deptCols = hris_table_columns($pdo, 'departments');
+            $dNameCol = $deptCols['name'] ?? ($deptCols['department_name'] ?? ($deptCols['title'] ?? null));
+            if ($dNameCol !== null) {
+                $deptJoin = "LEFT JOIN `departments` `d` ON `d`.`id` = `e`.`department_id`";
+                $deptExpr = "COALESCE(NULLIF(TRIM(`d`.`{$dNameCol}`), ''), '')";
+            } else {
+                $deptExpr = "''";
+            }
+        } elseif (isset($empCols['department'])) {
+            $deptExpr = "COALESCE(NULLIF(TRIM(`e`.`department`), ''), '')";
+        } else {
+            $deptExpr = "''";
+        }
+
+        $posJoin = '';
+        if (isset($empCols['position_id']) && hris_table_exists($pdo, 'positions')) {
+            $posCols = hris_table_columns($pdo, 'positions');
+            $pTitleCol = $posCols['title'] ?? ($posCols['name'] ?? ($posCols['position_name'] ?? null));
+            if ($pTitleCol !== null) {
+                $posJoin = "LEFT JOIN `positions` `p` ON `p`.`id` = `e`.`position_id`";
+                $jobExpr = "COALESCE(NULLIF(TRIM(`p`.`{$pTitleCol}`), ''), '')";
+            } else {
+                $jobExpr = "''";
+            }
+        } elseif (isset($empCols['job_title'])) {
+            $jobExpr = "COALESCE(NULLIF(TRIM(`e`.`job_title`), ''), '')";
+        } else {
+            $jobExpr = "''";
+        }
+
+        $whereParts = [
+            "REPLACE(REPLACE(LOWER(TRIM(`e`.`rank`)), '-', '_'), ' ', '_') = 'team_leader'"
+        ];
+        if (isset($empCols['employment_status'])) {
+            $whereParts[] = "(LOWER(TRIM(`e`.`employment_status`)) IN ('active', '') OR `e`.`employment_status` IS NULL)";
+        }
+
+        $sql = "
+            SELECT DISTINCT
+                {$pkCol} AS `id`,
+                TRIM(CONCAT_WS(' ', NULLIF(TRIM(COALESCE(`e`.`first_name`, '')), ''), NULLIF(TRIM(COALESCE(`e`.`middle_name`, '')), ''), NULLIF(TRIM(COALESCE(`e`.`last_name`, '')), ''))) AS `full_name`,
+                {$deptExpr} AS `department`,
+                {$jobExpr} AS `job_title`,
+                {$emailCol} AS `email`,
+                `e`.`rank` AS `rank`
+            FROM `employees` `e`
+            {$deptJoin}
+            {$posJoin}
+            WHERE " . implode(' AND ', $whereParts) . "
             ORDER BY `full_name` ASC
-        ");
-        $list = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-        return array_values(array_filter($list, fn($x) => trim((string)($x['full_name'] ?? '')) !== ''));
+        ";
+
+        $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return array_values(array_filter($rows, fn($x) => trim((string)($x['full_name'] ?? '')) !== ''));
     } catch (Throwable $e) {
+        error_log('hris_fetch_staff_options error: ' . $e->getMessage());
         return [];
+    }
+}
+
+function hris_build_orientation_email(array $rec, array $sched, string $hrActorName): array
+{
+    $companyName = trim((string)(getenv('COMPANY_NAME') ?: ($_SESSION['company_name'] ?? 'HRIS Human Resources')));
+    $empName     = trim((string)($rec['full_name'] ?? 'New Hire'));
+    $empCode     = trim((string)($rec['employee_code'] ?? ''));
+    $department  = trim((string)($rec['department'] ?? 'General'));
+    $jobTitle    = trim((string)($rec['job_title'] ?? 'New Hire'));
+    $dtRaw       = trim((string)($sched['orientation_at'] ?? ''));
+    $room        = trim((string)($sched['orientation_room'] ?? 'To be announced'));
+    $facilitator = trim((string)($sched['facilitator_name'] ?? 'Unassigned'));
+    $buddy       = trim((string)($sched['buddy_name'] ?? ''));
+
+    $ts = $dtRaw !== '' ? strtotime($dtRaw) : false;
+    $formattedDate = $ts ? date('l, F j, Y', $ts) : ($dtRaw !== '' ? $dtRaw : 'To Be Determined');
+    $formattedTime = $ts ? date('g:i A', $ts) . ' (PHT)' : 'To Be Determined';
+
+    $subject = "Company Orientation Schedule: {$empName} ({$department})";
+
+    $buddyPlain = $buddy !== '' ? "Team Buddy:      {$buddy}\n" : '';
+    $plainBody = "Dear {$empName},\n\n"
+        . "Welcome to {$companyName}! Below is your schedule for Step 3: Company Orientation (HR / Facilitator Check-In).\n\n"
+        . "COMPANY ORIENTATION DETAILS\n"
+        . "----------------------------------------\n"
+        . "Employee:        {$empName}" . ($empCode !== '' ? " ({$empCode})" : '') . "\n"
+        . "Role / Dept:     {$jobTitle} • {$department}\n"
+        . "Date:            {$formattedDate}\n"
+        . "Time:            {$formattedTime}\n"
+        . "Room / Venue:    {$room}\n"
+        . "HR / Facilitator:{$facilitator}\n"
+        . $buddyPlain
+        . "----------------------------------------\n\n"
+        . "Please arrive a few minutes early so our HR / Facilitator team can verify your attendance at check-in.\n\n"
+        . "Best regards,\n"
+        . "{$hrActorName}\n"
+        . "Human Resources Department • {$companyName}";
+
+    $esc = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+    $buddyRow = $buddy !== ''
+        ? '<tr><td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">Team Buddy</td><td style="padding:6px 10px;font-size:13.5px;color:#0f172a;">' . $esc($buddy) . '</td></tr>'
+        : '';
+
+    $htmlBody = '<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>' . $esc($subject) . '</title></head>
+<body style="margin:0;padding:24px;background-color:#f1f5f9;font-family:\'Segoe UI\',Arial,sans-serif;color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+    <tr>
+      <td style="background:linear-gradient(135deg,#0f172a,#1d4ed8);padding:24px 28px;color:#ffffff;">
+        <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#93c5fd;font-weight:700;">' . $esc($companyName) . ' • Onboarding</div>
+        <h1 style="margin:6px 0 0;font-size:21px;font-weight:700;color:#ffffff;">Company Orientation Invitation</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:26px 28px;font-size:14.5px;line-height:1.65;color:#334155;">
+        <p style="margin:0 0 14px;">Dear <strong style="color:#0f172a;">' . $esc($empName) . '</strong>,</p>
+        <p style="margin:0 0 18px;">
+          Welcome to <strong style="color:#0f172a;">' . $esc($companyName) . '</strong>! Your <strong>Company Orientation (HR / Facilitator Check-In)</strong> schedule has been set with the following details:
+        </p>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:16px;margin:16px 0;">
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;width:36%;font-weight:600;">New Employee</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#0f172a;font-weight:700;">' . $esc($empName) . ($empCode !== '' ? ' (' . $esc($empCode) . ')' : '') . '</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">Role / Department</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#0f172a;">' . $esc($jobTitle) . ' • ' . $esc($department) . '</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">Orientation Date</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#0f172a;font-weight:700;">' . $esc($formattedDate) . '</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">Orientation Time</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#0f172a;font-weight:700;">' . $esc($formattedTime) . '</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">Room / Venue</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#2563eb;font-weight:600;">' . $esc($room) . '</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 10px;font-size:13px;color:#64748b;font-weight:600;">HR / Facilitator</td>
+            <td style="padding:6px 10px;font-size:13.5px;color:#0f172a;">' . $esc($facilitator) . '</td>
+          </tr>
+          ' . $buddyRow . '
+        </table>
+
+        <p style="margin:18px 0 14px;">
+          Please arrive a few minutes before your scheduled time for HR / Facilitator room check-in. If you have any questions, reach out to Human Resources.
+        </p>
+
+        <p style="margin:20px 0 0;">
+          Best regards,<br>
+          <strong style="color:#0f172a;">' . $esc($hrActorName) . '</strong><br>
+          <span style="font-size:13px;color:#64748b;">Human Resources Department • ' . $esc($companyName) . '</span>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>';
+
+    return [
+        'subject'    => $subject,
+        'html_body'  => $htmlBody,
+        'plain_body' => $plainBody,
+    ];
+}
+
+function hris_send_orientation_email(string $toEmail, string $subject, string $htmlBody, string $plainBody): array
+{
+    $toEmail = trim($toEmail);
+    if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        return ['sent' => false, 'error' => 'Invalid or missing employee email address.'];
+    }
+
+    $mailerFile = __DIR__ . '/../classes/Mailer.php';
+    if (!is_file($mailerFile)) {
+        return ['sent' => false, 'error' => 'classes/Mailer.php not found.'];
+    }
+
+    try {
+        require_once $mailerFile;
+        if (!class_exists('Mailer')) {
+            return ['sent' => false, 'error' => 'Mailer class not found.'];
+        }
+
+        $mailer = new Mailer();
+        $sent = $mailer->send($toEmail, $subject, $htmlBody, $plainBody);
+        return $sent
+            ? ['sent' => true, 'error' => '']
+            : ['sent' => false, 'error' => 'Mailer::send() returned false. Check your PHP error log.'];
+    } catch (Throwable $e) {
+        error_log('HRIS orientation email failed: ' . $e->getMessage());
+        return ['sent' => false, 'error' => $e->getMessage()];
     }
 }
 
@@ -290,11 +626,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } elseif ($action === 'save_schedule') {
-            $schedRaw = trim((string)($_POST['orientation_at'] ?? ''));
-            $room     = trim((string)($_POST['orientation_room'] ?? ''));
-            $facEmpId = (int)($_POST['facilitator_employee_id'] ?? 0);
-            $facName  = trim((string)($_POST['facilitator_name'] ?? ''));
-            $buddy    = trim((string)($_POST['buddy_name'] ?? ''));
+            $schedRaw  = trim((string)($_POST['orientation_at'] ?? ''));
+            $room      = trim((string)($_POST['orientation_room'] ?? ''));
+            $facEmpId  = (int)($_POST['facilitator_employee_id'] ?? 0);
+            $facName   = trim((string)($_POST['facilitator_name'] ?? ''));
+            $buddy     = trim((string)($_POST['buddy_name'] ?? ''));
+            $empEmail  = trim((string)($_POST['employee_email'] ?? ''));
+            $sendEmail = ((string)($_POST['send_email'] ?? '1')) === '1';
 
             if ($facEmpId > 0 && $facName === '') {
                 foreach ($initialPayload['staff'] as $st) {
@@ -314,15 +652,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $schedSql = $normalized;
             }
 
+            $recStmt = $pdo->prepare("SELECT * FROM `employee_onboarding` WHERE `id` = ? LIMIT 1");
+            $recStmt->execute([$targetId]);
+            $curRec = $recStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $finalEmail = $empEmail !== '' ? $empEmail : hris_resolve_onboarding_email($pdo, $curRec);
+
             $pdo->prepare("
                 UPDATE `employee_onboarding`
-                SET `orientation_at` = ?,
+                SET `email` = CASE WHEN ? <> '' THEN ? ELSE `email` END,
+                    `orientation_at` = ?,
                     `orientation_room` = ?,
                     `facilitator_employee_id` = ?,
                     `facilitator_name` = ?,
                     `buddy_name` = ?
                 WHERE `id` = ?
             ")->execute([
+                $finalEmail,
+                $finalEmail,
                 $schedSql,
                 $room !== '' ? $room : null,
                 $facEmpId > 0 ? $facEmpId : null,
@@ -332,7 +679,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             hris_recompute_onboarding_status($pdo, $targetId);
-            $flashMsg = 'Orientation schedule & facilitator assignment saved.';
+
+            if ($sendEmail) {
+                $mergedRec = array_merge($curRec, ['email' => $finalEmail]);
+                $tpl = hris_build_orientation_email($mergedRec, [
+                    'orientation_at'   => $schedSql ?? '',
+                    'orientation_room' => $room,
+                    'facilitator_name' => $facName,
+                    'buddy_name'       => $buddy,
+                ], $hrActorName);
+
+                $mailRes = hris_send_orientation_email($finalEmail, $tpl['subject'], $tpl['html_body'], $tpl['plain_body']);
+                if ($mailRes['sent']) {
+                    $pdo->prepare("UPDATE `employee_onboarding` SET `orientation_email_sent_at` = NOW() WHERE `id` = ?")
+                        ->execute([$targetId]);
+                    $flashMsg = "Orientation schedule saved and invitation sent to {$finalEmail}.";
+                } else {
+                    $flashErr = "Orientation schedule saved (Email notice: {$mailRes['error']})";
+                }
+            } else {
+                $flashMsg = 'Orientation schedule & facilitator assignment saved.';
+            }
 
             if (function_exists('hris_broadcast_onboarding_event')) {
                 hris_broadcast_onboarding_event('onboarding_updated', [
@@ -424,14 +791,11 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
   .hr-onb-main-grid { display: grid; grid-template-columns: 440px 1fr; gap: 18px; align-items: start; margin-bottom: 20px; }
   @media (max-width: 1080px) { .hr-onb-main-grid { grid-template-columns: 1fr; } }
 
-  /* Queue DataTable Card */
   .hr-queue-card {
     background: #111827; border: 1px solid rgba(148, 163, 184, 0.18);
     border-radius: 16px; padding: 16px;
   }
-  .hr-queue-tabs {
-    display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0;
-  }
+  .hr-queue-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
   .hr-qtab {
     padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.25);
     background: #0b1120; color: #cbd5e1; font-size: 11.5px; font-weight: 700; cursor: pointer;
@@ -455,16 +819,13 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
     background: #0b1120; border-bottom: 1px solid rgba(148, 163, 184, 0.22); cursor: pointer; user-select: none;
   }
   .hr-qtable th:hover { color: #ffffff; background: #131d33; }
-  .hr-qtable td {
-    padding: 9px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); color: #e2e8f0;
-  }
+  .hr-qtable td { padding: 9px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); color: #e2e8f0; }
   .hr-qtable tbody tr { cursor: pointer; transition: background 0.12s ease; }
   .hr-qtable tbody tr:hover td { background: rgba(30, 41, 59, 0.7); }
   .hr-qtable tbody tr.is-selected td {
     background: rgba(37, 99, 235, 0.24); border-top: 1px solid #3b82f6; border-bottom: 1px solid #3b82f6;
   }
 
-  /* Detail panel */
   .hr-detail-card {
     background: #111827; border: 1px solid rgba(148, 163, 184, 0.18);
     border-radius: 16px; padding: 22px 24px;
@@ -501,7 +862,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
   }
   .hr-input::placeholder { color: #94a3b8; }
 
-  /* Door Check-In Roster DataTable */
   .hr-roster-card {
     background: #111827; border: 1px solid rgba(148, 163, 184, 0.18);
     border-radius: 16px; padding: 22px 24px;
@@ -574,7 +934,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
     <?php endif; ?>
   </div>
 
-  <!-- Top Section: Queue DataTable + Selected Onboarding Detail -->
   <div class="hr-onb-main-grid">
     <div class="hr-queue-card">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -595,7 +954,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
         placeholder="Search name, ID, or department / role..."
       >
 
-      <!-- Default active tab is In Progress -->
       <div class="hr-queue-tabs" role="tablist" aria-label="Filter onboarding queue by status">
         <button type="button" class="hr-qtab is-prog is-active" data-qstatus="In Progress">In Progress (<span id="hrQTabProg"><?= (int)$initialPayload['inProgressCount'] ?></span>)</button>
         <button type="button" class="hr-qtab is-done" data-qstatus="Completed">Completed (<span id="hrQTabDone"><?= (int)$initialPayload['completedCount'] ?></span>)</button>
@@ -636,7 +994,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
     <div class="hr-detail-card" id="hrDetailPanel"></div>
   </div>
 
-  <!-- Bottom Section: HR / Facilitator Orientation Door Check-In Roster DataTable -->
   <div class="hr-roster-card">
     <div class="hr-roster-top">
       <div>
@@ -657,7 +1014,7 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
           id="hrRosterSearchInput"
           class="hr-input"
           style="width:auto; min-width:250px;"
-          placeholder="Search Employee Name or ID (e.g. EMP-OB-005)..."
+          placeholder="Search Employee Name or ID (e.g. EMP-005)..."
         >
       </div>
     </div>
@@ -705,9 +1062,8 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
   (function () {
     let hrState = <?= json_encode($initialPayload, JSON_UNESCAPED_UNICODE) ?>;
 
-    // Default to showing "In Progress" in the Onboarding Queue until another tab is clicked
     let queueSearchQuery = '';
-    let queueStatusFilter = 'In Progress'; // 'In Progress' | 'Completed' | 'all'
+    let queueStatusFilter = 'In Progress';
     let queueSortCol = 'id';
     let queueSortDir = 'asc';
     let queuePage = 1;
@@ -719,7 +1075,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
       : (initialRecords.length ? Number(initialRecords[0].id) : 0);
     let scheduleDrawerOpen = false;
 
-    // Door Check-In Roster DataTable state
     let rosterSortCol = 'id';
     let rosterSortDir = 'asc';
     let rosterPage = 1;
@@ -753,12 +1108,16 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
         if (payload.state) {
           renderHrOnboarding(payload.state);
         }
+        try {
+          if ('BroadcastChannel' in window) {
+            new BroadcastChannel('hris_realtime_sync').postMessage({ type: 'onboarding_updated' });
+          }
+        } catch (_) {}
       } catch (_) {
         showBanner(false, 'Network error while saving onboarding update.');
       }
     }
 
-    // ── Queue DataTable Controls ─────────────────────────────────────
     const queueSearchInput = document.getElementById('hrQueueSearchInput');
     const queuePageSizeEl  = document.getElementById('hrQueuePageSize');
 
@@ -961,18 +1320,21 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
       const polDone  = Number(rec.step_policy || 0) === 1;
 
       const staffList = Array.isArray(hrState.staff) ? hrState.staff : [];
-      const staffOptionsHtml = staffList.map(st => {
-        const stId = Number(st.id);
-        const sel = Number(rec.facilitator_employee_id || 0) === stId ? 'selected' : '';
-        return `<option value="${stId}" data-name="${esc(st.full_name)}" ${sel}>${esc(st.full_name)}${st.department ? ` (${esc(st.department)})` : ''}</option>`;
-      }).join('');
+      const staffOptionsHtml = staffList.length
+        ? staffList.map(st => {
+            const stId = Number(st.id);
+            const sel = Number(rec.facilitator_employee_id || 0) === stId ? 'selected' : '';
+            const meta = [st.job_title, st.department].filter(Boolean).join(' • ');
+            return `<option value="${stId}" data-name="${esc(st.full_name)}" ${sel}>${esc(st.full_name)}${meta ? ` (${esc(meta)})` : ''}</option>`;
+          }).join('')
+        : `<option value="" disabled>No active Team Leaders found (rank = team_leader)</option>`;
 
       panel.innerHTML = `
         <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px;">
           <div>
             <h2 style="margin:0 0 3px; font-size:21px; font-weight:800; color:#ffffff;">${esc(rec.full_name)}</h2>
             <div style="font-size:13px; color:#94a3b8;">
-              ${esc(rec.employee_code)} • ${esc(rec.department)} • ${esc(rec.job_title)}
+              ${esc(rec.employee_code)} • ${esc(rec.department)} • ${esc(rec.job_title)}${rec.email ? ` • ${esc(rec.email)}` : ''}
             </div>
           </div>
           <span class="${isCompleted ? 'hr-badge-done' : 'hr-badge-prog'}">
@@ -980,7 +1342,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
           </span>
         </div>
 
-        <!-- Step 1 -->
         <div class="hr-step-box">
           <div>
             <div style="font-size:14px; font-weight:700; color:#ffffff;">1. Personal Information &amp; Employee Record</div>
@@ -997,7 +1358,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
           </div>
         </div>
 
-        <!-- Step 2 -->
         <div class="hr-step-box">
           <div>
             <div style="font-size:14px; font-weight:700; color:#ffffff;">2. Pre-Employment Documents</div>
@@ -1017,12 +1377,11 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
           </div>
         </div>
 
-        <!-- Step 3 -->
         <div class="hr-step-box">
           <div>
             <div style="font-size:14px; font-weight:700; color:#ffffff;">3. Company Orientation (HR / Facilitator Check-In)</div>
             <div style="font-size:12.5px; color:#94a3b8; margin-top:2px;">
-              Schedule: <strong>${esc(rec.orientation_at || 'Not scheduled')}</strong> • Facilitator: <strong>${esc(rec.facilitator_name || 'Unassigned')}</strong>${rec.orientation_room ? ` • Room: <strong>${esc(rec.orientation_room)}</strong>` : ''}
+              Schedule: <strong>${esc(rec.orientation_at || 'Not scheduled')}</strong> • Facilitator: <strong>${esc(rec.facilitator_name || 'Unassigned')}</strong>${rec.orientation_room ? ` • Room: <strong>${esc(rec.orientation_room)}</strong>` : ''}${rec.orientation_email_sent_at ? ` • <span style="color:#6ee7b7;">✉ Emailed</span>` : ''}
             </div>
           </div>
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
@@ -1054,15 +1413,25 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
                 <input type="text" name="orientation_room" class="hr-input" placeholder="e.g. Room 3 floor 31" value="${esc(rec.orientation_room || '')}">
               </div>
               <div>
-                <label style="display:block; font-size:11.5px; color:#94a3b8; margin-bottom:4px;">Assigned HR / Facilitator</label>
+                <label style="display:block; font-size:11.5px; color:#94a3b8; margin-bottom:4px;">Assigned Facilitator (Team Leader)</label>
                 <select name="facilitator_employee_id" id="hrFacSelect" class="hr-input">
                   <option value="">-- Select Facilitator --</option>
                   ${staffOptionsHtml}
                 </select>
               </div>
               <div>
+                <label style="display:block; font-size:11.5px; color:#94a3b8; margin-bottom:4px;">Employee Email (for Orientation Letter)</label>
+                <input type="email" name="employee_email" class="hr-input" placeholder="employee@example.com" value="${esc(rec.email || '')}">
+              </div>
+              <div>
                 <label style="display:block; font-size:11.5px; color:#94a3b8; margin-bottom:4px;">Team Buddy</label>
                 <input type="text" name="buddy_name" class="hr-input" placeholder="Optional buddy name" value="${esc(rec.buddy_name || '')}">
+              </div>
+              <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
+                <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#cbd5e1; cursor:pointer;">
+                  <input type="checkbox" name="send_email" value="1" checked>
+                  Send orientation invitation email on save
+                </label>
               </div>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -1072,7 +1441,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
           </form>
         </div>
 
-        <!-- Step 4 -->
         <div class="hr-step-box">
           <div>
             <div style="font-size:14px; font-weight:700; color:#ffffff;">4. Policy Acknowledgement (Employee Sign-Off)</div>
@@ -1106,16 +1474,27 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
       const facSelect = document.getElementById('hrFacSelect');
       const facHidden = document.getElementById('hrFacNameHidden');
       if (facSelect && facHidden) {
-        facSelect.addEventListener('change', () => {
+        const syncFacName = () => {
           const opt = facSelect.options[facSelect.selectedIndex];
-          facHidden.value = opt ? (opt.getAttribute('data-name') || '') : '';
-        });
+          facHidden.value = opt && opt.value ? (opt.getAttribute('data-name') || '') : '';
+        };
+        syncFacName();
+        facSelect.addEventListener('change', syncFacName);
       }
 
       const schedForm = document.getElementById('hrScheduleForm');
       if (schedForm) {
         schedForm.addEventListener('submit', async e => {
           e.preventDefault();
+          if (facSelect && facHidden) {
+            const opt = facSelect.options[facSelect.selectedIndex];
+            facHidden.value = opt && opt.value ? (opt.getAttribute('data-name') || '') : '';
+          }
+          const submitBtn = schedForm.querySelector('button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving & Sending...';
+          }
           scheduleDrawerOpen = false;
           await postHrAction(new FormData(schedForm));
         });
@@ -1129,7 +1508,6 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
       });
     }
 
-    // ── Door Check-In Roster DataTable ────────────────────────────────
     const facFilterEl  = document.getElementById('hrRosterFacilitatorFilter');
     const attFilterEl  = document.getElementById('hrRosterAttendanceFilter');
     const rosSearchEl  = document.getElementById('hrRosterSearchInput');
@@ -1345,6 +1723,16 @@ require_once __DIR__ . '/../templates/hrTemplates/header.php';
         }
       } catch (_) {}
     }
+
+    try {
+      if ('BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('hris_realtime_sync');
+        bc.onmessage = (ev) => {
+          const t = String(ev?.data?.type || '');
+          if (t.includes('onboarding')) pollHrOnboarding();
+        };
+      }
+    } catch (_) {}
 
     (function connectHrWS() {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
