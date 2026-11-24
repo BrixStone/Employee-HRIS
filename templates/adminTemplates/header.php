@@ -1,33 +1,151 @@
 <?php
-$currentPage = basename($_SERVER['PHP_SELF'] ?? 'users.php', '.php');
-require_once __DIR__ . '/../../classes/Rbac.php';
-$navRole = Rbac::normalizeRole($_SESSION['role'] ?? '');
-$navPdo  = (isset($pdo) && $pdo instanceof PDO) ? $pdo : null;
 
-$navCan = static function (string $module, string $ability) use ($navPdo, $navRole): bool {
-    return $navPdo !== null
-        && Rbac::can($navPdo, $navRole, $module, $ability)
-        && Rbac::scope($navPdo, $navRole, $module) === 'all';
+$currentPage = basename($_SERVER['PHP_SELF'] ?? 'dashboard.php', '.php');
+
+require_once __DIR__ . '/../../classes/Rbac.php';
+
+/*
+|--------------------------------------------------------------------------
+| Logged-in account information
+|--------------------------------------------------------------------------
+*/
+
+$navRole = Rbac::normalizeRole($_SESSION['role'] ?? '');
+
+$navRank = Rbac::normalizeRank(
+  $_SESSION['rank'] ?? 'employee'
+);
+
+$navPdo = (isset($pdo) && $pdo instanceof PDO)
+  ? $pdo
+  : null;
+
+/*
+|--------------------------------------------------------------------------
+| Permission checker
+|--------------------------------------------------------------------------
+*/
+
+$navCan = static function (
+  string $module,
+  string $ability = 'view'
+) use ($navPdo, $navRole, $navRank): bool {
+
+  if ($navPdo === null) {
+    return false;
+  }
+
+  return Rbac::can(
+    $navPdo,
+    $navRole,
+    $module,
+    $ability,
+    $navRank
+  );
 };
 
+/*
+|--------------------------------------------------------------------------
+| Module visibility checker
+|--------------------------------------------------------------------------
+*/
+
+$navModuleEnabled = static function (
+  string $module
+) use ($navPdo, $navRole, $navRank): bool {
+
+  if ($navPdo === null) {
+    return false;
+  }
+
+  return Rbac::moduleEnabled(
+    $navPdo,
+    $navRole,
+    $module,
+    $navRank
+  );
+};
+
+/*
+|--------------------------------------------------------------------------
+| Sidebar navigation
+|--------------------------------------------------------------------------
+*/
+
 $navItems = [
-    ['/admin/dashboard.php',   'Dashboard',       "\u{2756}",  ['dashboard'],   true],
-    ['/admin/users.php',       'User Management', "\u{25C9}",  ['users'],       $navCan('user_management', 'view')],
-    ['/admin/audit_logs.php',  'Audit Trail',     "\u{1F4CB}", ['audit_logs'],  $navCan('audit_logs',      'view')],
-    ['/admin/permissions.php', 'System Settings', "\u{2699}",  ['permissions'], $navCan('system_settings', 'view')],
+
+  [
+    '/admin/dashboard.php',
+    'Dashboard',
+    "\u{2756}",
+    ['dashboard'],
+    $navModuleEnabled('dashboard')
+  ],
+
+  [
+    '/admin/users.php',
+    'User Management',
+    "\u{25C9}",
+    ['users'],
+    $navModuleEnabled('user_management')
+  ],
+
+  [
+    '/admin/audit_logs.php',
+    'Audit Trail',
+    "\u{1F4CB}",
+    ['audit_logs'],
+    $navModuleEnabled('audit_logs')
+  ],
+
+  [
+    '/admin/permissions.php',
+    'System Permissions',
+    "\u{2699}",
+    ['permissions'],
+    $navModuleEnabled('system_settings')
+  ],
+
 ];
 
+/*
+|--------------------------------------------------------------------------
+| Page titles
+|--------------------------------------------------------------------------
+*/
+
 $pageTitles = [
-    'dashboard'   => 'Dashboard',
-    'users'       => 'User Management',
-    'audit_logs'  => 'Audit Trail',
-    'permissions' => 'System Settings',
+  'dashboard'  => 'Dashboard',
+  'users'      => 'User Management',
+  'audit_logs' => 'Audit Trail',
+  'permissions' => 'System Permissions',
 ];
+
 $pageTitle = $pageTitles[$currentPage] ?? 'Administration';
-$cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
+
+$cssPage = $cssPageOverride
+  ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage);
+
+/*
+|--------------------------------------------------------------------------
+| Profile information
+|--------------------------------------------------------------------------
+*/
+
+$navUserName = $_SESSION['username'] ?? 'Administrator';
+
+$navRoleLabel = match ($navRole) {
+  'admin'    => 'System Administrator',
+  'hr'       => 'Human Resources',
+  'employee' => 'Employee',
+  default    => 'User'
+};
+
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,7 +165,12 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
 
   <style>
     /* ── Layout: main fills full screen ──────────────── */
-    html, body { height: 100%; margin: 0; padding: 0; }
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
 
     .hris-app {
       display: flex;
@@ -83,7 +206,7 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
       left: 0;
       height: 100vh;
       z-index: 300;
-      transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+      transition: transform 0.28s cubic-bezier(.4, 0, .2, 1);
     }
 
     .sidebar.hidden {
@@ -146,7 +269,7 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
       gap: 0;
     }
 
-        .topbar-title {
+    .topbar-title {
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -183,113 +306,114 @@ $cssPage   = $cssPageOverride ?? preg_replace('/[^a-z0-9_-]/', '', $currentPage)
       overflow-x: hidden;
     }
 
-    html, body {
+    html,
+    body {
       overflow-x: hidden;
     }
-    
-/* =========================================
+
+    /* =========================================
    ADMIN SIDEBAR - RESPONSIVE OVERLAY FIX
 ========================================= */
 
-.sidebar {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(var(--sidebar-width), 85vw);
-    height: 100dvh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    z-index: 300;
-    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
-}
-
-.sidebar.hidden {
-    transform: translateX(-100%);
-}
-
-.sidebar:not(.hidden) {
-    transform: translateX(0);
-}
-
-.sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 299;
-}
-
-.main {
-    margin-left: 0 !important;
-    width: 100%;
-    min-width: 0;
-}
-
-.topbar {
-    width: 100%;
-    min-width: 0;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.topbar-title {
-    min-width: 0;
-}
-
-.topbar-actions {
-    min-width: 0;
-}
-
-.content {
-    min-width: 0;
-    width: 100%;
-}
-
-@media (max-width: 760px) {
     .sidebar {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: min(var(--sidebar-width), 85vw);
+      height: 100dvh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 300;
+      transition: transform 0.28s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .sidebar.hidden {
+      transform: translateX(-100%);
+    }
+
+    .sidebar:not(.hidden) {
+      transform: translateX(0);
+    }
+
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 299;
+    }
+
+    .main {
+      margin-left: 0 !important;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .topbar {
+      width: 100%;
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .topbar-title {
+      min-width: 0;
+    }
+
+    .topbar-actions {
+      min-width: 0;
+    }
+
+    .content {
+      min-width: 0;
+      width: 100%;
+    }
+
+    @media (max-width: 760px) {
+      .sidebar {
         position: fixed !important;
         width: min(264px, 85vw);
         height: 100dvh;
         padding: 20px 14px;
-    }
+      }
 
-    .nav-list {
+      .nav-list {
         display: grid;
         overflow: visible;
-    }
+      }
 
-    .sidebar-footer {
+      .sidebar-footer {
         display: block;
-    }
+      }
 
-    .topbar {
+      .topbar {
         padding: 12px 16px;
-    }
+      }
 
-    .topbar-actions {
+      .topbar-actions {
         display: none;
+      }
     }
-}
 
-html,
-body {
-    max-width: 100%;
-    overflow-x: hidden;
-}
-html,
-body,
-.content,
-.sidebar {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
+    html,
+    body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
 
-html::-webkit-scrollbar,
-body::-webkit-scrollbar,
-.content::-webkit-scrollbar,
-.sidebar::-webkit-scrollbar {
-    display: none;
-}
+    html,
+    body,
+    .content,
+    .sidebar {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
 
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar,
+    .content::-webkit-scrollbar,
+    .sidebar::-webkit-scrollbar {
+      display: none;
+    }
   </style>
 </head>
 
@@ -309,7 +433,7 @@ body::-webkit-scrollbar,
       <?php foreach ($navItems as [$href, $label, $icon, $pages, $visible]): ?>
         <?php if ($visible): ?>
           <a class="nav-item <?= in_array($currentPage, $pages, true) ? 'active' : '' ?>"
-             href="<?= $href ?>">
+            href="<?= $href ?>">
             <span class="nav-icon"><?= $icon ?></span>
             <span><?= $label ?></span>
           </a>
@@ -320,16 +444,24 @@ body::-webkit-scrollbar,
     <div class="sidebar-footer">
       <div class="footer-line"></div>
       <div class="admin-profile">
-        <span class="avatar">AD</span>
+        <span class="avatar">
+          <?= strtoupper(substr($navUserName, 0, 2)) ?>
+        </span>
+
         <span class="admin-info">
-          <strong>System Administrator</strong>
-          <span>Admin Console</span>
+          <strong>
+            <?= htmlspecialchars($navUserName, ENT_QUOTES, 'UTF-8') ?>
+          </strong>
+
+          <span>
+            <?= htmlspecialchars($navRoleLabel, ENT_QUOTES, 'UTF-8') ?>
+          </span>
         </span>
       </div>
       <a class="logout-btn" href="/authentication/logout.php">
         <svg class="logout-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span>Log Out</span>
       </a>
@@ -357,18 +489,18 @@ body::-webkit-scrollbar,
     </header>
     <section class="content">
 
-  <script>
-    const sidebar   = document.getElementById('adminSidebar');
-    const backdrop  = document.getElementById('sidebarBackdrop');
-    const toggleBtn = document.getElementById('sidebarToggle');
+      <script>
+        const sidebar = document.getElementById('adminSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        const toggleBtn = document.getElementById('sidebarToggle');
 
-    toggleBtn.addEventListener('click', () => {
-      const isHidden = sidebar.classList.toggle('hidden');
-      backdrop.classList.toggle('active', !isHidden);
-    });
+        toggleBtn.addEventListener('click', () => {
+          const isHidden = sidebar.classList.toggle('hidden');
+          backdrop.classList.toggle('active', !isHidden);
+        });
 
-    backdrop.addEventListener('click', () => {
-      sidebar.classList.add('hidden');
-      backdrop.classList.remove('active');
-    });
-  </script>
+        backdrop.addEventListener('click', () => {
+          sidebar.classList.add('hidden');
+          backdrop.classList.remove('active');
+        });
+      </script>

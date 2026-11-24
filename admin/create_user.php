@@ -1,9 +1,16 @@
+
 <?php
 // admin/create_user.php
 // Create a login account and send a password setup invitation.
 
 require_once __DIR__ . '/../authentication/guard.php';
+
 $account = require_access('user_management', 'edit', 'all');
+
+// Account creation and role assignment are administrator-only.
+if (Rbac::normalizeRole($account['role']) !== 'admin') {
+    guard_forbidden($account['role']);
+}
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/User.php';
@@ -13,12 +20,36 @@ require_once __DIR__ . '/../classes/Mailer.php';
 $mailConfig = require __DIR__ . '/../config/mail.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
-  session_start();
+    session_start();
+}
+
+$isAjax = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+
+function sendJsonResponse(
+    bool $success,
+    string $message,
+    array $errors = [],
+    int $statusCode = 200,
+    bool $warning = false
+) {
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+
+    echo json_encode([
+        'success' => $success,
+        'message' => $message,
+        'errors' => $errors,
+        'warning' => $warning
+    ]);
+
+    exit;
 }
 
 $userModel = new User($pdo);
+
 // Remove expired pending accounts.
 $deletedAccounts = $userModel->deleteExpiredPendingAccounts();
+
 $mailer = new Mailer();
 
 $roles = Rbac::ROLES;
@@ -29,61 +60,86 @@ $success = '';
 $warning = '';
 
 if (isset($_SESSION['create_user_success'])) {
-  $success = $_SESSION['create_user_success'];
-  unset($_SESSION['create_user_success']);
+    $success = $_SESSION['create_user_success'];
+    unset($_SESSION['create_user_success']);
 }
 
 if (isset($_SESSION['create_user_warning'])) {
-  $warning = $_SESSION['create_user_warning'];
-  unset($_SESSION['create_user_warning']);
+    $warning = $_SESSION['create_user_warning'];
+    unset($_SESSION['create_user_warning']);
 }
 
 $cleanupMessage = '';
 
 if ($deletedAccounts > 0) {
-  $cleanupMessage = $deletedAccounts
-    . ' expired invitation account(s) were deleted.';
+    $cleanupMessage = $deletedAccounts
+        . ' expired invitation account(s) were deleted.';
 }
+
+// ==================================================
+// HANDLE FORM SUBMISSION
+// ==================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-  csrf_check($account['role']);
+    csrf_check($account['role']);
 
-  $role = Rbac::normalizeRole($_POST['role'] ?? '');
-  $username = trim($_POST['username'] ?? '');
+    $role = Rbac::normalizeRole($_POST['role'] ?? '');
+    $username = trim($_POST['username'] ?? '');
 
-  $status = ($_POST['status'] ?? 'Active') === 'Inactive'
-    ? 'Inactive'
-    : 'Active';
+    $submittedStatus = $_POST['status'] ?? 'Active';
 
-  $employee_id = ctype_digit((string)($_POST['employee_id'] ?? ''))
-    && (int)$_POST['employee_id'] > 0
-    ? (int)$_POST['employee_id']
-    : null;
+    $status = $submittedStatus === 'Inactive'
+        ? 'Inactive'
+        : 'Active';
 
-  // Validate role.
-  if (!in_array($role, $roles, true)) {
-    $errors[] = 'Please choose a valid role.';
-  }
+    $employee_id = ctype_digit((string)($_POST['employee_id'] ?? ''))
+        && (int)$_POST['employee_id'] > 0
+        ? (int)$_POST['employee_id']
+        : null;
 
-  // Validate username.
-  if ($username === '' || strlen($username) < 3) {
-    $errors[] = 'Username must be at least 3 characters.';
-  }
+    // Validate role.
+    if (!in_array($role, $roles, true)) {
+        $errors[] = 'Please choose a valid role.';
+    }
 
-  // Employee accounts require an employee record. (Manager and team leader
-  // are employee ranks, set on the employee record, not account roles.)
-  if ($role === 'employee' && $employee_id === null) {
-    $errors[] = 'The employee role needs a linked employee.';
-  }
+    // Only administrators can create administrator accounts.
+    if (
+        $role === 'admin'
+        && Rbac::normalizeRole($account['role']) !== 'admin'
+    ) {
+        $errors[] = 'Only administrators can create administrator accounts.';
+    }
 
-  // Get employee email.
-  $employeeEmail = null;
+    // Validate account status.
+    if (!in_array($submittedStatus, ['Active', 'Inactive'], true)) {
+        $errors[] = 'Please choose a valid account status.';
+    }
 
-  if ($employee_id !== null) {
+    // Validate username.
+    if ($username === '' || strlen($username) < 3) {
+        $errors[] = 'Username must be at least 3 characters.';
+    }
 
-    $chk = $pdo->prepare(
-      "SELECT email
+    // Employee and HR accounts require a linked employee record.
+    // Manager and team leader are employee ranks, not account roles.
+    if (
+        in_array($role, ['employee', 'hr'], true)
+        && $employee_id === null
+    ) {
+        $errors[] = "The {$role} role needs a linked employee.";
+    }
+
+    // ==================================================
+    // GET EMPLOYEE EMAIL
+    // ==================================================
+
+    $employeeEmail = null;
+
+    if ($employee_id !== null) {
+
+        $chk = $pdo->prepare(
+            "SELECT email
              FROM employees
              WHERE id = :id
              AND id NOT IN (
@@ -92,88 +148,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  WHERE employee_id IS NOT NULL
              )
              LIMIT 1"
-    );
+        );
 
-    $chk->execute(['id' => $employee_id]);
+        $chk->execute(['id' => $employee_id]);
 
-    $employeeEmail = $chk->fetchColumn();
+        $employeeEmail = $chk->fetchColumn();
 
-    if ($employeeEmail === false) {
-      $errors[] = 'That employee does not exist or already has an account.';
-    } elseif (!filter_var($employeeEmail, FILTER_VALIDATE_EMAIL)) {
-      $errors[] = 'The selected employee does not have a valid email address.';
+        if ($employeeEmail === false) {
+            $errors[] = 'That employee does not exist or already has an account.';
+        } elseif (!filter_var($employeeEmail, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'The selected employee does not have a valid email address.';
+        }
+
+    } else {
+
+        // Unlinked accounts need a recipient email too.
+        $employeeEmail = trim($_POST['email'] ?? '');
+
+        if (!filter_var($employeeEmail, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Please provide a valid email address for the invitation.';
+        }
     }
-  } else {
-    // Unlinked accounts need a recipient email too.
-    $employeeEmail = trim($_POST['email'] ?? '');
 
-    if (!filter_var($employeeEmail, FILTER_VALIDATE_EMAIL)) {
-      $errors[] = 'Please provide a valid email address for the invitation.';
+    // ==================================================
+    // AJAX VALIDATION RESPONSE
+    // ==================================================
+
+    if ($errors && $isAjax) {
+        sendJsonResponse(
+            false,
+            'Please correct the following errors.',
+            $errors,
+            422
+        );
     }
-  }
 
-  // Check duplicate username.
-  if (!$errors) {
+    // ==================================================
+    // CHECK DUPLICATE USERNAME
+    // ==================================================
 
-    $stmt = $pdo->prepare(
-      "SELECT 1
+    if (!$errors) {
+
+        $stmt = $pdo->prepare(
+            "SELECT 1
              FROM users
              WHERE LOWER(username) = LOWER(:u)
              LIMIT 1"
-    );
+        );
 
-    $stmt->execute(['u' => $username]);
+        $stmt->execute(['u' => $username]);
 
-    if ($stmt->fetchColumn()) {
-      $errors[] = 'Username already exists.';
+        if ($stmt->fetchColumn()) {
+            $errors[] = 'Username already exists.';
+        }
     }
-  }
 
-  // Check application URL.
-  $appUrl = rtrim((string)($mailConfig['app_url'] ?? ''), '/');
+    // ==================================================
+    // CHECK APPLICATION URL
+    // ==================================================
 
-  if (!$appUrl || !filter_var($appUrl, FILTER_VALIDATE_URL)) {
-    $errors[] = 'Application URL is not configured correctly.';
-  }
+    $appUrl = rtrim((string)($mailConfig['app_url'] ?? ''), '/');
 
-  // Create account and send invitation.
-  if (!$errors) {
+    if (!$appUrl || !filter_var($appUrl, FILTER_VALIDATE_URL)) {
+        $errors[] = 'Application URL is not configured correctly.';
+    }
 
-    try {
+    // ==================================================
+    // CREATE ACCOUNT AND SEND INVITATION
+    // ==================================================
 
-      // Create account without an administrator-provided password.
-      $userId = $userModel->createPendingAccount([
-        'employee_id' => $employee_id,
-        'username' => $username,
-        'role' => $role,
-        'status' => $status
-      ]);
+    if (!$errors) {
 
-      // Generate one-time password setup token.
-      $token = $userModel->createSetupToken($userId);
+        try {
 
-      // Build invitation URL.
-      $setupUrl = $appUrl
-        . '/authentication/setup_password.php?token='
-        . urlencode($token);
+            // Create account without an administrator-provided password.
+            $userId = $userModel->createPendingAccount([
+                'employee_id' => $employee_id,
+                'username' => $username,
+                'role' => $role,
+                'status' => $status
+            ]);
 
-      // Escape values used in HTML.
-      $safeUsername = htmlspecialchars(
-        $username,
-        ENT_QUOTES,
-        'UTF-8'
-      );
+            // Record account creation in the audit log.
+            AuditLogger::log(
+                'user.create_pending',
+                'user',
+                $userId,
+                [
+                    'username' => $username,
+                    'role' => $role,
+                    'status' => $status,
+                    'employee_id' => $employee_id,
+                    'created_by' => $account['user_id']
+                ]
+            );
 
-      $safeSetupUrl = htmlspecialchars(
-        $setupUrl,
-        ENT_QUOTES,
-        'UTF-8'
-      );
+            // Generate one-time password setup token.
+            $token = $userModel->createSetupToken($userId);
 
-      // Invitation email.
-      $subject = 'Welcome to the HRIS Employee Portal';
+            // Build invitation URL.
+            $setupUrl = $appUrl
+                . '/authentication/setup_password.php?token='
+                . urlencode($token);
 
-      $htmlBody = '
+            // Escape values used in HTML.
+            $safeUsername = htmlspecialchars(
+                $username,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+
+            $safeSetupUrl = htmlspecialchars(
+                $setupUrl,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+
+            // Invitation email.
+            $subject = 'Welcome to the HRIS Employee Portal';
+
+            $htmlBody = '
                 <!DOCTYPE html>
                 <html>
                 <body style="font-family:Arial,sans-serif;background:#f4f6f9;padding:30px">
@@ -230,266 +324,314 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </html>
             ';
 
-      $plainBody =
-        "Welcome to the HRIS Employee Portal!\n\n"
-        . "Your username is: {$username}\n\n"
-        . "Set up your password using this link:\n"
-        . "{$setupUrl}\n\n"
-        . "This link expires after 10 minutes.";
+            $plainBody =
+                "Welcome to the HRIS Employee Portal!\n\n"
+                . "Your username is: {$username}\n\n"
+                . "Set up your password using this link:\n"
+                . "{$setupUrl}\n\n"
+                . "This link expires after 10 minutes.";
 
-      // Send email without deleting the newly created account if SMTP fails.
-      $sent = false;
-      try {
-        $sent = $mailer->send(
-          $employeeEmail,
-          $subject,
-          $htmlBody,
-          $plainBody
-        );
-      } catch (Throwable $mailError) {
-        error_log(
-          "HRIS invitation email exception for user ID {$userId}: "
-            . $mailError->getMessage()
-        );
-        $sent = false;
-      }
+            // Send email without deleting the newly created account if SMTP fails.
+            $sent = false;
 
-      if ($sent) {
+            try {
 
-        $_SESSION['create_user_success'] =
-          "Account created successfully for {$username}. "
-          . "The password setup invitation was sent to {$employeeEmail}.";
+                $sent = $mailer->send(
+                    $employeeEmail,
+                    $subject,
+                    $htmlBody,
+                    $plainBody
+                );
 
-        header('Location: create_user.php');
-        exit;
-      } else {
+            } catch (Throwable $mailError) {
 
-        error_log(
-          "HRIS invitation email failed for user ID: {$userId}"
-        );
+                error_log(
+                    "HRIS invitation email exception for user ID {$userId}: "
+                    . $mailError->getMessage()
+                );
 
-        $_SESSION['create_user_warning'] =
-          "Account created for {$username}, but the invitation email to {$employeeEmail} could not be sent. "
-          . "Use this setup link directly (expires in 10 minutes): {$setupUrl}";
+                $sent = false;
+            }
 
-        header('Location: create_user.php');
-        exit;
-      }
-    } catch (Throwable $e) {
+            // ==================================================
+            // EMAIL SENT SUCCESSFULLY
+            // ==================================================
 
-      error_log(
-        'Create user invitation failed: '
-          . $e->getMessage()
-          . ' | File: '
-          . $e->getFile()
-          . ' | Line: '
-          . $e->getLine()
-      );
+            if ($sent) {
 
-      $errors[] = 'Could not complete account creation. Please check the server logs.';
+                $message = "Account created successfully for {$username}. "
+                    . "The password setup invitation was sent to {$employeeEmail}.";
+
+                if ($isAjax) {
+                    sendJsonResponse(
+                        true,
+                        $message
+                    );
+                }
+
+                $_SESSION['create_user_success'] = $message;
+
+                header('Location: create_user.php');
+                exit;
+
+            } else {
+
+                // Account remains pending if email delivery fails.
+                error_log(
+                    "HRIS invitation email failed for user ID: {$userId}"
+                );
+
+                $message = 'The account was created, but the invitation email could not be sent. The account is still pending activation.';
+
+                if ($isAjax) {
+                    sendJsonResponse(
+                        true,
+                        $message,
+                        [],
+                        200,
+                        true
+                    );
+                }
+
+                $_SESSION['create_user_warning'] = $message;
+
+                header('Location: create_user.php');
+                exit;
+            }
+
+        } catch (Throwable $e) {
+
+            error_log(
+                'Create user invitation failed: '
+                . $e->getMessage()
+                . ' | File: '
+                . $e->getFile()
+                . ' | Line: '
+                . $e->getLine()
+            );
+
+            $message = 'Could not complete account creation. Please check the server logs.';
+
+            if ($isAjax) {
+                sendJsonResponse(
+                    false,
+                    $message,
+                    [],
+                    500
+                );
+            }
+
+            $errors[] = $message;
+        }
     }
-  }
 }
+
+// ==================================================
+// LOAD PAGE
+// ==================================================
 
 require __DIR__ . '/../templates/adminTemplates/header.php';
 ?>
 
 <section class="page-head">
-  <div class="ph-text">
-    <p class="eyebrow">ACCESS CONTROL</p>
-    <h1>Create User</h1>
-    <p>
-      Create a login account and send an email invitation
-      for password setup.
-    </p>
-  </div>
+    <div class="ph-text">
+        <p class="eyebrow">ACCESS CONTROL</p>
+        <h1>Create User</h1>
 
-  <div class="ph-actions">
-    <a class="button" href="/admin/users.php">
-      ← Back to Users
-    </a>
-  </div>
+        <p>
+            Create a login account and send an email invitation
+            for password setup.
+        </p>
+    </div>
+
+    <div class="ph-actions">
+        <a class="button" href="/admin/users.php">
+            ← Back to Users
+        </a>
+    </div>
 </section>
+
 <?php if ($cleanupMessage): ?>
-  <div class="alert" style="margin-bottom:20px">
-    <?= htmlspecialchars($cleanupMessage) ?>
-  </div>
+    <div class="alert" style="margin-bottom:20px">
+        <?= htmlspecialchars($cleanupMessage) ?>
+    </div>
 <?php endif; ?>
 
 <?php if ($errors): ?>
-  <div class="alert error" style="margin-bottom:20px">
-    <?php foreach ($errors as $e): ?>
-      <div><?= htmlspecialchars($e) ?></div>
-    <?php endforeach; ?>
-  </div>
+    <div class="alert error" style="margin-bottom:20px">
+        <?php foreach ($errors as $e): ?>
+            <div><?= htmlspecialchars($e) ?></div>
+        <?php endforeach; ?>
+    </div>
 <?php endif; ?>
 
 <?php if ($warning): ?>
-  <div class="alert"
-    style="margin-bottom:20px;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.14);color:#fde68a;word-break:break-all">
+    <div class="alert"
+        style="margin-bottom:20px;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.14);color:#fde68a">
 
-    <?= htmlspecialchars($warning) ?>
+        <?= htmlspecialchars($warning) ?>
 
-  </div>
+    </div>
 <?php endif; ?>
 
 <?php if ($success): ?>
-  <div class="alert"
-    style="margin-bottom:20px;border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12);color:#c7f9e5">
+    <div class="alert"
+        style="margin-bottom:20px;border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12);color:#c7f9e5">
 
-    <?= htmlspecialchars($success) ?>
+        <?= htmlspecialchars($success) ?>
 
-  </div>
+    </div>
 <?php endif; ?>
 
 <div class="panel">
 
-  <div class="panel-head">
-    <h2>New Account Details</h2>
-  </div>
+    <div class="panel-head">
+        <h2>New Account Details</h2>
+    </div>
 
-  <div class="panel-body">
+    <div class="panel-body">
 
-    <form method="post" autocomplete="off">
+        <form method="post" autocomplete="off">
 
-      <?= csrf_field() ?>
+            <?= csrf_field() ?>
 
-      <div>
-        <label for="employee_id">Employee</label>
+            <div>
+                <label for="employee_id">Employee</label>
 
-        <select id="employee_id" name="employee_id">
+                <select id="employee_id" name="employee_id">
 
-          <option value="">-- None --</option>
+                    <option value="">-- None --</option>
 
-          <?php foreach ($employees as $emp):
+                    <?php foreach ($employees as $emp):
 
-            $id = (int)$emp['id'];
+                        $id = (int)$emp['id'];
 
-            $code = !empty($emp['employee_id'])
-              ? '[' . htmlspecialchars($emp['employee_id']) . '] '
-              : '';
+                        $code = !empty($emp['employee_id'])
+                            ? '[' . htmlspecialchars($emp['employee_id']) . '] '
+                            : '';
 
-            $name = trim(
-              ($emp['last_name'] ?? '') . ', '
-                . ($emp['first_name'] ?? '')
-            );
+                        $name = trim(
+                            ($emp['last_name'] ?? '') . ', '
+                            . ($emp['first_name'] ?? '')
+                        );
 
-            $label = $code . $name;
+                        $label = $code . $name;
 
-            $sel = (
-              isset($_POST['employee_id'])
-              && (int)$_POST['employee_id'] === $id
-            ) ? 'selected' : '';
+                        $sel = (
+                            isset($_POST['employee_id'])
+                            && (int)$_POST['employee_id'] === $id
+                        ) ? 'selected' : '';
 
-          ?>
+                    ?>
 
-            <option value="<?= $id ?>" <?= $sel ?>>
-              <?= htmlspecialchars($label) ?>
-            </option>
+                        <option value="<?= $id ?>" <?= $sel ?>>
+                            <?= htmlspecialchars($label) ?>
+                        </option>
 
-          <?php endforeach; ?>
+                    <?php endforeach; ?>
 
-        </select>
+                </select>
 
-        <div class="muted" style="margin-top:6px">
-          Employee accounts require an employee record.
-          Linked accounts receive their invitation at the employee's
-          registered email address.
-        </div>
-      </div>
+                <div class="muted" style="margin-top:6px">
+                    Employee accounts require an employee record.
+                    Linked accounts receive their invitation at the employee's
+                    registered email address.
+                </div>
+            </div>
 
-      <div style="margin-top:18px">
+            <div style="margin-top:18px">
 
-        <label for="email">
-          Invitation Email (for accounts without an employee record)
-        </label>
+                <label for="email">
+                    Invitation Email (for accounts without an employee record)
+                </label>
 
-        <input
-          id="email"
-          name="email"
-          type="email"
-          value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
-          placeholder="example@gmail.com">
+                <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
+                    placeholder="example@gmail.com">
 
-        <div class="muted" style="margin-top:6px">
-          For linked accounts, the employee's registered email is used instead.
-        </div>
+                <div class="muted" style="margin-top:6px">
+                    For linked accounts, the employee's registered email is used instead.
+                </div>
 
-      </div>
+            </div>
 
-      <div style="margin-top:18px">
+            <div style="margin-top:18px">
 
-        <label for="username">Username</label>
+                <label for="username">Username</label>
 
-        <input
-          id="username"
-          name="username"
-          required
-          minlength="3"
-          value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    minlength="3"
+                    value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
 
-      </div>
+            </div>
 
-      <div class="form-grid" style="margin-top:18px">
+            <div class="form-grid" style="margin-top:18px">
 
-        <div>
-          <label for="role">Role</label>
+                <div>
+                    <label for="role">Role</label>
 
-          <select id="role" name="role">
+                    <select id="role" name="role">
 
-            <?php foreach ($roles as $r): ?>
+                        <?php foreach ($roles as $r): ?>
 
-              <option
-                value="<?= htmlspecialchars($r) ?>"
-                <?= (($_POST['role'] ?? 'employee') === $r) ? 'selected' : '' ?>>
+                            <option
+                                value="<?= htmlspecialchars($r) ?>"
+                                <?= (($_POST['role'] ?? 'employee') === $r) ? 'selected' : '' ?>>
 
-                <?= htmlspecialchars(ucfirst($r)) ?>
+                                <?= htmlspecialchars(ucfirst($r)) ?>
 
-              </option>
+                            </option>
 
-            <?php endforeach; ?>
+                        <?php endforeach; ?>
 
-          </select>
-        </div>
+                    </select>
+                </div>
 
-        <div>
-          <label for="status">Status</label>
+                <div>
+                    <label for="status">Status</label>
 
-          <select id="status" name="status">
+                    <select id="status" name="status">
 
-            <option value="Active"
-              <?= (($_POST['status'] ?? 'Active') === 'Active') ? 'selected' : '' ?>>
-              Active
-            </option>
+                        <option value="Active"
+                            <?= (($_POST['status'] ?? 'Active') === 'Active') ? 'selected' : '' ?>>
+                            Active
+                        </option>
 
-            <option value="Inactive"
-              <?= (($_POST['status'] ?? '') === 'Inactive') ? 'selected' : '' ?>>
-              Inactive
-            </option>
+                        <option value="Inactive"
+                            <?= (($_POST['status'] ?? '') === 'Inactive') ? 'selected' : '' ?>>
+                            Inactive
+                        </option>
 
-          </select>
-        </div>
+                    </select>
+                </div>
 
-      </div>
+            </div>
 
-      <div class="muted" style="margin-top:15px">
-        The employee will create their own password using the
-        invitation email. No password is required here.
-      </div>
+            <div class="muted" style="margin-top:15px">
+                The employee will create their own password using the
+                invitation email. No password is required here.
+            </div>
 
-      <div class="form-actions">
+            <div class="form-actions">
 
-        <button class="primary-button" type="submit">
-          Create User & Send Invitations
-        </button>
+                <button class="primary-button" type="submit">
+                    Create User & Send Invitations
+                </button>
 
-        <a class="button" href="/admin/users.php">
-          Cancel
-        </a>
+                <a class="button" href="/admin/users.php">
+                    Cancel
+                </a>
 
-      </div>
+            </div>
 
-    </form>
+        </form>
 
-  </div>
+    </div>
 </div>
