@@ -53,11 +53,12 @@ services:
     container_name: hris_app
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8000:80"
     volumes:
       - ../:/app
+      - hris_backups:/backups:ro
+      - backup_requests:/requests
     working_dir: /app
-    command: ["php", "-S", "0.0.0.0:8000", "-t", "/app"]
     environment:
       DB_HOST: mysql
       DB_PORT: "3306"
@@ -183,8 +184,40 @@ services:
       - monitoring
       - hris_net              # reach hris-realtime to push live notifications
 
+  # ----------------------------------------------------------
+  # Automatic MySQL database backups
+  # Runs immediately, then every 24 hours.
+  # Backup files are stored in a persistent Docker volume.
+  # ----------------------------------------------------------
+  hris-backup:
+    image: mysql:8.0
+    container_name: hris_backup
+    restart: unless-stopped
+    init: true
+    entrypoint: ["bash", "/usr/local/bin/backup.sh"]
+    volumes:
+      - ./backup/backup.sh:/usr/local/bin/backup.sh:ro
+      - hris_backups:/backups
+      - backup_requests:/requests
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: hris
+      DB_USER: hris_app
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      BACKUP_RETENTION_DAYS: "30"
+      BACKUP_INTERVAL_SECONDS: "86400"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - monitoring
+
+
 volumes:
   mysql_data:
+  hris_backups:
+  backup_requests:
 
 networks:
   monitoring:
