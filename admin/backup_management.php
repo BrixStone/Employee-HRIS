@@ -382,10 +382,10 @@ foreach ($activityDates as $activity) {
     <?php if ($backupFlash): ?>
 
         <div class="backup-message <?= htmlspecialchars(
-            $backupFlash['type'] ?? 'info',
-            ENT_QUOTES,
-            'UTF-8'
-        ) ?>">
+                                        $backupFlash['type'] ?? 'info',
+                                        ENT_QUOTES,
+                                        'UTF-8'
+                                    ) ?>">
 
             <?= htmlspecialchars(
                 $backupFlash['message'] ?? '',
@@ -532,10 +532,10 @@ foreach ($activityDates as $activity) {
                                     <tr
                                         class="backup-row"
                                         data-filename="<?= htmlspecialchars(
-                                            strtolower($filename),
-                                            ENT_QUOTES,
-                                            'UTF-8'
-                                        ) ?>"
+                                                            strtolower($filename),
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        ) ?>"
                                         data-date="<?= (int) $backup['created_at'] ?>">
 
                                         <td>
@@ -544,17 +544,17 @@ foreach ($activityDates as $activity) {
                                                 name="backup_selection"
                                                 class="backup-radio"
                                                 value="<?= htmlspecialchars(
-                                                    $filename,
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                ) ?>"
+                                                            $filename,
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        ) ?>"
                                                 form="restoreForm"
                                                 required
                                                 aria-label="Select <?= htmlspecialchars(
-                                                    $filename,
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                ) ?>">
+                                                                        $filename,
+                                                                        ENT_QUOTES,
+                                                                        'UTF-8'
+                                                                    ) ?>">
                                         </td>
 
                                         <td>
@@ -592,7 +592,8 @@ foreach ($activityDates as $activity) {
 
                                                 <form
                                                     method="POST"
-                                                    action="/admin/backup/verify">
+                                                    action="/admin/backup/verify"
+                                                    class="backup-verify-form">
 
                                                     <?= csrf_field() ?>
 
@@ -600,10 +601,10 @@ foreach ($activityDates as $activity) {
                                                         type="hidden"
                                                         name="filename"
                                                         value="<?= htmlspecialchars(
-                                                            $filename,
-                                                            ENT_QUOTES,
-                                                            'UTF-8'
-                                                        ) ?>">
+                                                                    $filename,
+                                                                    ENT_QUOTES,
+                                                                    'UTF-8'
+                                                                ) ?>">
 
                                                     <button
                                                         type="submit"
@@ -828,15 +829,15 @@ foreach ($activityDates as $activity) {
                                                     type="button"
                                                     class="backup-restore-button safety-restore-button"
                                                     data-filename="<?= htmlspecialchars(
-                                                        $backup['filename'],
-                                                        ENT_QUOTES,
-                                                        'UTF-8'
-                                                    ) ?>"
+                                                                        $backup['filename'],
+                                                                        ENT_QUOTES,
+                                                                        'UTF-8'
+                                                                    ) ?>"
                                                     data-date="<?= htmlspecialchars(
-                                                        $backup['formatted_date'],
-                                                        ENT_QUOTES,
-                                                        'UTF-8'
-                                                    ) ?>">
+                                                                    $backup['formatted_date'],
+                                                                    ENT_QUOTES,
+                                                                    'UTF-8'
+                                                                ) ?>">
                                                     Restore
                                                 </button>
 
@@ -856,6 +857,57 @@ foreach ($activityDates as $activity) {
                 <?php endif; ?>
 
             </section>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ======================================
+     BACKUP VERIFICATION RESULT MODAL
+======================================= -->
+
+<div
+    class="backup-modal"
+    id="backupResultModal"
+    aria-hidden="true">
+
+    <div
+        class="backup-modal-overlay"
+        data-close-result>
+    </div>
+
+    <div
+        class="backup-modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="backupResultTitle">
+
+        <div
+            class="backup-modal-icon"
+            id="backupResultIcon">
+
+            <i class="fas fa-info-circle"></i>
+
+        </div>
+
+        <h2 id="backupResultTitle">
+            Backup Verification
+        </h2>
+
+        <p id="backupResultMessage">
+            Verification result will appear here.
+        </p>
+
+        <div class="backup-modal-actions">
+
+            <button
+                type="button"
+                class="backup-modal-confirm"
+                data-close-result>
+                Close
+            </button>
 
         </div>
 
@@ -1020,518 +1072,656 @@ foreach ($activityDates as $activity) {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function() {
 
-    // ==========================================
-    // ELEMENTS
-    // ==========================================
+        // ==========================================
+        // ELEMENTS
+        // ==========================================
 
-    const rows = Array.from(
-        document.querySelectorAll('.backup-row')
-    );
+        const rows = Array.from(
+            document.querySelectorAll('.backup-row')
+        );
 
-    const restoreForm = document.getElementById('restoreForm');
+        const restoreForm = document.getElementById('restoreForm');
 
-    const activityCanvas = document.getElementById('backupActivityChart');
+        const activityCanvas = document.getElementById('backupActivityChart');
 
-    // ==========================================
-    // BACKUP ACTIVITY CHART
-    // ==========================================
+        // ==========================================
+        // BACKUP ACTIVITY CHART
+        // ==========================================
 
-    if (activityCanvas && typeof Chart !== 'undefined') {
+        if (activityCanvas && typeof Chart !== 'undefined') {
 
-        new Chart(activityCanvas, {
-            type: 'bar',
+            new Chart(activityCanvas, {
+                type: 'bar',
 
-            data: {
-                labels: <?= json_encode($activityLabels) ?>,
+                data: {
+                    labels: <?= json_encode($activityLabels) ?>,
 
-                datasets: [
-                    {
-                        label: 'Normal Backups',
-                        data: <?= json_encode($normalActivity) ?>,
-                        backgroundColor: '#9B7BD3',
-                        borderRadius: 5,
-                        borderSkipped: false
-                    },
-                    {
-                        label: 'Safety Backups',
-                        data: <?= json_encode($safetyActivity) ?>,
-                        backgroundColor: '#4F9DA6',
-                        borderRadius: 5,
-                        borderSkipped: false
-                    },
-                    {
-                        label: 'Successful Restores',
-                        data: <?= json_encode($restoreActivity) ?>,
-                        backgroundColor: '#D6A45D',
-                        borderRadius: 5,
-                        borderSkipped: false
-                    }
-                ]
-            },
-
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-
-                interaction: {
-                    intersect: false,
-                    mode: 'index'
+                    datasets: [{
+                            label: 'Normal Backups',
+                            data: <?= json_encode($normalActivity) ?>,
+                            backgroundColor: '#9B7BD3',
+                            borderRadius: 5,
+                            borderSkipped: false
+                        },
+                        {
+                            label: 'Safety Backups',
+                            data: <?= json_encode($safetyActivity) ?>,
+                            backgroundColor: '#4F9DA6',
+                            borderRadius: 5,
+                            borderSkipped: false
+                        },
+                        {
+                            label: 'Successful Restores',
+                            data: <?= json_encode($restoreActivity) ?>,
+                            backgroundColor: '#D6A45D',
+                            borderRadius: 5,
+                            borderSkipped: false
+                        }
+                    ]
                 },
 
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            color: '#B4A5C0',
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            padding: 20
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#B4A5C0',
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                padding: 20
+                            }
+                        },
+
+                        tooltip: {
+                            backgroundColor: '#171d32',
+                            titleColor: '#FFFFFF',
+                            bodyColor: '#D8D2E2',
+                            borderColor: '#303b5c',
+                            borderWidth: 1,
+                            padding: 12
                         }
                     },
 
-                    tooltip: {
-                        backgroundColor: '#171d32',
-                        titleColor: '#FFFFFF',
-                        bodyColor: '#D8D2E2',
-                        borderColor: '#303b5c',
-                        borderWidth: 1,
-                        padding: 12
-                    }
-                },
-
-                scales: {
-                    x: {
-                        stacked: false,
-                        grid: {
-                            display: false
+                    scales: {
+                        x: {
+                            stacked: false,
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#B4A5C0'
+                            }
                         },
-                        ticks: {
-                            color: '#B4A5C0'
-                        }
-                    },
 
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            precision: 0,
-                            color: '#B4A5C0'
-                        },
-                        grid: {
-                            color: 'rgba(180, 165, 192, 0.12)'
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                color: '#B4A5C0'
+                            },
+                            grid: {
+                                color: 'rgba(180, 165, 192, 0.12)'
+                            }
                         }
                     }
                 }
-            }
-        });
-    }
+            });
+        }
 
-    // ==========================================
-    // MODAL HELPERS
-    // ==========================================
+        // ==========================================
+        // MODAL HELPERS
+        // ==========================================
 
-    function openModal(modal) {
-        if (!modal) return;
+        function openModal(modal) {
+            if (!modal) return;
 
-        modal.classList.add('show');
-        modal.setAttribute('aria-hidden', 'false');
-    }
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+        }
 
-    function closeModal(modal) {
-        if (!modal) return;
+        function closeModal(modal) {
+            if (!modal) return;
 
-        modal.classList.remove('show');
-        modal.setAttribute('aria-hidden', 'true');
-    }
+            modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+        }
 
-    // ==========================================
-    // BACKUP HISTORY / SAFETY BACKUP MODALS
-    // ==========================================
+        // ==========================================
+        // BACKUP HISTORY / SAFETY BACKUP MODALS
+        // ==========================================
 
-    document.querySelectorAll('[data-open-modal]').forEach(function(button) {
-
-        button.addEventListener('click', function() {
-
-            const modalId = this.dataset.openModal;
-            const modal = document.getElementById(modalId);
-
-            openModal(modal);
-        });
-
-    });
-
-    document.querySelectorAll('.backup-modal [data-close-modal]')
-        .forEach(function(button) {
+        document.querySelectorAll('[data-open-modal]').forEach(function(button) {
 
             button.addEventListener('click', function() {
 
-                const modal = this.closest('.backup-modal');
+                const modalId = this.dataset.openModal;
+                const modal = document.getElementById(modalId);
 
-                closeModal(modal);
+                openModal(modal);
             });
 
         });
 
-    // ==========================================
-    // RESTORE FORM
-    // ==========================================
+        document.querySelectorAll('.backup-modal [data-close-modal]')
+            .forEach(function(button) {
 
-    if (!restoreForm) {
-        return;
-    }
+                button.addEventListener('click', function() {
 
-    const hasNormalBackups = rows.length > 0;
+                    const modal = this.closest('.backup-modal');
 
-    const searchInput = document.getElementById('backupSearch');
-    const sortSelect = document.getElementById('backupSort');
+                    closeModal(modal);
+                });
 
-    const previousButton = document.getElementById('backupPrevious');
-    const nextButton = document.getElementById('backupNext');
+            });
 
-    const pageNumbers = document.getElementById('backupPageNumbers');
-    const paginationInfo = document.getElementById('backupPaginationInfo');
-    const noResults = document.getElementById('backupNoResults');
+        // ==========================================
+        // RESTORE FORM
+        // ==========================================
+        // ==========================================
+        // BACKUP VERIFICATION
+        // ==========================================
 
-    const radios = document.querySelectorAll('.backup-radio');
+        const verifyForms = document.querySelectorAll(
+            '.backup-verify-form'
+        );
 
-    const restoreButton = document.getElementById(
-        'openRestoreConfirmation'
-    );
+        const resultModal = document.getElementById(
+            'backupResultModal'
+        );
 
-    const selectedBackupLabel = document.getElementById(
-        'selectedBackupLabel'
-    );
+        const resultIcon = document.getElementById(
+            'backupResultIcon'
+        );
 
-    const confirmationModal = document.getElementById(
-        'restoreConfirmationModal'
-    );
+        const resultTitle = document.getElementById(
+            'backupResultTitle'
+        );
 
-    const statusModal = document.getElementById(
-        'restoreStatusModal'
-    );
+        const resultMessage = document.getElementById(
+            'backupResultMessage'
+        );
 
-    const confirmRestoreButton = document.getElementById(
-        'confirmRestoreButton'
-    );
+        // Show the verification result
+        function showBackupResult(success, message) {
 
-    const closeStatusButton = document.getElementById(
-        'closeRestoreStatus'
-    );
+            resultTitle.textContent = success ?
+                'Backup Verified' :
+                'Verification Failed';
 
-    const statusDescription = document.getElementById(
-        'restoreStatusDescription'
-    );
+            resultMessage.textContent = message;
 
-    const statusTitle = document.getElementById(
-        'restoreStatusTitle'
-    );
+            resultIcon.className = success ?
+                'backup-modal-icon success' :
+                'backup-modal-icon warning';
 
-    const statusIcon = document.getElementById(
-        'restoreStatusIcon'
-    );
+            resultIcon.innerHTML = success ?
+                '<i class="fas fa-check"></i>' :
+                '<i class="fas fa-exclamation-triangle"></i>';
 
-    const statusIconText = document.getElementById(
-        'restoreStatusIconText'
-    );
-
-    const finalResult = document.getElementById(
-        'restoreFinalResult'
-    );
-
-    const stageItems = Array.from(
-        document.querySelectorAll('.restore-progress-item')
-    );
-
-    // ==========================================
-    // STATE
-    // ==========================================
-
-    let currentPage = 1;
-    const pageSize = 5;
-
-    let filteredRows = [...rows];
-
-    let restoreRequestId = null;
-    let restoreFinished = false;
-    let polling = false;
-
-    let selectedRestoreFilename = null;
-
-    const stageOrder = [
-        'validate',
-        'safety',
-        'replace',
-        'validate-live'
-    ];
-
-    // ==========================================
-    // SELECT BACKUP FOR RESTORATION
-    // ==========================================
-
-    function selectBackup(filename, date) {
-
-        selectedRestoreFilename = filename;
-
-        document.getElementById(
-            'selectedBackupFilename'
-        ).value = filename;
-
-        if (selectedBackupLabel) {
-            selectedBackupLabel.textContent = filename;
+            openModal(resultModal);
         }
 
-        document.getElementById(
-            'confirmationFilename'
-        ).textContent = filename;
+        // Close the verification result modal
+        document.querySelectorAll('[data-close-result]').forEach(function(button) {
 
-        document.getElementById(
-            'confirmationDate'
-        ).textContent = date;
+            button.addEventListener('click', function() {
+                closeModal(resultModal);
+            });
 
-        document.getElementById(
-            'statusFilename'
-        ).textContent = filename;
-    }
+        });
 
-    // ==========================================
-    // NORMAL BACKUP SEARCH, SORTING, PAGINATION
-    // ==========================================
+        // Handle every Verify form
+        verifyForms.forEach(function(form) {
 
-    function getVisibleBackups() {
+            form.addEventListener('submit', async function(event) {
 
-        if (!hasNormalBackups) {
+                // Stop the browser from navigating away
+                event.preventDefault();
+
+                const verifyButton = form.querySelector('button[type="submit"]');
+
+                verifyButton.disabled = true;
+                verifyButton.textContent = 'Verifying...';
+
+                try {
+
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    showBackupResult(
+                        response.ok && data.success === true,
+                        data.message || 'No verification message was provided.'
+                    );
+
+                } catch (error) {
+
+                    console.error('Backup verification error:', error);
+
+                    showBackupResult(
+                        false,
+                        'Unable to verify the backup. Please check your connection or server response.'
+                    );
+
+                } finally {
+
+                    verifyButton.disabled = false;
+                    verifyButton.textContent = 'Verify';
+
+                }
+
+            });
+
+        });
+        if (!restoreForm) {
             return;
         }
 
-        const searchTerm = searchInput.value.trim().toLowerCase();
+        const hasNormalBackups = rows.length > 0;
 
-        filteredRows = rows.filter(function(row) {
-            return row.dataset.filename.includes(searchTerm);
-        });
+        const searchInput = document.getElementById('backupSearch');
+        const sortSelect = document.getElementById('backupSort');
 
-        filteredRows.sort(function(a, b) {
+        const previousButton = document.getElementById('backupPrevious');
+        const nextButton = document.getElementById('backupNext');
 
-            const dateA = Number(a.dataset.date);
-            const dateB = Number(b.dataset.date);
+        const pageNumbers = document.getElementById('backupPageNumbers');
+        const paginationInfo = document.getElementById('backupPaginationInfo');
+        const noResults = document.getElementById('backupNoResults');
 
-            return sortSelect.value === 'oldest'
-                ? dateA - dateB
-                : dateB - dateA;
-        });
+        const radios = document.querySelectorAll('.backup-radio');
 
-        const totalPages = Math.max(
-            1,
-            Math.ceil(filteredRows.length / pageSize)
+        const restoreButton = document.getElementById(
+            'openRestoreConfirmation'
         );
 
-        currentPage = Math.min(currentPage, totalPages);
-
-        rows.forEach(function(row) {
-            row.style.display = 'none';
-        });
-
-        const startIndex = (currentPage - 1) * pageSize;
-
-        const pageRows = filteredRows.slice(
-            startIndex,
-            startIndex + pageSize
+        const selectedBackupLabel = document.getElementById(
+            'selectedBackupLabel'
         );
 
-        pageRows.forEach(function(row) {
+        const confirmationModal = document.getElementById(
+            'restoreConfirmationModal'
+        );
 
-            row.style.display = '';
+        const statusModal = document.getElementById(
+            'restoreStatusModal'
+        );
+
+        const confirmRestoreButton = document.getElementById(
+            'confirmRestoreButton'
+        );
+
+        const closeStatusButton = document.getElementById(
+            'closeRestoreStatus'
+        );
+
+        const statusDescription = document.getElementById(
+            'restoreStatusDescription'
+        );
+
+        const statusTitle = document.getElementById(
+            'restoreStatusTitle'
+        );
+
+        const statusIcon = document.getElementById(
+            'restoreStatusIcon'
+        );
+
+        const statusIconText = document.getElementById(
+            'restoreStatusIconText'
+        );
+
+        const finalResult = document.getElementById(
+            'restoreFinalResult'
+        );
+
+        const stageItems = Array.from(
+            document.querySelectorAll('.restore-progress-item')
+        );
+
+        // ==========================================
+        // STATE
+        // ==========================================
+
+        let currentPage = 1;
+        const pageSize = 5;
+
+        let filteredRows = [...rows];
+
+        let restoreRequestId = null;
+        let restoreFinished = false;
+        let polling = false;
+
+        let selectedRestoreFilename = null;
+
+        const stageOrder = [
+            'validate',
+            'safety',
+            'replace',
+            'validate-live'
+        ];
+
+        // ==========================================
+        // SELECT BACKUP FOR RESTORATION
+        // ==========================================
+
+        function selectBackup(filename, date) {
+
+            selectedRestoreFilename = filename;
 
             document.getElementById(
-                'backupTableBody'
-            ).appendChild(row);
+                'selectedBackupFilename'
+            ).value = filename;
 
-        });
-
-        noResults.hidden = filteredRows.length !== 0;
-
-        const start = filteredRows.length === 0
-            ? 0
-            : startIndex + 1;
-
-        const end = Math.min(
-            startIndex + pageSize,
-            filteredRows.length
-        );
-
-        paginationInfo.textContent =
-            `Showing ${start}–${end} of ${filteredRows.length} backups`;
-
-        previousButton.disabled = currentPage <= 1;
-        nextButton.disabled = currentPage >= totalPages;
-
-        renderPageNumbers(totalPages);
-
-        document.getElementById(
-            'backupTotal'
-        ).textContent = `${filteredRows.length} backup(s)`;
-    }
-
-    function renderPageNumbers(totalPages) {
-
-        pageNumbers.innerHTML = '';
-
-        for (let page = 1; page <= totalPages; page++) {
-
-            const button = document.createElement('button');
-
-            button.type = 'button';
-            button.textContent = page;
-            button.className = 'backup-page-button';
-
-            if (page === currentPage) {
-                button.classList.add('active');
+            if (selectedBackupLabel) {
+                selectedBackupLabel.textContent = filename;
             }
 
-            button.addEventListener('click', function() {
-                currentPage = page;
-                getVisibleBackups();
+            document.getElementById(
+                'confirmationFilename'
+            ).textContent = filename;
+
+            document.getElementById(
+                'confirmationDate'
+            ).textContent = date;
+
+            document.getElementById(
+                'statusFilename'
+            ).textContent = filename;
+        }
+
+        // ==========================================
+        // NORMAL BACKUP SEARCH, SORTING, PAGINATION
+        // ==========================================
+
+        function getVisibleBackups() {
+
+            if (!hasNormalBackups) {
+                return;
+            }
+
+            const searchTerm = searchInput.value.trim().toLowerCase();
+
+            filteredRows = rows.filter(function(row) {
+                return row.dataset.filename.includes(searchTerm);
             });
 
-            pageNumbers.appendChild(button);
-        }
-    }
+            filteredRows.sort(function(a, b) {
 
-    // ==========================================
-    // NORMAL BACKUP CONTROLS
-    // ==========================================
+                const dateA = Number(a.dataset.date);
+                const dateB = Number(b.dataset.date);
 
-    if (hasNormalBackups) {
+                return sortSelect.value === 'oldest' ?
+                    dateA - dateB :
+                    dateB - dateA;
+            });
 
-        searchInput.addEventListener('input', function() {
-            currentPage = 1;
-            getVisibleBackups();
-        });
-
-        sortSelect.addEventListener('change', function() {
-            currentPage = 1;
-            getVisibleBackups();
-        });
-
-        previousButton.addEventListener('click', function() {
-
-            if (currentPage > 1) {
-                currentPage--;
-                getVisibleBackups();
-            }
-
-        });
-
-        nextButton.addEventListener('click', function() {
-
-            const totalPages = Math.ceil(
-                filteredRows.length / pageSize
+            const totalPages = Math.max(
+                1,
+                Math.ceil(filteredRows.length / pageSize)
             );
 
-            if (currentPage < totalPages) {
-                currentPage++;
-                getVisibleBackups();
-            }
+            currentPage = Math.min(currentPage, totalPages);
 
-        });
+            rows.forEach(function(row) {
+                row.style.display = 'none';
+            });
 
-        // Normal backup selection
-        radios.forEach(function(radio) {
+            const startIndex = (currentPage - 1) * pageSize;
 
-            radio.addEventListener('change', function() {
+            const pageRows = filteredRows.slice(
+                startIndex,
+                startIndex + pageSize
+            );
 
-                const selectedRow = this.closest('tr');
+            pageRows.forEach(function(row) {
 
-                const filename = this.value;
-                const date = selectedRow.children[2].textContent.trim();
+                row.style.display = '';
 
-                selectBackup(filename, date);
-
-                if (restoreButton) {
-                    restoreButton.disabled = false;
-                }
+                document.getElementById(
+                    'backupTableBody'
+                ).appendChild(row);
 
             });
 
-        });
+            noResults.hidden = filteredRows.length !== 0;
 
-        // Normal backup restore button
-        if (restoreButton) {
+            const start = filteredRows.length === 0 ?
+                0 :
+                startIndex + 1;
 
-            restoreButton.addEventListener('click', function() {
+            const end = Math.min(
+                startIndex + pageSize,
+                filteredRows.length
+            );
 
-                if (!selectedRestoreFilename) {
-                    alert('Please select a backup first.');
-                    return;
-                }
+            paginationInfo.textContent =
+                `Showing ${start}–${end} of ${filteredRows.length} backups`;
 
-                openModal(confirmationModal);
-            });
+            previousButton.disabled = currentPage <= 1;
+            nextButton.disabled = currentPage >= totalPages;
 
+            renderPageNumbers(totalPages);
+
+            document.getElementById(
+                'backupTotal'
+            ).textContent = `${filteredRows.length} backup(s)`;
         }
 
-        getVisibleBackups();
-    }
+        function renderPageNumbers(totalPages) {
 
-    // ==========================================
-    // SAFETY BACKUP SELECTION
-    // ==========================================
+            pageNumbers.innerHTML = '';
 
-    document.querySelectorAll('.safety-restore-button')
-        .forEach(function(button) {
+            for (let page = 1; page <= totalPages; page++) {
 
-            button.addEventListener('click', function() {
+                const button = document.createElement('button');
 
-                const filename = this.dataset.filename;
-                const date = this.dataset.date;
+                button.type = 'button';
+                button.textContent = page;
+                button.className = 'backup-page-button';
 
-                selectBackup(filename, date);
+                if (page === currentPage) {
+                    button.classList.add('active');
+                }
 
-                // Close the safety backup list before opening confirmation.
-                closeModal(
-                    document.getElementById('safetyBackupsModal')
+                button.addEventListener('click', function() {
+                    currentPage = page;
+                    getVisibleBackups();
+                });
+
+                pageNumbers.appendChild(button);
+            }
+        }
+
+        // ==========================================
+        // NORMAL BACKUP CONTROLS
+        // ==========================================
+
+        if (hasNormalBackups) {
+
+            searchInput.addEventListener('input', function() {
+                currentPage = 1;
+                getVisibleBackups();
+            });
+
+            sortSelect.addEventListener('change', function() {
+                currentPage = 1;
+                getVisibleBackups();
+            });
+
+            previousButton.addEventListener('click', function() {
+
+                if (currentPage > 1) {
+                    currentPage--;
+                    getVisibleBackups();
+                }
+
+            });
+
+            nextButton.addEventListener('click', function() {
+
+                const totalPages = Math.ceil(
+                    filteredRows.length / pageSize
                 );
 
-                openModal(confirmationModal);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    getVisibleBackups();
+                }
+
             });
 
-        });
+            // Normal backup selection
+            radios.forEach(function(radio) {
 
-    // ==========================================
-    // RESTORE CONFIRMATION MODAL CLOSE
-    // ==========================================
+                radio.addEventListener('change', function() {
 
-    confirmationModal.querySelectorAll('[data-close-modal]')
-        .forEach(function(button) {
+                    const selectedRow = this.closest('tr');
 
-            button.addEventListener('click', function() {
-                closeModal(confirmationModal);
+                    const filename = this.value;
+                    const date = selectedRow.children[2].textContent.trim();
+
+                    selectBackup(filename, date);
+
+                    if (restoreButton) {
+                        restoreButton.disabled = false;
+                    }
+
+                });
+
             });
 
-        });
+            // Normal backup restore button
+            if (restoreButton) {
 
-    // ==========================================
-    // RESTORE STATUS RESET
-    // ==========================================
+                restoreButton.addEventListener('click', function() {
 
-    function resetRestoreStatus() {
+                    if (!selectedRestoreFilename) {
+                        alert('Please select a backup first.');
+                        return;
+                    }
 
-        restoreFinished = false;
+                    openModal(confirmationModal);
+                });
 
-        statusTitle.textContent = 'Database Restore';
+            }
 
-        statusDescription.textContent =
-            'Submitting database restoration request...';
+            getVisibleBackups();
+        }
 
-        statusIcon.className = 'backup-modal-icon progress';
-        statusIconText.textContent = '...';
+        // ==========================================
+        // SAFETY BACKUP SELECTION
+        // ==========================================
 
-        finalResult.hidden = true;
-        finalResult.textContent = '';
+        document.querySelectorAll('.safety-restore-button')
+            .forEach(function(button) {
 
-        closeStatusButton.disabled = true;
+                button.addEventListener('click', function() {
 
-        stageItems.forEach(function(item) {
+                    const filename = this.dataset.filename;
+                    const date = this.dataset.date;
+
+                    selectBackup(filename, date);
+
+                    // Close the safety backup list before opening confirmation.
+                    closeModal(
+                        document.getElementById('safetyBackupsModal')
+                    );
+
+                    openModal(confirmationModal);
+                });
+
+            });
+
+        // ==========================================
+        // RESTORE CONFIRMATION MODAL CLOSE
+        // ==========================================
+
+        confirmationModal.querySelectorAll('[data-close-modal]')
+            .forEach(function(button) {
+
+                button.addEventListener('click', function() {
+                    closeModal(confirmationModal);
+                });
+
+            });
+
+        // ==========================================
+        // RESTORE STATUS RESET
+        // ==========================================
+
+        function resetRestoreStatus() {
+
+            restoreFinished = false;
+
+            statusTitle.textContent = 'Database Restore';
+
+            statusDescription.textContent =
+                'Submitting database restoration request...';
+
+            statusIcon.className = 'backup-modal-icon progress';
+            statusIconText.textContent = '...';
+
+            finalResult.hidden = true;
+            finalResult.textContent = '';
+
+            closeStatusButton.disabled = true;
+
+            stageItems.forEach(function(item) {
+
+                item.classList.remove(
+                    'active',
+                    'completed',
+                    'failed'
+                );
+
+                item.dataset.completed = 'false';
+
+                item.querySelector(
+                    '.restore-stage-icon'
+                ).textContent = '';
+
+                item.querySelector(
+                    '.restore-stage-status'
+                ).textContent = 'Waiting';
+
+                const label = item.querySelector(
+                    '.restore-stage-label'
+                );
+
+                if (label) {
+                    label.textContent = 'Restore safety backup';
+                }
+
+            });
+        }
+
+        // ==========================================
+        // STAGE DISPLAY
+        // ==========================================
+
+        function markStage(item, state, label) {
+
+            const icon = item.querySelector('.restore-stage-icon');
+            const status = item.querySelector('.restore-stage-status');
 
             item.classList.remove(
                 'active',
@@ -1539,379 +1729,343 @@ document.addEventListener('DOMContentLoaded', function() {
                 'failed'
             );
 
-            item.dataset.completed = 'false';
+            item.classList.add(state);
 
-            item.querySelector(
-                '.restore-stage-icon'
-            ).textContent = '';
+            icon.textContent =
+                state === 'completed' ? '✓' :
+                state === 'failed' ? '!' : '...';
 
-            item.querySelector(
-                '.restore-stage-status'
-            ).textContent = 'Waiting';
+            status.textContent = label;
 
-            const label = item.querySelector(
-                '.restore-stage-label'
-            );
-
-            if (label) {
-                label.textContent = 'Restore safety backup';
-            }
-
-        });
-    }
-
-    // ==========================================
-    // STAGE DISPLAY
-    // ==========================================
-
-    function markStage(item, state, label) {
-
-        const icon = item.querySelector('.restore-stage-icon');
-        const status = item.querySelector('.restore-stage-status');
-
-        item.classList.remove(
-            'active',
-            'completed',
-            'failed'
-        );
-
-        item.classList.add(state);
-
-        icon.textContent =
-            state === 'completed' ? '✓' :
-            state === 'failed' ? '!' : '...';
-
-        status.textContent = label;
-
-        item.dataset.completed =
-            state === 'completed' ? 'true' : 'false';
-    }
-
-    function updateRestoreStage(stage, status, message) {
-
-        const currentIndex = stageOrder.indexOf(stage);
-
-        if (stage === 'rollback') {
-
-            stageItems.forEach(function(item) {
-
-                if (item.dataset.stage === 'rollback') {
-
-                    markStage(
-                        item,
-                        status === 'failed' ? 'failed' : 'active',
-                        status === 'failed' ? 'Failed' : 'In progress'
-                    );
-
-                } else if (item.dataset.completed === 'true') {
-
-                    markStage(item, 'completed', 'Completed');
-
-                }
-
-            });
-
-            statusDescription.textContent = message;
-            return;
+            item.dataset.completed =
+                state === 'completed' ? 'true' : 'false';
         }
 
-        if (currentIndex >= 0) {
+        function updateRestoreStage(stage, status, message) {
 
-            stageItems.forEach(function(item) {
+            const currentIndex = stageOrder.indexOf(stage);
 
-                const index = stageOrder.indexOf(
-                    item.dataset.stage
-                );
+            if (stage === 'rollback') {
 
-                if (index === -1) {
-                    return;
-                }
+                stageItems.forEach(function(item) {
 
-                if (index < currentIndex) {
+                    if (item.dataset.stage === 'rollback') {
 
-                    markStage(item, 'completed', 'Completed');
+                        markStage(
+                            item,
+                            status === 'failed' ? 'failed' : 'active',
+                            status === 'failed' ? 'Failed' : 'In progress'
+                        );
 
-                } else if (index === currentIndex) {
-
-                    if (status === 'failed') {
-
-                        markStage(item, 'failed', 'Failed');
-
-                    } else if (status === 'success') {
+                    } else if (item.dataset.completed === 'true') {
 
                         markStage(item, 'completed', 'Completed');
 
-                    } else {
-
-                        markStage(item, 'active', 'In progress');
-
                     }
 
-                }
+                });
 
-            });
-
-        }
-
-        if (stage === 'failed') {
-
-            const unfinishedStage = stageItems.find(function(item) {
-                return item.dataset.stage !== 'rollback' &&
-                    item.dataset.completed !== 'true' &&
-                    !item.classList.contains('failed');
-            });
-
-            if (unfinishedStage) {
-                markStage(unfinishedStage, 'failed', 'Failed');
-            }
-        }
-
-        statusDescription.textContent = message ||
-            'Database restoration is processing.';
-    }
-
-    // ==========================================
-    // FINISH RESTORE
-    // ==========================================
-
-    function finishRestore(status, message) {
-
-        restoreFinished = true;
-
-        closeStatusButton.disabled = false;
-
-        statusDescription.textContent = message;
-        finalResult.textContent = message;
-        finalResult.hidden = false;
-
-        if (status === 'success') {
-
-            statusTitle.textContent = 'Restore Completed';
-
-            statusIcon.className = 'backup-modal-icon success';
-            statusIconText.textContent = '✓';
-
-            stageItems.forEach(function(item) {
-
-                if (item.dataset.stage !== 'rollback') {
-                    markStage(item, 'completed', 'Completed');
-                }
-
-            });
-
-            const rollbackItem = document.querySelector(
-                '.restore-progress-item[data-stage="rollback"]'
-            );
-
-            if (rollbackItem) {
-
-                const label = rollbackItem.querySelector(
-                    '.restore-stage-label'
-                );
-
-                if (label) {
-                    label.textContent = 'Safety backup secured';
-                }
-
-                markStage(
-                    rollbackItem,
-                    'completed',
-                    'Completed'
-                );
+                statusDescription.textContent = message;
+                return;
             }
 
-        } else {
+            if (currentIndex >= 0) {
 
-            statusTitle.textContent = 'Restore Failed';
+                stageItems.forEach(function(item) {
 
-            statusIcon.className = 'backup-modal-icon warning';
-            statusIconText.textContent = '!';
-
-            const activeStage = stageItems.find(function(item) {
-                return item.classList.contains('active');
-            });
-
-            if (activeStage) {
-                markStage(activeStage, 'failed', 'Failed');
-            }
-
-        }
-    }
-
-    // ==========================================
-    // SUBMIT RESTORE REQUEST
-    // ==========================================
-
-    confirmRestoreButton.addEventListener('click', async function() {
-
-        if (!selectedRestoreFilename) {
-            alert('Please select a backup first.');
-            closeModal(confirmationModal);
-            return;
-        }
-
-        if (polling) {
-            return;
-        }
-
-        document.getElementById(
-            'selectedBackupFilename'
-        ).value = selectedRestoreFilename;
-
-        confirmRestoreButton.disabled = true;
-        confirmRestoreButton.textContent = 'Submitting...';
-
-        resetRestoreStatus();
-
-        closeModal(confirmationModal);
-        openModal(statusModal);
-
-        try {
-
-            const response = await fetch(restoreForm.action, {
-                method: 'POST',
-                body: new FormData(restoreForm),
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success || !data.request_id) {
-                throw new Error(
-                    data.message || 'Could not submit restore request.'
-                );
-            }
-
-            restoreRequestId = data.request_id;
-
-            statusDescription.textContent =
-                data.message || 'Restore request submitted.';
-
-            await pollRestoreStatus();
-
-        } catch (error) {
-
-            finishRestore(
-                'failed',
-                error.message || 'An unexpected error occurred.'
-            );
-
-        } finally {
-
-            confirmRestoreButton.disabled = false;
-            confirmRestoreButton.textContent = 'Confirm Restore';
-
-        }
-
-    });
-
-    // ==========================================
-    // POLL WORKER PROGRESS
-    // ==========================================
-
-    function wait(milliseconds) {
-        return new Promise(function(resolve) {
-            setTimeout(resolve, milliseconds);
-        });
-    }
-
-    async function pollRestoreStatus() {
-
-        if (!restoreRequestId || polling) {
-            return;
-        }
-
-        polling = true;
-
-        try {
-
-            while (!restoreFinished) {
-
-                try {
-
-                    const url =
-                        '/admin/backup/restore_status?request_id=' +
-                        encodeURIComponent(restoreRequestId);
-
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        credentials: 'same-origin',
-                        headers: {
-                            'Accept': 'application/json'
-                        },
-                        cache: 'no-store'
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok || !data.success) {
-                        throw new Error(
-                            data.message ||
-                            'Unable to retrieve restore status.'
-                        );
-                    }
-
-                    updateRestoreStage(
-                        data.stage,
-                        data.status,
-                        data.message
+                    const index = stageOrder.indexOf(
+                        item.dataset.stage
                     );
 
-                    if (
-                        data.status === 'success' ||
-                        data.status === 'failed'
-                    ) {
+                    if (index === -1) {
+                        return;
+                    }
 
-                        finishRestore(
+                    if (index < currentIndex) {
+
+                        markStage(item, 'completed', 'Completed');
+
+                    } else if (index === currentIndex) {
+
+                        if (status === 'failed') {
+
+                            markStage(item, 'failed', 'Failed');
+
+                        } else if (status === 'success') {
+
+                            markStage(item, 'completed', 'Completed');
+
+                        } else {
+
+                            markStage(item, 'active', 'In progress');
+
+                        }
+
+                    }
+
+                });
+
+            }
+
+            if (stage === 'failed') {
+
+                const unfinishedStage = stageItems.find(function(item) {
+                    return item.dataset.stage !== 'rollback' &&
+                        item.dataset.completed !== 'true' &&
+                        !item.classList.contains('failed');
+                });
+
+                if (unfinishedStage) {
+                    markStage(unfinishedStage, 'failed', 'Failed');
+                }
+            }
+
+            statusDescription.textContent = message ||
+                'Database restoration is processing.';
+        }
+
+        // ==========================================
+        // FINISH RESTORE
+        // ==========================================
+
+        function finishRestore(status, message) {
+
+            restoreFinished = true;
+
+            closeStatusButton.disabled = false;
+
+            statusDescription.textContent = message;
+            finalResult.textContent = message;
+            finalResult.hidden = false;
+
+            if (status === 'success') {
+
+                statusTitle.textContent = 'Restore Completed';
+
+                statusIcon.className = 'backup-modal-icon success';
+                statusIconText.textContent = '✓';
+
+                stageItems.forEach(function(item) {
+
+                    if (item.dataset.stage !== 'rollback') {
+                        markStage(item, 'completed', 'Completed');
+                    }
+
+                });
+
+                const rollbackItem = document.querySelector(
+                    '.restore-progress-item[data-stage="rollback"]'
+                );
+
+                if (rollbackItem) {
+
+                    const label = rollbackItem.querySelector(
+                        '.restore-stage-label'
+                    );
+
+                    if (label) {
+                        label.textContent = 'Safety backup secured';
+                    }
+
+                    markStage(
+                        rollbackItem,
+                        'completed',
+                        'Completed'
+                    );
+                }
+
+            } else {
+
+                statusTitle.textContent = 'Restore Failed';
+
+                statusIcon.className = 'backup-modal-icon warning';
+                statusIconText.textContent = '!';
+
+                const activeStage = stageItems.find(function(item) {
+                    return item.classList.contains('active');
+                });
+
+                if (activeStage) {
+                    markStage(activeStage, 'failed', 'Failed');
+                }
+
+            }
+        }
+
+        // ==========================================
+        // SUBMIT RESTORE REQUEST
+        // ==========================================
+
+        confirmRestoreButton.addEventListener('click', async function() {
+
+            if (!selectedRestoreFilename) {
+                alert('Please select a backup first.');
+                closeModal(confirmationModal);
+                return;
+            }
+
+            if (polling) {
+                return;
+            }
+
+            document.getElementById(
+                'selectedBackupFilename'
+            ).value = selectedRestoreFilename;
+
+            confirmRestoreButton.disabled = true;
+            confirmRestoreButton.textContent = 'Submitting...';
+
+            resetRestoreStatus();
+
+            closeModal(confirmationModal);
+            openModal(statusModal);
+
+            try {
+
+                const response = await fetch(restoreForm.action, {
+                    method: 'POST',
+                    body: new FormData(restoreForm),
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success || !data.request_id) {
+                    throw new Error(
+                        data.message || 'Could not submit restore request.'
+                    );
+                }
+
+                restoreRequestId = data.request_id;
+
+                statusDescription.textContent =
+                    data.message || 'Restore request submitted.';
+
+                await pollRestoreStatus();
+
+            } catch (error) {
+
+                finishRestore(
+                    'failed',
+                    error.message || 'An unexpected error occurred.'
+                );
+
+            } finally {
+
+                confirmRestoreButton.disabled = false;
+                confirmRestoreButton.textContent = 'Confirm Restore';
+
+            }
+
+        });
+
+        // ==========================================
+        // POLL WORKER PROGRESS
+        // ==========================================
+
+        function wait(milliseconds) {
+            return new Promise(function(resolve) {
+                setTimeout(resolve, milliseconds);
+            });
+        }
+
+        async function pollRestoreStatus() {
+
+            if (!restoreRequestId || polling) {
+                return;
+            }
+
+            polling = true;
+
+            try {
+
+                while (!restoreFinished) {
+
+                    try {
+
+                        const url =
+                            '/admin/backup/restore_status?request_id=' +
+                            encodeURIComponent(restoreRequestId);
+
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Accept': 'application/json'
+                            },
+                            cache: 'no-store'
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok || !data.success) {
+                            throw new Error(
+                                data.message ||
+                                'Unable to retrieve restore status.'
+                            );
+                        }
+
+                        updateRestoreStage(
+                            data.stage,
                             data.status,
                             data.message
                         );
 
-                        break;
+                        if (
+                            data.status === 'success' ||
+                            data.status === 'failed'
+                        ) {
+
+                            finishRestore(
+                                data.status,
+                                data.message
+                            );
+
+                            break;
+                        }
+
+                    } catch (error) {
+
+                        console.error(
+                            'Restore status error:',
+                            error
+                        );
+
+                        statusDescription.textContent =
+                            'Unable to retrieve the latest status. Retrying...';
+
                     }
 
-                } catch (error) {
-
-                    console.error(
-                        'Restore status error:',
-                        error
-                    );
-
-                    statusDescription.textContent =
-                        'Unable to retrieve the latest status. Retrying...';
-
+                    await wait(1500);
                 }
 
-                await wait(1500);
+            } finally {
+
+                polling = false;
+
+            }
+        }
+
+        // ==========================================
+        // CLOSE STATUS MODAL
+        // ==========================================
+
+        closeStatusButton.addEventListener('click', function() {
+
+            if (!restoreFinished) {
+                return;
             }
 
-        } finally {
+            closeModal(statusModal);
 
-            polling = false;
+            if (statusTitle.textContent === 'Restore Completed') {
+                window.location.reload();
+            }
 
-        }
-    }
-
-    // ==========================================
-    // CLOSE STATUS MODAL
-    // ==========================================
-
-    closeStatusButton.addEventListener('click', function() {
-
-        if (!restoreFinished) {
-            return;
-        }
-
-        closeModal(statusModal);
-
-        if (statusTitle.textContent === 'Restore Completed') {
-            window.location.reload();
-        }
+        });
 
     });
-
-});
 </script>
