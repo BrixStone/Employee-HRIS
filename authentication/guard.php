@@ -24,6 +24,14 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+error_log(
+    'SESSION DEBUG: ' . json_encode([
+        'session_active' => session_status() === PHP_SESSION_ACTIVE,
+        'user_id_present' => !empty($_SESSION['user_id']),
+        'role_present' => !empty($_SESSION['role']),
+    ])
+);
+
 require_once __DIR__ . '/../config/database.php'; // $pdo
 require_once __DIR__ . '/../classes/Rbac.php';
 

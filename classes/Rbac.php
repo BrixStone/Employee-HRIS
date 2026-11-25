@@ -66,7 +66,8 @@ final class Rbac
         'user_management' => 'User Management',
         'audit_logs' => 'Audit Logs',
         'reports' => 'Reports',
-        'system_settings' => 'System Settings'
+        'system_settings' => 'System Settings',
+        'backup_management' => 'Backup Management'
     ];
 
     /**
@@ -114,6 +115,7 @@ final class Rbac
     {
         return strtolower(trim((string) $role));
     }
+
 
     /**
      * Normalize employee rank.
@@ -203,7 +205,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC role permission loading failed: ' .
-                $e->getMessage()
+                    $e->getMessage()
             );
         }
 
@@ -271,7 +273,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC rank permission loading failed: ' .
-                $e->getMessage()
+                    $e->getMessage()
             );
         }
 
@@ -445,7 +447,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC module lookup failed: ' .
-                $e->getMessage()
+                    $e->getMessage()
             );
 
             return false;
@@ -604,7 +606,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC team lookup failed: ' .
-                $e->getMessage()
+                    $e->getMessage()
             );
 
             /*
@@ -632,5 +634,14 @@ final class Rbac
             self::teamEmployeeIds($pdo, $managerEmployeeId),
             true
         );
+    }
+
+    public static function isSuperAdmin(mixed $role): bool
+    {
+        return self::normalizeRole($role) === 'admin';
+    }
+    public static function canManageBackups(mixed $role): bool
+    {
+        return self::isSuperAdmin($role);
     }
 }

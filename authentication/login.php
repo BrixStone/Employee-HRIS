@@ -9,7 +9,7 @@ require_once __DIR__ . '/../classes/AuditLogger.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !empty($_SESSION['role'])) {
     switch ($_SESSION['role']) {
         case 'admin':
-            header('Location: /admin/users.php');
+            header('Location: /admin/dashboard.php');
             exit;
 
         case 'hr':
@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Redirect according to the user's role.
                     switch ($user['role']) {
                         case 'admin':
-                            $destination = '/admin/users.php';
+                            $destination = '/admin/dashboard.php';
                             break;
 
                         case 'hr':
