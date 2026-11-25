@@ -1398,3 +1398,19 @@ body.modal-open {
         margin-bottom: 16px !important;
     }
 }
+/* ==========================================
+   BACKUP MODAL STACKING ORDER
+========================================== */
+
+.backup-modal.backup-list-modal-wrapper {
+    z-index: 10000;
+}
+
+#restoreConfirmationModal,
+#restoreStatusModal {
+    z-index: 11000;
+}
+
+#backupResultModal {
+    z-index: 12000;
+}
