@@ -106,6 +106,15 @@ $navItems = [
     $navModuleEnabled('system_settings')
   ],
 
+  [
+    '/admin/backup_management.php',
+    'Backup Management',
+    "\u{1F4BE}",
+    ['backup_management'],
+    $navModuleEnabled('backup_management')
+      && Rbac::canManageBackups($navRole)
+  ],
+
 ];
 
 /*
@@ -119,6 +128,7 @@ $pageTitles = [
   'users'      => 'User Management',
   'audit_logs' => 'Audit Trail',
   'permissions' => 'System Permissions',
+  'backup_management' => 'Backup Management',
 ];
 
 $pageTitle = $pageTitles[$currentPage] ?? 'Administration';
@@ -159,6 +169,7 @@ $navRoleLabel = match ($navRole) {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="../assets/css/hris-base.css">
   <link rel="stylesheet" href="../assets/css/pages/<?= htmlspecialchars($cssPage, ENT_QUOTES, 'UTF-8') ?>.css">
+  
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
   <script src="../asset/js/page-transition.js" defer></script>
