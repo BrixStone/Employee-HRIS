@@ -1,3 +1,4 @@
+
 <?php
 // admin/backup/verify.php
 
@@ -12,15 +13,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // Validate CSRF token.
 csrf_check($account['role']);
 
-// Redirect helper.
-function verifyRedirect(string $type, string $message): never
-{
-    $_SESSION['backup_flash'] = [
-        'type' => $type,
-        'message' => $message,
-    ];
+// Send a JSON response to JavaScript.
+function verifyResponse(
+    bool $success,
+    string $message,
+    int $statusCode = 200
+): never {
 
-    header('Location: /admin/backup_management');
+    http_response_code($statusCode);
+
+    header('Content-Type: application/json; charset=utf-8');
+
+    echo json_encode([
+        'success' => $success,
+        'message' => $message,
+    ]);
+
     exit;
 }
 
@@ -35,7 +43,7 @@ if (
         $filename
     )
 ) {
-    verifyRedirect('error', 'Invalid backup filename.');
+    verifyResponse(false, 'Invalid backup filename.', 422);
 }
 
 // Resolve backup file.
@@ -50,20 +58,21 @@ if (
     !is_file($backupPath) ||
     !is_readable($backupPath)
 ) {
-    verifyRedirect('error', 'Backup file not found.');
+    verifyResponse(false, 'Backup file not found.', 404);
 }
 
 // Open gzip archive.
 $handle = @gzopen($backupPath, 'rb');
 
 if ($handle === false) {
-    verifyRedirect('error', 'Backup archive could not be opened.');
+    verifyResponse(false, 'Backup archive could not be opened.', 422);
 }
 
 // Read the complete compressed stream.
 $valid = true;
 
 while (!gzeof($handle)) {
+
     $data = @gzread($handle, 1024 * 1024);
 
     if ($data === false) {
@@ -79,12 +88,13 @@ while (!gzeof($handle)) {
 
 gzclose($handle);
 
+// Check archive integrity result.
 if (!$valid) {
-    verifyRedirect('error', 'Backup archive verification failed.');
+    verifyResponse(false, 'Backup archive verification failed.', 422);
 }
 
 // Archive passed gzip integrity check.
-verifyRedirect(
-    'success',
+verifyResponse(
+    true,
     'Backup archive passed gzip integrity verification: ' . $filename
 );
