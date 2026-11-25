@@ -87,13 +87,13 @@ foreach ($safetyBackupFiles as $backupPath) {
             : 'Unknown',
     ];
 }
+
 // ==========================================
 // BACKUP OVERVIEW STATISTICS
 // ==========================================
 
 $totalNormalBackups = count($backups);
 $totalSafetyBackups = count($safetyBackups);
-
 $totalBackups = $totalNormalBackups + $totalSafetyBackups;
 
 $totalStorageBytes = 0;
@@ -122,6 +122,7 @@ function formatBackupStorage($bytes)
 }
 
 $formattedStorage = formatBackupStorage($totalStorageBytes);
+
 // ==========================================
 // BACKUP ACTIVITY - LAST 14 DAYS
 // ==========================================
@@ -145,7 +146,6 @@ for ($i = 13; $i >= 0; $i--) {
     $activityLabels[] = date('M d', strtotime($date));
 }
 
-// Count normal backups.
 foreach ($backups as $backup) {
     $date = date('Y-m-d', $backup['created_at']);
 
@@ -154,7 +154,6 @@ foreach ($backups as $backup) {
     }
 }
 
-// Count safety backups.
 foreach ($safetyBackups as $backup) {
     $date = date('Y-m-d', $backup['created_at']);
 
@@ -208,7 +207,6 @@ foreach ($resultFiles as $resultFile) {
     }
 }
 
-// Prepare Chart.js datasets.
 foreach ($activityDates as $activity) {
     $normalActivity[] = $activity['normal'];
     $safetyActivity[] = $activity['safety'];
@@ -217,6 +215,11 @@ foreach ($activityDates as $activity) {
 ?>
 
 <div class="backup-management">
+
+    <!-- ======================================
+         BACKUP OVERVIEW
+    ======================================= -->
+
     <section class="backup-overview">
 
         <div class="backup-overview-header">
@@ -253,44 +256,137 @@ foreach ($activityDates as $activity) {
             </article>
 
         </div>
+
         <div class="backup-activity">
+
             <div class="backup-activity-header">
                 <div>
                     <h3>Backup Activity</h3>
                     <p>Backup and restore activity over the last 14 days.</p>
                 </div>
+
                 <span>Last 14 days</span>
             </div>
 
             <div class="backup-activity-chart">
                 <canvas id="backupActivityChart"></canvas>
             </div>
+
         </div>
+
     </section>
 
-    <div class="backup-page-header">
+    <!-- ======================================
+         PAGE TITLE
+    ======================================= -->
+
+    <div class="backup-page-title">
         <div>
             <h1>Backup Management</h1>
             <p>Manage and monitor your HRIS database backups.</p>
         </div>
+    </div>
 
-        <div class="backup-actions">
+    <!-- ======================================
+         BACKUP ACTIONS
+    ======================================= -->
+
+    <section class="backup-actions-section">
+
+        <div class="backup-actions-heading">
+            <div>
+                <h2>Backup Actions</h2>
+                <p>Manage your regular backups and recovery snapshots.</p>
+            </div>
+        </div>
+
+        <div class="backup-navigation-grid">
+
+            <!-- OPEN BACKUP HISTORY MODAL -->
+            <button
+                type="button"
+                class="backup-navigation-card"
+                data-open-modal="backupHistoryModal">
+
+                <div class="backup-navigation-icon history-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+
+                <div class="backup-navigation-content">
+                    <h3>View Backup History</h3>
+                    <p>View, search, download, and restore normal backups.</p>
+
+                    <span>
+                        View History
+                        <i class="fas fa-arrow-right"></i>
+                    </span>
+                </div>
+
+            </button>
+
+            <!-- OPEN SAFETY BACKUPS MODAL -->
+            <button
+                type="button"
+                class="backup-navigation-card"
+                data-open-modal="safetyBackupsModal">
+
+                <div class="backup-navigation-icon safety-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+
+                <div class="backup-navigation-content">
+                    <h3>View Safety Backups</h3>
+                    <p>Browse and restore safety snapshots.</p>
+
+                    <span>
+                        View Safety Backups
+                        <i class="fas fa-arrow-right"></i>
+                    </span>
+                </div>
+
+            </button>
+
+        </div>
+
+        <!-- CREATE BACKUP -->
+        <div class="backup-create-card">
+
+            <div class="backup-create-content">
+                <div class="backup-create-icon">
+                    <i class="fas fa-plus"></i>
+                </div>
+
+                <div>
+                    <h3>Create New Backup</h3>
+                    <p>Create a fresh copy of your HRIS database.</p>
+                </div>
+            </div>
+
             <form method="POST" action="/admin/backup/create">
                 <?= csrf_field() ?>
 
-                <button type="submit">
+                <button type="submit" class="backup-create-button">
+                    <i class="fas fa-database"></i>
                     Create Backup Now
                 </button>
             </form>
+
         </div>
-    </div>
+
+    </section>
+
+    <!-- ======================================
+         FLASH MESSAGE
+    ======================================= -->
 
     <?php if ($backupFlash): ?>
+
         <div class="backup-message <?= htmlspecialchars(
-                                        $backupFlash['type'] ?? 'info',
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>">
+            $backupFlash['type'] ?? 'info',
+            ENT_QUOTES,
+            'UTF-8'
+        ) ?>">
+
             <?= htmlspecialchars(
                 $backupFlash['message'] ?? '',
                 ENT_QUOTES,
@@ -307,376 +403,465 @@ foreach ($activityDates as $activity) {
                     ) ?>
                 </p>
             <?php endif; ?>
+
         </div>
+
     <?php endif; ?>
 
-    <section class="backup-history">
+    <!-- ======================================
+         BACKUP HISTORY MODAL
+    ======================================= -->
 
-        <!-- Shared restore form.
-             This must remain outside the normal backup condition. -->
-        <form
-            id="restoreForm"
-            method="POST"
-            action="/admin/backup/restore">
+    <div
+        class="backup-modal backup-list-modal-wrapper"
+        id="backupHistoryModal"
+        aria-hidden="true">
 
-            <?= csrf_field() ?>
-
-            <input
-                type="hidden"
-                name="filename"
-                id="selectedBackupFilename">
-        </form>
-
-        <div class="backup-section-header">
-            <div>
-                <h2>Backup History</h2>
-                <p>Select a backup to restore, verify, or download.</p>
-            </div>
-
-            <span id="backupTotal">
-                <?= count($backups) ?> backup(s)
-            </span>
+        <div
+            class="backup-modal-overlay"
+            data-close-modal>
         </div>
 
-        <?php if (empty($backups)): ?>
+        <div
+            class="backup-modal-content backup-list-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="backupHistoryModalTitle">
 
-            <div class="backup-empty">
-                <h3>No backups found</h3>
-                <p>Create your first database backup to see it here.</p>
+            <div class="backup-list-modal-header">
+
+                <div>
+                    <h2 id="backupHistoryModalTitle">Backup History</h2>
+                    <p>View, search, verify, download, and restore backups.</p>
+                </div>
+
+                <button
+                    type="button"
+                    data-close-modal
+                    class="backup-list-close"
+                    aria-label="Close backup history">
+
+                    <i class="fas fa-times"></i>
+
+                </button>
+
             </div>
 
-        <?php else: ?>
+            <section class="backup-history" id="backupHistory">
 
-            <!-- Search and sorting -->
-            <div class="backup-table-controls">
+                <!-- Shared restore form -->
+                <form
+                    id="restoreForm"
+                    method="POST"
+                    action="/admin/backup/restore">
 
-                <div class="backup-search">
-                    <label for="backupSearch">Search backups</label>
+                    <?= csrf_field() ?>
+
                     <input
-                        type="search"
-                        id="backupSearch"
-                        placeholder="Search filename...">
+                        type="hidden"
+                        name="filename"
+                        id="selectedBackupFilename">
+
+                </form>
+
+                <div class="backup-section-header">
+
+                    <div>
+                        <h2>Backup History</h2>
+                        <p>Select a backup to restore, verify, or download.</p>
+                    </div>
+
+                    <span id="backupTotal">
+                        <?= count($backups) ?> backup(s)
+                    </span>
+
                 </div>
 
-                <div class="backup-sort">
-                    <label for="backupSort">Sort by date</label>
-                    <select id="backupSort">
-                        <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
-                    </select>
-                </div>
+                <?php if (empty($backups)): ?>
 
-            </div>
+                    <div class="backup-empty">
+                        <h3>No backups found</h3>
+                        <p>Create your first database backup to see it here.</p>
+                    </div>
 
-            <div class="backup-table-wrapper">
+                <?php else: ?>
 
-                <table class="backup-table" id="backupTable">
+                    <!-- Search and sorting -->
+                    <div class="backup-table-controls">
 
-                    <thead>
-                        <tr>
-                            <th>Select</th>
-                            <th>Backup Filename</th>
-                            <th>Date Created</th>
-                            <th>File Size</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
+                        <div class="backup-search">
+                            <label for="backupSearch">Search backups</label>
+                            <input
+                                type="search"
+                                id="backupSearch"
+                                placeholder="Search filename...">
+                        </div>
 
-                    <tbody id="backupTableBody">
+                        <div class="backup-sort">
+                            <label for="backupSort">Sort by date</label>
 
-                        <?php foreach ($backups as $backup): ?>
+                            <select id="backupSort">
+                                <option value="newest">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                            </select>
+                        </div>
 
-                            <?php $filename = $backup['filename']; ?>
+                    </div>
 
-                            <tr
-                                class="backup-row"
-                                data-filename="<?= htmlspecialchars(
-                                                    strtolower($filename),
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                ) ?>"
-                                data-date="<?= (int) $backup['created_at'] ?>">
+                    <div class="backup-table-wrapper">
 
-                                <td>
-                                    <input
-                                        type="radio"
-                                        name="backup_selection"
-                                        class="backup-radio"
-                                        value="<?= htmlspecialchars(
+                        <table class="backup-table" id="backupTable">
+
+                            <thead>
+                                <tr>
+                                    <th>Select</th>
+                                    <th>Backup Filename</th>
+                                    <th>Date Created</th>
+                                    <th>File Size</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="backupTableBody">
+
+                                <?php foreach ($backups as $backup): ?>
+
+                                    <?php $filename = $backup['filename']; ?>
+
+                                    <tr
+                                        class="backup-row"
+                                        data-filename="<?= htmlspecialchars(
+                                            strtolower($filename),
+                                            ENT_QUOTES,
+                                            'UTF-8'
+                                        ) ?>"
+                                        data-date="<?= (int) $backup['created_at'] ?>">
+
+                                        <td>
+                                            <input
+                                                type="radio"
+                                                name="backup_selection"
+                                                class="backup-radio"
+                                                value="<?= htmlspecialchars(
                                                     $filename,
                                                     ENT_QUOTES,
                                                     'UTF-8'
                                                 ) ?>"
-                                        form="restoreForm"
-                                        required
-                                        aria-label="Select <?= htmlspecialchars(
-                                                                $filename,
-                                                                ENT_QUOTES,
-                                                                'UTF-8'
-                                                            ) ?>">
-                                </td>
+                                                form="restoreForm"
+                                                required
+                                                aria-label="Select <?= htmlspecialchars(
+                                                    $filename,
+                                                    ENT_QUOTES,
+                                                    'UTF-8'
+                                                ) ?>">
+                                        </td>
 
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $filename,
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $filename,
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
 
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $backup['formatted_date'],
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $backup['formatted_date'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
 
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $backup['size'],
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $backup['size'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
 
-                                <td>
-                                    <span class="backup-status success">
-                                        Available
-                                    </span>
-                                </td>
+                                        <td>
+                                            <span class="backup-status success">
+                                                Available
+                                            </span>
+                                        </td>
 
-                                <td>
-                                    <div class="backup-row-actions">
+                                        <td>
+                                            <div class="backup-row-actions">
 
-                                        <form
-                                            method="POST"
-                                            action="/admin/backup/verify">
+                                                <form
+                                                    method="POST"
+                                                    action="/admin/backup/verify">
 
-                                            <?= csrf_field() ?>
+                                                    <?= csrf_field() ?>
 
-                                            <input
-                                                type="hidden"
-                                                name="filename"
-                                                value="<?= htmlspecialchars(
+                                                    <input
+                                                        type="hidden"
+                                                        name="filename"
+                                                        value="<?= htmlspecialchars(
                                                             $filename,
                                                             ENT_QUOTES,
                                                             'UTF-8'
                                                         ) ?>">
 
-                                            <button
-                                                type="submit"
-                                                class="backup-verify">
-                                                Verify
-                                            </button>
-                                        </form>
+                                                    <button
+                                                        type="submit"
+                                                        class="backup-verify">
+                                                        Verify
+                                                    </button>
 
-                                        <a
-                                            href="/admin/backup/download?file=<?= rawurlencode($filename) ?>"
-                                            class="backup-download">
-                                            Download
-                                        </a>
+                                                </form>
 
-                                    </div>
-                                </td>
+                                                <a
+                                                    href="/admin/backup/download?file=<?= rawurlencode($filename) ?>"
+                                                    class="backup-download">
+                                                    Download
+                                                </a>
 
-                            </tr>
+                                            </div>
+                                        </td>
 
-                        <?php endforeach; ?>
+                                    </tr>
 
-                    </tbody>
+                                <?php endforeach; ?>
 
-                </table>
+                            </tbody>
 
-                <div id="backupNoResults" class="backup-empty" hidden>
-                    <h3>No matching backups</h3>
-                    <p>Try another filename or change your search.</p>
-                </div>
+                        </table>
 
-            </div>
+                        <div id="backupNoResults" class="backup-empty" hidden>
+                            <h3>No matching backups</h3>
+                            <p>Try another filename or change your search.</p>
+                        </div>
 
-            <!-- Pagination -->
-            <div class="backup-table-footer">
+                    </div>
 
-                <div class="backup-pagination-info">
-                    <span id="backupPaginationInfo">
-                        Showing 0–0 of 0 backups
-                    </span>
-                </div>
+                    <!-- Pagination -->
+                    <div class="backup-table-footer">
 
-                <div class="backup-pagination">
+                        <div class="backup-pagination-info">
+                            <span id="backupPaginationInfo">
+                                Showing 0–0 of 0 backups
+                            </span>
+                        </div>
 
-                    <button
-                        type="button"
-                        id="backupPrevious"
-                        class="backup-page-button">
-                        Previous
-                    </button>
+                        <div class="backup-pagination">
 
-                    <span id="backupPageNumbers"></span>
+                            <button
+                                type="button"
+                                id="backupPrevious"
+                                class="backup-page-button">
+                                Previous
+                            </button>
 
-                    <button
-                        type="button"
-                        id="backupNext"
-                        class="backup-page-button">
-                        Next
-                    </button>
+                            <span id="backupPageNumbers"></span>
 
-                </div>
+                            <button
+                                type="button"
+                                id="backupNext"
+                                class="backup-page-button">
+                                Next
+                            </button>
 
-            </div>
+                        </div>
 
-            <!-- Normal backup restore action -->
-            <div class="backup-restore-footer">
+                    </div>
+
+                    <!-- Restore action -->
+                    <div class="backup-restore-footer">
+
+                        <div>
+                            <strong id="selectedBackupLabel">
+                                No backup selected
+                            </strong>
+
+                            <p>Select one backup from the table to restore.</p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="openRestoreConfirmation"
+                            class="backup-restore-button"
+                            disabled>
+                            Restore Selected Backup
+                        </button>
+
+                    </div>
+
+                <?php endif; ?>
+
+            </section>
+
+        </div>
+
+    </div>
+
+    <!-- ======================================
+         SAFETY BACKUPS MODAL
+    ======================================= -->
+
+    <div
+        class="backup-modal backup-list-modal-wrapper"
+        id="safetyBackupsModal"
+        aria-hidden="true">
+
+        <div
+            class="backup-modal-overlay"
+            data-close-modal>
+        </div>
+
+        <div
+            class="backup-modal-content backup-list-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="safetyBackupsModalTitle">
+
+            <div class="backup-list-modal-header">
 
                 <div>
-                    <strong id="selectedBackupLabel">
-                        No backup selected
-                    </strong>
-
-                    <p>Select one backup from the table to restore.</p>
+                    <h2 id="safetyBackupsModalTitle">Safety Backups</h2>
+                    <p>Browse and restore your pre-restore recovery snapshots.</p>
                 </div>
 
                 <button
                     type="button"
-                    id="openRestoreConfirmation"
-                    class="backup-restore-button"
-                    disabled>
-                    Restore Selected Backup
+                    data-close-modal
+                    class="backup-list-close"
+                    aria-label="Close safety backups">
+
+                    <i class="fas fa-times"></i>
+
                 </button>
 
             </div>
 
-        <?php endif; ?>
+            <section class="backup-history safety-backup-history" id="safetyBackups">
 
-    </section>
+                <div class="backup-section-header">
 
-    <!-- ======================================
-         RESTORE SAFETY BACKUPS
-    ======================================= -->
+                    <div>
+                        <h2>Restore Safety Backups</h2>
+                        <p>
+                            Recovery copies automatically created before database restoration.
+                        </p>
+                    </div>
 
-    <section class="backup-history safety-backup-history">
+                    <span>
+                        <?= count($safetyBackups) ?> safety backup(s)
+                    </span>
 
-        <div class="backup-section-header">
-            <div>
-                <h2>Restore Safety Backups</h2>
-                <p>
-                    Recovery copies automatically created before database restoration.
-                </p>
-            </div>
+                </div>
 
-            <span>
-                <?= count($safetyBackups) ?> safety backup(s)
-            </span>
+                <?php if (empty($safetyBackups)): ?>
+
+                    <div class="backup-empty">
+                        <h3>No safety backups found</h3>
+                        <p>
+                            Safety backups will appear here whenever a database
+                            restore creates a pre-restore recovery copy.
+                        </p>
+                    </div>
+
+                <?php else: ?>
+
+                    <div class="backup-table-wrapper">
+
+                        <table class="backup-table">
+
+                            <thead>
+                                <tr>
+                                    <th>Backup Filename</th>
+                                    <th>Date Created</th>
+                                    <th>File Size</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                <?php foreach ($safetyBackups as $backup): ?>
+
+                                    <tr>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $backup['filename'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $backup['formatted_date'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $backup['size'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <span class="backup-status success">
+                                                Available
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <div class="backup-row-actions">
+
+                                                <a
+                                                    href="/admin/backup/download?file=<?= rawurlencode($backup['filename']) ?>"
+                                                    class="backup-download">
+                                                    Download
+                                                </a>
+
+                                                <button
+                                                    type="button"
+                                                    class="backup-restore-button safety-restore-button"
+                                                    data-filename="<?= htmlspecialchars(
+                                                        $backup['filename'],
+                                                        ENT_QUOTES,
+                                                        'UTF-8'
+                                                    ) ?>"
+                                                    data-date="<?= htmlspecialchars(
+                                                        $backup['formatted_date'],
+                                                        ENT_QUOTES,
+                                                        'UTF-8'
+                                                    ) ?>">
+                                                    Restore
+                                                </button>
+
+                                            </div>
+                                        </td>
+
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                <?php endif; ?>
+
+            </section>
+
         </div>
 
-        <?php if (empty($safetyBackups)): ?>
-
-            <div class="backup-empty">
-                <h3>No safety backups found</h3>
-                <p>
-                    Safety backups will appear here whenever a database restore
-                    creates a pre-restore recovery copy.
-                </p>
-            </div>
-
-        <?php else: ?>
-
-            <div class="backup-table-wrapper">
-
-                <table class="backup-table">
-
-                    <thead>
-                        <tr>
-                            <th>Backup Filename</th>
-                            <th>Date Created</th>
-                            <th>File Size</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-
-                        <?php foreach ($safetyBackups as $backup): ?>
-
-                            <tr>
-
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $backup['filename'],
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
-
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $backup['formatted_date'],
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
-
-                                <td>
-                                    <?= htmlspecialchars(
-                                        $backup['size'],
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>
-                                </td>
-
-                                <td>
-                                    <span class="backup-status success">
-                                        Available
-                                    </span>
-                                </td>
-
-                                <td>
-                                    <div class="backup-row-actions">
-
-                                        <a
-                                            href="/admin/backup/download?file=<?= rawurlencode($backup['filename']) ?>"
-                                            class="backup-download">
-                                            Download
-                                        </a>
-
-                                        <button
-                                            type="button"
-                                            class="backup-restore-button safety-restore-button"
-                                            data-filename="<?= htmlspecialchars(
-                                                                $backup['filename'],
-                                                                ENT_QUOTES,
-                                                                'UTF-8'
-                                                            ) ?>"
-                                            data-date="<?= htmlspecialchars(
-                                                            $backup['formatted_date'],
-                                                            ENT_QUOTES,
-                                                            'UTF-8'
-                                                        ) ?>">
-                                            Restore
-                                        </button>
-
-                                    </div>
-                                </td>
-
-                            </tr>
-
-                        <?php endforeach; ?>
-
-                    </tbody>
-
-                </table>
-
-            </div>
-
-        <?php endif; ?>
-
-    </section>
+    </div>
 
 </div>
-
 
 <!-- ======================================
      RESTORE CONFIRMATION MODAL
@@ -742,8 +927,8 @@ foreach ($activityDates as $activity) {
         </div>
 
     </div>
-</div>
 
+</div>
 
 <!-- ======================================
      RESTORE STATUS MODAL
@@ -813,7 +998,8 @@ foreach ($activityDates as $activity) {
         <div
             class="backup-restore-result"
             id="restoreFinalResult"
-            hidden></div>
+            hidden>
+        </div>
 
         <div class="backup-modal-actions">
 
@@ -828,507 +1014,524 @@ foreach ($activityDates as $activity) {
         </div>
 
     </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
 
-        // ==========================================
-        // ELEMENTS
-        // ==========================================
+    // ==========================================
+    // ELEMENTS
+    // ==========================================
 
-        const rows = Array.from(
-            document.querySelectorAll('.backup-row')
-        );
+    const rows = Array.from(
+        document.querySelectorAll('.backup-row')
+    );
 
-        const restoreForm = document.getElementById('restoreForm');
-        // ==========================================
-        // BACKUP ACTIVITY CHART
-        // ==========================================
+    const restoreForm = document.getElementById('restoreForm');
 
-        const activityCanvas = document.getElementById('backupActivityChart');
+    const activityCanvas = document.getElementById('backupActivityChart');
 
-        if (activityCanvas && typeof Chart !== 'undefined') {
-            new Chart(activityCanvas, {
-                type: 'bar',
+    // ==========================================
+    // BACKUP ACTIVITY CHART
+    // ==========================================
 
-                data: {
-                    labels: <?= json_encode($activityLabels) ?>,
+    if (activityCanvas && typeof Chart !== 'undefined') {
 
-                    datasets: [{
-                            label: 'Normal Backups',
-                            data: <?= json_encode($normalActivity) ?>,
-                            backgroundColor: '#9B7BD3',
-                            borderRadius: 5,
-                            borderSkipped: false
-                        },
-                        {
-                            label: 'Safety Backups',
-                            data: <?= json_encode($safetyActivity) ?>,
-                            backgroundColor: '#4F9DA6',
-                            borderRadius: 5,
-                            borderSkipped: false
-                        },
-                        {
-                            label: 'Successful Restores',
-                            data: <?= json_encode($restoreActivity) ?>,
-                            backgroundColor: '#D6A45D',
-                            borderRadius: 5,
-                            borderSkipped: false
-                        }
-                    ]
+        new Chart(activityCanvas, {
+            type: 'bar',
+
+            data: {
+                labels: <?= json_encode($activityLabels) ?>,
+
+                datasets: [
+                    {
+                        label: 'Normal Backups',
+                        data: <?= json_encode($normalActivity) ?>,
+                        backgroundColor: '#9B7BD3',
+                        borderRadius: 5,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Safety Backups',
+                        data: <?= json_encode($safetyActivity) ?>,
+                        backgroundColor: '#4F9DA6',
+                        borderRadius: 5,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Successful Restores',
+                        data: <?= json_encode($restoreActivity) ?>,
+                        backgroundColor: '#D6A45D',
+                        borderRadius: 5,
+                        borderSkipped: false
+                    }
+                ]
+            },
+
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
                 },
 
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    },
-
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: '#B4A5C0',
-                                usePointStyle: true,
-                                pointStyle: 'circle',
-                                padding: 20
-                            }
-                        },
-
-                        tooltip: {
-                            backgroundColor: '#171d32',
-                            titleColor: '#FFFFFF',
-                            bodyColor: '#D8D2E2',
-                            borderColor: '#303b5c',
-                            borderWidth: 1,
-                            padding: 12
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#B4A5C0',
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 20
                         }
                     },
 
-                    scales: {
-                        x: {
-                            stacked: false,
-                            grid: {
-                                display: false
-                            },
-                            ticks: {
-                                color: '#B4A5C0'
-                            }
-                        },
+                    tooltip: {
+                        backgroundColor: '#171d32',
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#D8D2E2',
+                        borderColor: '#303b5c',
+                        borderWidth: 1,
+                        padding: 12
+                    }
+                },
 
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0,
-                                color: '#B4A5C0'
-                            },
-                            grid: {
-                                color: 'rgba(180, 165, 192, 0.12)'
-                            }
+                scales: {
+                    x: {
+                        stacked: false,
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#B4A5C0'
+                        }
+                    },
+
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0,
+                            color: '#B4A5C0'
+                        },
+                        grid: {
+                            color: 'rgba(180, 165, 192, 0.12)'
                         }
                     }
                 }
+            }
+        });
+    }
+
+    // ==========================================
+    // MODAL HELPERS
+    // ==========================================
+
+    function openModal(modal) {
+        if (!modal) return;
+
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeModal(modal) {
+        if (!modal) return;
+
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    // ==========================================
+    // BACKUP HISTORY / SAFETY BACKUP MODALS
+    // ==========================================
+
+    document.querySelectorAll('[data-open-modal]').forEach(function(button) {
+
+        button.addEventListener('click', function() {
+
+            const modalId = this.dataset.openModal;
+            const modal = document.getElementById(modalId);
+
+            openModal(modal);
+        });
+
+    });
+
+    document.querySelectorAll('.backup-modal [data-close-modal]')
+        .forEach(function(button) {
+
+            button.addEventListener('click', function() {
+
+                const modal = this.closest('.backup-modal');
+
+                closeModal(modal);
             });
+
+        });
+
+    // ==========================================
+    // RESTORE FORM
+    // ==========================================
+
+    if (!restoreForm) {
+        return;
+    }
+
+    const hasNormalBackups = rows.length > 0;
+
+    const searchInput = document.getElementById('backupSearch');
+    const sortSelect = document.getElementById('backupSort');
+
+    const previousButton = document.getElementById('backupPrevious');
+    const nextButton = document.getElementById('backupNext');
+
+    const pageNumbers = document.getElementById('backupPageNumbers');
+    const paginationInfo = document.getElementById('backupPaginationInfo');
+    const noResults = document.getElementById('backupNoResults');
+
+    const radios = document.querySelectorAll('.backup-radio');
+
+    const restoreButton = document.getElementById(
+        'openRestoreConfirmation'
+    );
+
+    const selectedBackupLabel = document.getElementById(
+        'selectedBackupLabel'
+    );
+
+    const confirmationModal = document.getElementById(
+        'restoreConfirmationModal'
+    );
+
+    const statusModal = document.getElementById(
+        'restoreStatusModal'
+    );
+
+    const confirmRestoreButton = document.getElementById(
+        'confirmRestoreButton'
+    );
+
+    const closeStatusButton = document.getElementById(
+        'closeRestoreStatus'
+    );
+
+    const statusDescription = document.getElementById(
+        'restoreStatusDescription'
+    );
+
+    const statusTitle = document.getElementById(
+        'restoreStatusTitle'
+    );
+
+    const statusIcon = document.getElementById(
+        'restoreStatusIcon'
+    );
+
+    const statusIconText = document.getElementById(
+        'restoreStatusIconText'
+    );
+
+    const finalResult = document.getElementById(
+        'restoreFinalResult'
+    );
+
+    const stageItems = Array.from(
+        document.querySelectorAll('.restore-progress-item')
+    );
+
+    // ==========================================
+    // STATE
+    // ==========================================
+
+    let currentPage = 1;
+    const pageSize = 5;
+
+    let filteredRows = [...rows];
+
+    let restoreRequestId = null;
+    let restoreFinished = false;
+    let polling = false;
+
+    let selectedRestoreFilename = null;
+
+    const stageOrder = [
+        'validate',
+        'safety',
+        'replace',
+        'validate-live'
+    ];
+
+    // ==========================================
+    // SELECT BACKUP FOR RESTORATION
+    // ==========================================
+
+    function selectBackup(filename, date) {
+
+        selectedRestoreFilename = filename;
+
+        document.getElementById(
+            'selectedBackupFilename'
+        ).value = filename;
+
+        if (selectedBackupLabel) {
+            selectedBackupLabel.textContent = filename;
         }
-        if (!restoreForm) {
+
+        document.getElementById(
+            'confirmationFilename'
+        ).textContent = filename;
+
+        document.getElementById(
+            'confirmationDate'
+        ).textContent = date;
+
+        document.getElementById(
+            'statusFilename'
+        ).textContent = filename;
+    }
+
+    // ==========================================
+    // NORMAL BACKUP SEARCH, SORTING, PAGINATION
+    // ==========================================
+
+    function getVisibleBackups() {
+
+        if (!hasNormalBackups) {
             return;
         }
 
-        const hasNormalBackups = rows.length > 0;
+        const searchTerm = searchInput.value.trim().toLowerCase();
 
-        const searchInput = document.getElementById('backupSearch');
-        const sortSelect = document.getElementById('backupSort');
+        filteredRows = rows.filter(function(row) {
+            return row.dataset.filename.includes(searchTerm);
+        });
 
-        const previousButton = document.getElementById('backupPrevious');
-        const nextButton = document.getElementById('backupNext');
+        filteredRows.sort(function(a, b) {
 
-        const pageNumbers = document.getElementById('backupPageNumbers');
-        const paginationInfo = document.getElementById('backupPaginationInfo');
-        const noResults = document.getElementById('backupNoResults');
+            const dateA = Number(a.dataset.date);
+            const dateB = Number(b.dataset.date);
 
-        const radios = document.querySelectorAll('.backup-radio');
+            return sortSelect.value === 'oldest'
+                ? dateA - dateB
+                : dateB - dateA;
+        });
 
-        const restoreButton = document.getElementById(
-            'openRestoreConfirmation'
+        const totalPages = Math.max(
+            1,
+            Math.ceil(filteredRows.length / pageSize)
         );
 
-        const selectedBackupLabel = document.getElementById(
-            'selectedBackupLabel'
+        currentPage = Math.min(currentPage, totalPages);
+
+        rows.forEach(function(row) {
+            row.style.display = 'none';
+        });
+
+        const startIndex = (currentPage - 1) * pageSize;
+
+        const pageRows = filteredRows.slice(
+            startIndex,
+            startIndex + pageSize
         );
 
-        const confirmationModal = document.getElementById(
-            'restoreConfirmationModal'
-        );
+        pageRows.forEach(function(row) {
 
-        const statusModal = document.getElementById(
-            'restoreStatusModal'
-        );
-
-        const confirmRestoreButton = document.getElementById(
-            'confirmRestoreButton'
-        );
-
-        const closeStatusButton = document.getElementById(
-            'closeRestoreStatus'
-        );
-
-        const statusDescription = document.getElementById(
-            'restoreStatusDescription'
-        );
-
-        const statusTitle = document.getElementById(
-            'restoreStatusTitle'
-        );
-
-        const statusIcon = document.getElementById(
-            'restoreStatusIcon'
-        );
-
-        const statusIconText = document.getElementById(
-            'restoreStatusIconText'
-        );
-
-        const finalResult = document.getElementById(
-            'restoreFinalResult'
-        );
-
-        const stageItems = Array.from(
-            document.querySelectorAll('.restore-progress-item')
-        );
-
-        // ==========================================
-        // STATE
-        // ==========================================
-
-        let currentPage = 1;
-        const pageSize = 5;
-
-        let filteredRows = [...rows];
-
-        let restoreRequestId = null;
-        let restoreFinished = false;
-        let polling = false;
-
-        let selectedRestoreFilename = null;
-        let selectedRestoreDate = '';
-
-        const stageOrder = [
-            'validate',
-            'safety',
-            'replace',
-            'validate-live'
-        ];
-
-        // ==========================================
-        // MODAL HELPERS
-        // ==========================================
-
-        function openModal(modal) {
-            if (!modal) return;
-
-            modal.classList.add('show');
-            modal.setAttribute('aria-hidden', 'false');
-        }
-
-        function closeModal(modal) {
-            if (!modal) return;
-
-            modal.classList.remove('show');
-            modal.setAttribute('aria-hidden', 'true');
-        }
-
-        // ==========================================
-        // SELECT BACKUP FOR RESTORATION
-        // ==========================================
-
-        function selectBackup(filename, date) {
-
-            selectedRestoreFilename = filename;
-            selectedRestoreDate = date;
+            row.style.display = '';
 
             document.getElementById(
-                'selectedBackupFilename'
-            ).value = filename;
+                'backupTableBody'
+            ).appendChild(row);
 
-            if (selectedBackupLabel) {
-                selectedBackupLabel.textContent = filename;
+        });
+
+        noResults.hidden = filteredRows.length !== 0;
+
+        const start = filteredRows.length === 0
+            ? 0
+            : startIndex + 1;
+
+        const end = Math.min(
+            startIndex + pageSize,
+            filteredRows.length
+        );
+
+        paginationInfo.textContent =
+            `Showing ${start}–${end} of ${filteredRows.length} backups`;
+
+        previousButton.disabled = currentPage <= 1;
+        nextButton.disabled = currentPage >= totalPages;
+
+        renderPageNumbers(totalPages);
+
+        document.getElementById(
+            'backupTotal'
+        ).textContent = `${filteredRows.length} backup(s)`;
+    }
+
+    function renderPageNumbers(totalPages) {
+
+        pageNumbers.innerHTML = '';
+
+        for (let page = 1; page <= totalPages; page++) {
+
+            const button = document.createElement('button');
+
+            button.type = 'button';
+            button.textContent = page;
+            button.className = 'backup-page-button';
+
+            if (page === currentPage) {
+                button.classList.add('active');
             }
 
-            document.getElementById(
-                'confirmationFilename'
-            ).textContent = filename;
-
-            document.getElementById(
-                'confirmationDate'
-            ).textContent = date;
-
-            document.getElementById(
-                'statusFilename'
-            ).textContent = filename;
-        }
-
-        // ==========================================
-        // NORMAL BACKUP SEARCH, SORTING, PAGINATION
-        // ==========================================
-
-        function getVisibleBackups() {
-
-            if (!hasNormalBackups) {
-                return;
-            }
-
-            const searchTerm = searchInput.value.trim().toLowerCase();
-
-            filteredRows = rows.filter(function(row) {
-                return row.dataset.filename.includes(searchTerm);
-            });
-
-            filteredRows.sort(function(a, b) {
-
-                const dateA = Number(a.dataset.date);
-                const dateB = Number(b.dataset.date);
-
-                return sortSelect.value === 'oldest' ?
-                    dateA - dateB :
-                    dateB - dateA;
-            });
-
-            const totalPages = Math.max(
-                1,
-                Math.ceil(filteredRows.length / pageSize)
-            );
-
-            currentPage = Math.min(currentPage, totalPages);
-
-            rows.forEach(function(row) {
-                row.style.display = 'none';
-            });
-
-            const startIndex = (currentPage - 1) * pageSize;
-
-            const pageRows = filteredRows.slice(
-                startIndex,
-                startIndex + pageSize
-            );
-
-            pageRows.forEach(function(row) {
-                row.style.display = '';
-
-                document.getElementById(
-                    'backupTableBody'
-                ).appendChild(row);
-            });
-
-            noResults.hidden = filteredRows.length !== 0;
-
-            const start = filteredRows.length === 0 ?
-                0 :
-                startIndex + 1;
-
-            const end = Math.min(
-                startIndex + pageSize,
-                filteredRows.length
-            );
-
-            paginationInfo.textContent =
-                `Showing ${start}–${end} of ${filteredRows.length} backups`;
-
-            previousButton.disabled = currentPage <= 1;
-            nextButton.disabled = currentPage >= totalPages;
-
-            renderPageNumbers(totalPages);
-
-            document.getElementById(
-                'backupTotal'
-            ).textContent = `${filteredRows.length} backup(s)`;
-        }
-
-        function renderPageNumbers(totalPages) {
-
-            pageNumbers.innerHTML = '';
-
-            for (let page = 1; page <= totalPages; page++) {
-
-                const button = document.createElement('button');
-
-                button.type = 'button';
-                button.textContent = page;
-                button.className = 'backup-page-button';
-
-                if (page === currentPage) {
-                    button.classList.add('active');
-                }
-
-                button.addEventListener('click', function() {
-                    currentPage = page;
-                    getVisibleBackups();
-                });
-
-                pageNumbers.appendChild(button);
-            }
-        }
-
-        // Bind normal backup controls only when normal backups exist.
-        if (hasNormalBackups) {
-
-            searchInput.addEventListener('input', function() {
-                currentPage = 1;
+            button.addEventListener('click', function() {
+                currentPage = page;
                 getVisibleBackups();
             });
 
-            sortSelect.addEventListener('change', function() {
-                currentPage = 1;
-                getVisibleBackups();
-            });
+            pageNumbers.appendChild(button);
+        }
+    }
 
-            previousButton.addEventListener('click', function() {
+    // ==========================================
+    // NORMAL BACKUP CONTROLS
+    // ==========================================
 
-                if (currentPage > 1) {
-                    currentPage--;
-                    getVisibleBackups();
-                }
-            });
+    if (hasNormalBackups) {
 
-            nextButton.addEventListener('click', function() {
-
-                const totalPages = Math.ceil(
-                    filteredRows.length / pageSize
-                );
-
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    getVisibleBackups();
-                }
-            });
-
-            // Normal backup selection
-            radios.forEach(function(radio) {
-
-                radio.addEventListener('change', function() {
-
-                    const selectedRow = this.closest('tr');
-
-                    const filename = this.value;
-                    const date = selectedRow.children[2].textContent.trim();
-
-                    selectBackup(filename, date);
-
-                    if (restoreButton) {
-                        restoreButton.disabled = false;
-                    }
-                });
-            });
-
-            // Normal backup restore button
-            if (restoreButton) {
-
-                restoreButton.addEventListener('click', function() {
-
-                    if (!selectedRestoreFilename) {
-                        alert('Please select a backup first.');
-                        return;
-                    }
-
-                    openModal(confirmationModal);
-                });
-            }
-
-            // Initialize normal backup table.
+        searchInput.addEventListener('input', function() {
+            currentPage = 1;
             getVisibleBackups();
-        }
+        });
 
-        // ==========================================
-        // SAFETY BACKUP SELECTION
-        // ==========================================
+        sortSelect.addEventListener('change', function() {
+            currentPage = 1;
+            getVisibleBackups();
+        });
 
-        document.querySelectorAll('.safety-restore-button')
-            .forEach(function(button) {
+        previousButton.addEventListener('click', function() {
 
-                button.addEventListener('click', function() {
+            if (currentPage > 1) {
+                currentPage--;
+                getVisibleBackups();
+            }
 
-                    const filename = this.dataset.filename;
-                    const date = this.dataset.date;
+        });
 
-                    selectBackup(filename, date);
+        nextButton.addEventListener('click', function() {
 
-                    openModal(confirmationModal);
-                });
-            });
+            const totalPages = Math.ceil(
+                filteredRows.length / pageSize
+            );
 
-        // ==========================================
-        // CONFIRMATION MODAL CLOSE
-        // ==========================================
+            if (currentPage < totalPages) {
+                currentPage++;
+                getVisibleBackups();
+            }
 
-        confirmationModal.querySelectorAll('[data-close-modal]')
-            .forEach(function(button) {
+        });
 
-                button.addEventListener('click', function() {
-                    closeModal(confirmationModal);
-                });
-            });
+        // Normal backup selection
+        radios.forEach(function(radio) {
 
-        // ==========================================
-        // RESTORE STATUS RESET
-        // ==========================================
+            radio.addEventListener('change', function() {
 
-        function resetRestoreStatus() {
+                const selectedRow = this.closest('tr');
 
-            restoreFinished = false;
+                const filename = this.value;
+                const date = selectedRow.children[2].textContent.trim();
 
-            statusTitle.textContent = 'Database Restore';
+                selectBackup(filename, date);
 
-            statusDescription.textContent =
-                'Submitting database restoration request...';
-
-            statusIcon.className = 'backup-modal-icon progress';
-            statusIconText.textContent = '...';
-
-            finalResult.hidden = true;
-            finalResult.textContent = '';
-
-            closeStatusButton.disabled = true;
-
-            stageItems.forEach(function(item) {
-
-                item.classList.remove(
-                    'active',
-                    'completed',
-                    'failed'
-                );
-
-                item.dataset.completed = 'false';
-
-                item.querySelector(
-                    '.restore-stage-icon'
-                ).textContent = '';
-
-                item.querySelector(
-                    '.restore-stage-status'
-                ).textContent = 'Waiting';
-
-                const label = item.querySelector(
-                    '.restore-stage-label'
-                );
-
-                if (label) {
-                    label.textContent = 'Restore safety backup';
+                if (restoreButton) {
+                    restoreButton.disabled = false;
                 }
+
             });
+
+        });
+
+        // Normal backup restore button
+        if (restoreButton) {
+
+            restoreButton.addEventListener('click', function() {
+
+                if (!selectedRestoreFilename) {
+                    alert('Please select a backup first.');
+                    return;
+                }
+
+                openModal(confirmationModal);
+            });
+
         }
 
-        // ==========================================
-        // STAGE DISPLAY
-        // ==========================================
+        getVisibleBackups();
+    }
 
-        function markStage(item, state, label) {
+    // ==========================================
+    // SAFETY BACKUP SELECTION
+    // ==========================================
 
-            const icon = item.querySelector('.restore-stage-icon');
-            const status = item.querySelector('.restore-stage-status');
+    document.querySelectorAll('.safety-restore-button')
+        .forEach(function(button) {
+
+            button.addEventListener('click', function() {
+
+                const filename = this.dataset.filename;
+                const date = this.dataset.date;
+
+                selectBackup(filename, date);
+
+                // Close the safety backup list before opening confirmation.
+                closeModal(
+                    document.getElementById('safetyBackupsModal')
+                );
+
+                openModal(confirmationModal);
+            });
+
+        });
+
+    // ==========================================
+    // RESTORE CONFIRMATION MODAL CLOSE
+    // ==========================================
+
+    confirmationModal.querySelectorAll('[data-close-modal]')
+        .forEach(function(button) {
+
+            button.addEventListener('click', function() {
+                closeModal(confirmationModal);
+            });
+
+        });
+
+    // ==========================================
+    // RESTORE STATUS RESET
+    // ==========================================
+
+    function resetRestoreStatus() {
+
+        restoreFinished = false;
+
+        statusTitle.textContent = 'Database Restore';
+
+        statusDescription.textContent =
+            'Submitting database restoration request...';
+
+        statusIcon.className = 'backup-modal-icon progress';
+        statusIconText.textContent = '...';
+
+        finalResult.hidden = true;
+        finalResult.textContent = '';
+
+        closeStatusButton.disabled = true;
+
+        stageItems.forEach(function(item) {
 
             item.classList.remove(
                 'active',
@@ -1336,333 +1539,379 @@ foreach ($activityDates as $activity) {
                 'failed'
             );
 
-            item.classList.add(state);
+            item.dataset.completed = 'false';
 
-            icon.textContent =
-                state === 'completed' ? '✓' :
-                state === 'failed' ? '!' : '...';
+            item.querySelector(
+                '.restore-stage-icon'
+            ).textContent = '';
 
-            status.textContent = label;
+            item.querySelector(
+                '.restore-stage-status'
+            ).textContent = 'Waiting';
 
-            item.dataset.completed =
-                state === 'completed' ? 'true' : 'false';
-        }
+            const label = item.querySelector(
+                '.restore-stage-label'
+            );
 
-        function updateRestoreStage(stage, status, message) {
-
-            const currentIndex = stageOrder.indexOf(stage);
-
-            // Handle rollback separately.
-            if (stage === 'rollback') {
-
-                stageItems.forEach(function(item) {
-
-                    if (item.dataset.stage === 'rollback') {
-
-                        markStage(
-                            item,
-                            status === 'failed' ? 'failed' : 'active',
-                            status === 'failed' ? 'Failed' : 'In progress'
-                        );
-
-                    } else if (item.dataset.completed === 'true') {
-
-                        markStage(item, 'completed', 'Completed');
-                    }
-                });
-
-                statusDescription.textContent = message;
-                return;
+            if (label) {
+                label.textContent = 'Restore safety backup';
             }
 
-            // Mark normal stages up to the current stage.
-            if (currentIndex >= 0) {
+        });
+    }
 
-                stageItems.forEach(function(item) {
+    // ==========================================
+    // STAGE DISPLAY
+    // ==========================================
 
-                    const index = stageOrder.indexOf(
-                        item.dataset.stage
-                    );
+    function markStage(item, state, label) {
 
-                    if (index === -1) {
-                        return;
-                    }
+        const icon = item.querySelector('.restore-stage-icon');
+        const status = item.querySelector('.restore-stage-status');
 
-                    if (index < currentIndex) {
+        item.classList.remove(
+            'active',
+            'completed',
+            'failed'
+        );
 
-                        markStage(item, 'completed', 'Completed');
+        item.classList.add(state);
 
-                    } else if (index === currentIndex) {
+        icon.textContent =
+            state === 'completed' ? '✓' :
+            state === 'failed' ? '!' : '...';
 
-                        if (status === 'failed') {
+        status.textContent = label;
 
-                            markStage(item, 'failed', 'Failed');
+        item.dataset.completed =
+            state === 'completed' ? 'true' : 'false';
+    }
 
-                        } else if (status === 'success') {
+    function updateRestoreStage(stage, status, message) {
 
-                            markStage(item, 'completed', 'Completed');
+        const currentIndex = stageOrder.indexOf(stage);
 
-                        } else {
+        if (stage === 'rollback') {
 
-                            markStage(item, 'active', 'In progress');
-                        }
-                    }
-                });
-            }
+            stageItems.forEach(function(item) {
 
-            // Handle the worker's final failed stage.
-            if (stage === 'failed') {
-
-                const unfinishedStage = stageItems.find(function(item) {
-                    return item.dataset.stage !== 'rollback' &&
-                        item.dataset.completed !== 'true' &&
-                        !item.classList.contains('failed');
-                });
-
-                if (unfinishedStage) {
-                    markStage(unfinishedStage, 'failed', 'Failed');
-                }
-            }
-
-            statusDescription.textContent = message ||
-                'Database restoration is processing.';
-        }
-
-        // ==========================================
-        // FINISH RESTORE
-        // ==========================================
-
-        function finishRestore(status, message) {
-
-            restoreFinished = true;
-
-            closeStatusButton.disabled = false;
-
-            statusDescription.textContent = message;
-            finalResult.textContent = message;
-            finalResult.hidden = false;
-
-            if (status === 'success') {
-
-                statusTitle.textContent = 'Restore Completed';
-
-                statusIcon.className = 'backup-modal-icon success';
-                statusIconText.textContent = '✓';
-
-                stageItems.forEach(function(item) {
-
-                    if (item.dataset.stage !== 'rollback') {
-                        markStage(item, 'completed', 'Completed');
-                    }
-                });
-
-                const rollbackItem = document.querySelector(
-                    '.restore-progress-item[data-stage="rollback"]'
-                );
-
-                if (rollbackItem) {
-
-                    const label = rollbackItem.querySelector(
-                        '.restore-stage-label'
-                    );
-
-                    if (label) {
-                        label.textContent = 'Safety backup secured';
-                    }
+                if (item.dataset.stage === 'rollback') {
 
                     markStage(
-                        rollbackItem,
-                        'completed',
-                        'Completed'
+                        item,
+                        status === 'failed' ? 'failed' : 'active',
+                        status === 'failed' ? 'Failed' : 'In progress'
                     );
+
+                } else if (item.dataset.completed === 'true') {
+
+                    markStage(item, 'completed', 'Completed');
+
                 }
 
-            } else {
+            });
 
-                statusTitle.textContent = 'Restore Failed';
-
-                statusIcon.className = 'backup-modal-icon warning';
-                statusIconText.textContent = '!';
-
-                const activeStage = stageItems.find(function(item) {
-                    return item.classList.contains('active');
-                });
-
-                if (activeStage) {
-                    markStage(activeStage, 'failed', 'Failed');
-                }
-            }
+            statusDescription.textContent = message;
+            return;
         }
 
-        // ==========================================
-        // SUBMIT RESTORE REQUEST
-        // ==========================================
+        if (currentIndex >= 0) {
 
-        confirmRestoreButton.addEventListener('click', async function() {
+            stageItems.forEach(function(item) {
 
-            if (!selectedRestoreFilename) {
-                alert('Please select a backup first.');
-                closeModal(confirmationModal);
-                return;
-            }
-
-            if (polling) {
-                return;
-            }
-
-            document.getElementById(
-                'selectedBackupFilename'
-            ).value = selectedRestoreFilename;
-
-            confirmRestoreButton.disabled = true;
-            confirmRestoreButton.textContent = 'Submitting...';
-
-            resetRestoreStatus();
-
-            closeModal(confirmationModal);
-            openModal(statusModal);
-
-            try {
-
-                const response = await fetch(restoreForm.action, {
-                    method: 'POST',
-                    body: new FormData(restoreForm),
-                    credentials: 'same-origin',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-
-                const data = await response.json();
-
-                if (!response.ok || !data.success || !data.request_id) {
-                    throw new Error(
-                        data.message || 'Could not submit restore request.'
-                    );
-                }
-
-                restoreRequestId = data.request_id;
-
-                statusDescription.textContent =
-                    data.message || 'Restore request submitted.';
-
-                await pollRestoreStatus();
-
-            } catch (error) {
-
-                finishRestore(
-                    'failed',
-                    error.message || 'An unexpected error occurred.'
+                const index = stageOrder.indexOf(
+                    item.dataset.stage
                 );
 
-            } finally {
+                if (index === -1) {
+                    return;
+                }
 
-                confirmRestoreButton.disabled = false;
-                confirmRestoreButton.textContent = 'Confirm Restore';
-            }
-        });
+                if (index < currentIndex) {
 
-        // ==========================================
-        // POLL WORKER PROGRESS
-        // ==========================================
+                    markStage(item, 'completed', 'Completed');
 
-        function wait(milliseconds) {
-            return new Promise(function(resolve) {
-                setTimeout(resolve, milliseconds);
+                } else if (index === currentIndex) {
+
+                    if (status === 'failed') {
+
+                        markStage(item, 'failed', 'Failed');
+
+                    } else if (status === 'success') {
+
+                        markStage(item, 'completed', 'Completed');
+
+                    } else {
+
+                        markStage(item, 'active', 'In progress');
+
+                    }
+
+                }
+
             });
+
         }
 
-        async function pollRestoreStatus() {
+        if (stage === 'failed') {
 
-            if (!restoreRequestId || polling) {
-                return;
+            const unfinishedStage = stageItems.find(function(item) {
+                return item.dataset.stage !== 'rollback' &&
+                    item.dataset.completed !== 'true' &&
+                    !item.classList.contains('failed');
+            });
+
+            if (unfinishedStage) {
+                markStage(unfinishedStage, 'failed', 'Failed');
+            }
+        }
+
+        statusDescription.textContent = message ||
+            'Database restoration is processing.';
+    }
+
+    // ==========================================
+    // FINISH RESTORE
+    // ==========================================
+
+    function finishRestore(status, message) {
+
+        restoreFinished = true;
+
+        closeStatusButton.disabled = false;
+
+        statusDescription.textContent = message;
+        finalResult.textContent = message;
+        finalResult.hidden = false;
+
+        if (status === 'success') {
+
+            statusTitle.textContent = 'Restore Completed';
+
+            statusIcon.className = 'backup-modal-icon success';
+            statusIconText.textContent = '✓';
+
+            stageItems.forEach(function(item) {
+
+                if (item.dataset.stage !== 'rollback') {
+                    markStage(item, 'completed', 'Completed');
+                }
+
+            });
+
+            const rollbackItem = document.querySelector(
+                '.restore-progress-item[data-stage="rollback"]'
+            );
+
+            if (rollbackItem) {
+
+                const label = rollbackItem.querySelector(
+                    '.restore-stage-label'
+                );
+
+                if (label) {
+                    label.textContent = 'Safety backup secured';
+                }
+
+                markStage(
+                    rollbackItem,
+                    'completed',
+                    'Completed'
+                );
             }
 
-            polling = true;
+        } else {
 
-            try {
+            statusTitle.textContent = 'Restore Failed';
 
-                while (!restoreFinished) {
+            statusIcon.className = 'backup-modal-icon warning';
+            statusIconText.textContent = '!';
 
-                    try {
+            const activeStage = stageItems.find(function(item) {
+                return item.classList.contains('active');
+            });
 
-                        const url =
-                            '/admin/backup/restore_status?request_id=' +
-                            encodeURIComponent(restoreRequestId);
+            if (activeStage) {
+                markStage(activeStage, 'failed', 'Failed');
+            }
 
-                        const response = await fetch(url, {
-                            method: 'GET',
-                            credentials: 'same-origin',
-                            headers: {
-                                'Accept': 'application/json'
-                            },
-                            cache: 'no-store'
-                        });
+        }
+    }
 
-                        const data = await response.json();
+    // ==========================================
+    // SUBMIT RESTORE REQUEST
+    // ==========================================
 
-                        if (!response.ok || !data.success) {
-                            throw new Error(
-                                data.message ||
-                                'Unable to retrieve restore status.'
-                            );
-                        }
+    confirmRestoreButton.addEventListener('click', async function() {
 
-                        updateRestoreStage(
-                            data.stage,
+        if (!selectedRestoreFilename) {
+            alert('Please select a backup first.');
+            closeModal(confirmationModal);
+            return;
+        }
+
+        if (polling) {
+            return;
+        }
+
+        document.getElementById(
+            'selectedBackupFilename'
+        ).value = selectedRestoreFilename;
+
+        confirmRestoreButton.disabled = true;
+        confirmRestoreButton.textContent = 'Submitting...';
+
+        resetRestoreStatus();
+
+        closeModal(confirmationModal);
+        openModal(statusModal);
+
+        try {
+
+            const response = await fetch(restoreForm.action, {
+                method: 'POST',
+                body: new FormData(restoreForm),
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success || !data.request_id) {
+                throw new Error(
+                    data.message || 'Could not submit restore request.'
+                );
+            }
+
+            restoreRequestId = data.request_id;
+
+            statusDescription.textContent =
+                data.message || 'Restore request submitted.';
+
+            await pollRestoreStatus();
+
+        } catch (error) {
+
+            finishRestore(
+                'failed',
+                error.message || 'An unexpected error occurred.'
+            );
+
+        } finally {
+
+            confirmRestoreButton.disabled = false;
+            confirmRestoreButton.textContent = 'Confirm Restore';
+
+        }
+
+    });
+
+    // ==========================================
+    // POLL WORKER PROGRESS
+    // ==========================================
+
+    function wait(milliseconds) {
+        return new Promise(function(resolve) {
+            setTimeout(resolve, milliseconds);
+        });
+    }
+
+    async function pollRestoreStatus() {
+
+        if (!restoreRequestId || polling) {
+            return;
+        }
+
+        polling = true;
+
+        try {
+
+            while (!restoreFinished) {
+
+                try {
+
+                    const url =
+                        '/admin/backup/restore_status?request_id=' +
+                        encodeURIComponent(restoreRequestId);
+
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json'
+                        },
+                        cache: 'no-store'
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok || !data.success) {
+                        throw new Error(
+                            data.message ||
+                            'Unable to retrieve restore status.'
+                        );
+                    }
+
+                    updateRestoreStage(
+                        data.stage,
+                        data.status,
+                        data.message
+                    );
+
+                    if (
+                        data.status === 'success' ||
+                        data.status === 'failed'
+                    ) {
+
+                        finishRestore(
                             data.status,
                             data.message
                         );
 
-                        if (
-                            data.status === 'success' ||
-                            data.status === 'failed'
-                        ) {
-
-                            finishRestore(
-                                data.status,
-                                data.message
-                            );
-
-                            break;
-                        }
-
-                    } catch (error) {
-
-                        console.error(
-                            'Restore status error:',
-                            error
-                        );
-
-                        statusDescription.textContent =
-                            'Unable to retrieve the latest status. Retrying...';
+                        break;
                     }
 
-                    await wait(1500);
+                } catch (error) {
+
+                    console.error(
+                        'Restore status error:',
+                        error
+                    );
+
+                    statusDescription.textContent =
+                        'Unable to retrieve the latest status. Retrying...';
+
                 }
 
-            } finally {
-
-                polling = false;
+                await wait(1500);
             }
+
+        } finally {
+
+            polling = false;
+
+        }
+    }
+
+    // ==========================================
+    // CLOSE STATUS MODAL
+    // ==========================================
+
+    closeStatusButton.addEventListener('click', function() {
+
+        if (!restoreFinished) {
+            return;
         }
 
-        // ==========================================
-        // CLOSE STATUS MODAL
-        // ==========================================
+        closeModal(statusModal);
 
-        closeStatusButton.addEventListener('click', function() {
-
-            if (!restoreFinished) {
-                return;
-            }
-
-            closeModal(statusModal);
-
-            if (statusTitle.textContent === 'Restore Completed') {
-                window.location.reload();
-            }
-        });
+        if (statusTitle.textContent === 'Restore Completed') {
+            window.location.reload();
+        }
 
     });
+
+});
 </script>
