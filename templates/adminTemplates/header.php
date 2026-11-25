@@ -286,7 +286,7 @@ $navRoleLabel = match ($navRole) {
     .topbar-title {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 6px;
     }
 
     .title-row {

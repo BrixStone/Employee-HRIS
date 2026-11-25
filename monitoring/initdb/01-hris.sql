@@ -291,21 +291,22 @@ CREATE TABLE
 -- ============================================================
 -- 5. ATTENDANCE (after employees so FK works)
 -- ============================================================
-CREATE TABLE
-    IF NOT EXISTS attendance (
-        id BIGINT NOT NULL AUTO_INCREMENT,
-        employee_id BIGINT DEFAULT NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        email VARCHAR(255) DEFAULT NULL,
-        time_in DATETIME DEFAULT NULL,
-        time_out DATETIME DEFAULT NULL,
-        workhours DECIMAL(10, 2) DEFAULT NULL,
-        Break_Time DATETIME DEFAULT NULL,
-        PRIMARY KEY (id),
-        KEY idx_attendance_email_time_in (email, time_in),
-        KEY idx_attendance_employee (employee_id),
-        CONSTRAINT fk_attendance_employee FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE SET NULL ON UPDATE CASCADE
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS attendance (
+    id          BIGINT        NOT NULL AUTO_INCREMENT,
+    employee_id BIGINT        DEFAULT NULL,
+    created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    email       VARCHAR(255)  DEFAULT NULL,
+    time_in     DATETIME      DEFAULT NULL,
+    time_out    DATETIME      DEFAULT NULL,
+    workhours   DECIMAL(10,2) DEFAULT NULL,
+    Break_Time  DATETIME      DEFAULT NULL,
+    PRIMARY KEY (id),
+    KEY idx_attendance_email_time_in (email, time_in),
+    KEY idx_attendance_employee      (employee_id),
+    CONSTRAINT fk_attendance_employee
+        FOREIGN KEY (employee_id) REFERENCES employees (id)
+        ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- employee_id backfilled from email via subquery (MySQL 8 compatible)
 -- ============================================================
