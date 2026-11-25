@@ -401,6 +401,8 @@ $navRoleLabel = match ($navRole) {
 
       .topbar {
         padding: 12px 16px;
+        height: auto;
+        min-height: 68px;
       }
 
       .topbar-actions {

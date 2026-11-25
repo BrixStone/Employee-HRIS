@@ -1,4 +1,3 @@
-
 <?php
 // admin/change_user_status.php
 

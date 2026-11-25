@@ -1,6 +1,6 @@
 <?php
 // classes/Payroll.php
-require_once __DIR__ . '/../classes/AuditLogger.php';
+require_once __DIR__ . '/AuditLogger.php';
 require_once __DIR__ . '/AttendanceService.php';
 
 

@@ -47,12 +47,19 @@ $loggedTodayStmt = $pdo->query("
 ");
 $loggedToday = (int)$loggedTodayStmt->fetchColumn();
 
-$onlineStmt = $pdo->query("
-    SELECT COUNT(*) FROM users
-    WHERE last_activity >= NOW() - INTERVAL 15 MINUTE
-      AND status = 'Active'
-");
-$currentlyOnline = (int)$onlineStmt->fetchColumn();
+try {
+    $onlineStmt = $pdo->query("
+        SELECT COUNT(*) FROM users
+        WHERE last_activity >= NOW() - INTERVAL 15 MINUTE
+          AND status = 'Active'
+    ");
+    $currentlyOnline = (int)$onlineStmt->fetchColumn();
+} catch (Throwable $e) {
+    // last_activity column may not exist yet on this database — it will be
+    // created on the next login via guard.php's self-healing ALTER.
+    $currentlyOnline = 0;
+    error_log('admin/dashboard.php last_activity query failed: ' . $e->getMessage());
+}
 
 $totalActiveStmt = $pdo->query("
     SELECT COUNT(*) FROM employees WHERE employment_status = 'Active'

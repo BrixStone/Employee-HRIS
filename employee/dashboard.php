@@ -1,18 +1,17 @@
 <?php
 // employee/dashboard.php
 
-session_start();
-
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Rbac.php';
 require_once __DIR__ . '/../classes/AttendanceService.php';
-// Prevent browser from displaying a cached dashboard after logout
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
 
-// Logged in, account still active, employee portal, allowed by the permission matrix
+// Guard starts the session, verifies login, checks portal + permission matrix.
 require_once __DIR__ . '/../authentication/guard.php';
 require_access('dashboard', 'view', null, ['employee']);
+
+// Prevent browser caching — sent after guard so headers are still clean.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
 // Get the employee ID saved during login
 $employeeId = $_SESSION['employee_id'] ?? null;
@@ -169,7 +168,7 @@ for ($d = 1; $d <= $daysSoFar; $d++) {
   $chartLabels[]   = (string)$d;
   $chartRegular[]  = round($dailyHours[$d][0] ?? 0, 2);
   $chartOvertime[] = round($dailyHours[$d][1] ?? 0, 2);
-  if ((int)$nowDt->setDate((int)$nowDt->format('Y'), (int)$nowDt->format('n'), $d)->format('N') <= 5) {
+  if ((int)(new DateTimeImmutable($nowDt->format('Y-') . $nowDt->format('m-') . str_pad((string)$d, 2, '0', STR_PAD_LEFT), $tz))->format('N') <= 5) {
     $workingDaysSoFar++;
   }
 }

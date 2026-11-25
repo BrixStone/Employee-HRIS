@@ -947,6 +947,18 @@ small {
     border-color: var(--line);
 }
 
+.pill-warning {
+    color: #fde68a;
+    background: rgba(245, 158, 11, .14);
+    border-color: rgba(245, 158, 11, .4);
+}
+
+.pill-info {
+    color: #93c5fd;
+    background: rgba(59, 130, 246, .14);
+    border-color: rgba(59, 130, 246, .35);
+}
+
 /* Row action links */
 .row-actions {
     display: inline-flex;

@@ -115,8 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $error = (string)$orientationGate['message'];
   } else {
     // Shift lifecycle (stale shifts, MISSING_OUT, overtime) lives in AttendanceService.
-    $nowObj      = AttendanceService::now();
-    $currentTime = $nowObj->format('Y-m-d H:i:s');
+    $nowObj        = AttendanceService::now();
+    $currentTime   = $nowObj->format('Y-m-d H:i:s');
+    $currentHour   = (int)$nowObj->format('H');
+    $currentMinute = (int)$nowObj->format('i');
 
     $flaggedNote = static function (array $dates): string {
       return $dates

@@ -1,4 +1,3 @@
-
 <?php
 // templates/hrTemplates/header.php
 

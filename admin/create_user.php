@@ -1,4 +1,3 @@
-
 <?php
 // admin/create_user.php
 // Create a login account and send a password setup invitation.

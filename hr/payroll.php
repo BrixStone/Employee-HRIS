@@ -4,6 +4,7 @@ require_once __DIR__ . '/../authentication/guard.php';
 require_access('payslips', 'edit', 'all');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/Payroll.php';
+require_once __DIR__ . '/../classes/AttendanceService.php';
 require_once __DIR__ . '/../classes/DSA/LinkedList.php';
 
 // DDD — Application layer wired to real MySQL repository

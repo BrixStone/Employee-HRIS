@@ -94,17 +94,11 @@ final class Rbac
 
     /**
      * Role permission cache.
-     *
-     * Structure:
-     * role => module => action => scope
      */
     private static ?array $matrix = null;
 
     /**
      * Rank permission cache.
-     *
-     * Structure:
-     * rank => module => action => [effect, scope]
      */
     private static ?array $rankMatrix = null;
 
@@ -115,7 +109,6 @@ final class Rbac
     {
         return strtolower(trim((string) $role));
     }
-
 
     /**
      * Normalize employee rank.
@@ -146,7 +139,7 @@ final class Rbac
     }
 
     /**
-     * Load system role permissions from the database.
+     * Load system role permissions from MySQL.
      *
      * Tables:
      *   roles
@@ -169,18 +162,13 @@ final class Rbac
                     m.module_key,
                     p.permission_key,
                     rp.data_scope
-
                 FROM role_permissions rp
-
                 INNER JOIN roles r
                     ON r.id = rp.role_id
-
                 INNER JOIN modules m
                     ON m.id = rp.module_id
-
                 INNER JOIN permissions p
                     ON p.id = rp.permission_id
-
                 WHERE m.is_active = 1
             ";
 
@@ -190,7 +178,7 @@ final class Rbac
                 $role = self::normalizeRole($row['role_key']);
                 $module = self::normalizeModule($row['module_key']);
                 $action = self::normalizeAction($row['permission_key']);
-                $scope = strtolower(trim($row['data_scope']));
+                $scope = strtolower(trim((string) $row['data_scope']));
 
                 if (
                     !in_array($role, self::ROLES, true) ||
@@ -205,7 +193,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC role permission loading failed: ' .
-                    $e->getMessage()
+                $e->getMessage()
             );
         }
 
@@ -236,15 +224,11 @@ final class Rbac
                     p.permission_key,
                     rp.effect,
                     rp.data_scope
-
                 FROM rank_permissions rp
-
                 INNER JOIN modules m
                     ON m.id = rp.module_id
-
                 INNER JOIN permissions p
                     ON p.id = rp.permission_id
-
                 WHERE m.is_active = 1
             ";
 
@@ -254,8 +238,8 @@ final class Rbac
                 $rank = self::normalizeRank($row['rank_key']);
                 $module = self::normalizeModule($row['module_key']);
                 $action = self::normalizeAction($row['permission_key']);
-                $effect = strtolower(trim($row['effect']));
-                $scope = strtolower(trim($row['data_scope']));
+                $effect = strtolower(trim((string) $row['effect']));
+                $scope = strtolower(trim((string) $row['data_scope']));
 
                 if (
                     !in_array($action, self::ACTIONS, true) ||
@@ -273,7 +257,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC rank permission loading failed: ' .
-                    $e->getMessage()
+                $e->getMessage()
             );
         }
 
@@ -283,7 +267,7 @@ final class Rbac
     /**
      * Clear permission caches.
      *
-     * Call this after saving permission changes.
+     * Call after saving permission changes.
      */
     public static function reset(): void
     {
@@ -295,8 +279,7 @@ final class Rbac
      * Get the effective scope for an account.
      *
      * Rank permissions override system role permissions.
-     *
-     * Admin always receives all scope.
+     * Admin always receives all scope for protected modules.
      */
     public static function scope(
         PDO $pdo,
@@ -323,12 +306,9 @@ final class Rbac
             return 'none';
         }
 
-        /*
-         * Check rank override first.
-         */
+        // Check rank override first.
         if ($rank !== null) {
             $rank = self::normalizeRank($rank);
-
             $rankPermissions = self::rankPermissions($pdo);
 
             $override =
@@ -343,9 +323,7 @@ final class Rbac
             }
         }
 
-        /*
-         * Fall back to system role permission.
-         */
+        // Fall back to system role permission.
         $matrix = self::matrix($pdo);
 
         return $matrix[$role][$module][$ability] ?? 'none';
@@ -353,18 +331,6 @@ final class Rbac
 
     /**
      * Check whether an account can perform an action.
-     *
-     * Examples:
-     *
-     * Rbac::can($pdo, 'hr', 'attendance', 'view');
-     *
-     * Rbac::can(
-     *     $pdo,
-     *     'employee',
-     *     'leave_requests',
-     *     'approve',
-     *     'manager'
-     * );
      */
     public static function can(
         PDO $pdo,
@@ -404,11 +370,6 @@ final class Rbac
 
     /**
      * Determine whether a module should appear in the sidebar.
-     *
-     * A module is visible if:
-     *   - The module exists and is active.
-     *   - The account can view it.
-     *   - Its effective scope is not none.
      */
     public static function moduleEnabled(
         PDO $pdo,
@@ -447,7 +408,7 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC module lookup failed: ' .
-                    $e->getMessage()
+                $e->getMessage()
             );
 
             return false;
@@ -464,9 +425,6 @@ final class Rbac
 
     /**
      * Compatibility method for older code.
-     *
-     * The old access levels are no longer stored in the database.
-     * This method derives a basic level from the new permissions.
      */
     public static function level(
         PDO $pdo,
@@ -567,13 +525,8 @@ final class Rbac
     /**
      * Get employees directly reporting to a team leader/manager.
      *
-     * IMPORTANT:
-     * This assumes employees.manager_id stores the supervisor's
-     * employees.id. If your My Team feature uses a different
-     * relationship, this query must be adjusted to match it.
-     *
-     * Returns:
-     *   int[] employee IDs
+     * Assumes employees.manager_id stores the supervisor's
+     * employees.id.
      */
     public static function teamEmployeeIds(
         PDO $pdo,
@@ -606,13 +559,10 @@ final class Rbac
         } catch (Throwable $e) {
             error_log(
                 'RBAC team lookup failed: ' .
-                    $e->getMessage()
+                $e->getMessage()
             );
 
-            /*
-             * Fail closed.
-             * Do not accidentally expose the whole department.
-             */
+            // Fail closed.
             return [];
         }
     }
@@ -640,6 +590,7 @@ final class Rbac
     {
         return self::normalizeRole($role) === 'admin';
     }
+
     public static function canManageBackups(mixed $role): bool
     {
         return self::isSuperAdmin($role);

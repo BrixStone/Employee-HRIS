@@ -141,3 +141,112 @@ if (!function_exists('hris_guard_active_employee')) {
         }
     }
 }
+
+// ── Self-healing schema patches ───────────────────────────────────────────────
+// Add any missing columns / seed data that older databases may not have.
+// Each block is safe to run on every request (checks before altering).
+if (isset($pdo) && $pdo instanceof PDO) {
+    try {
+        static $hris_schema_patched = false;
+        if (!$hris_schema_patched) {
+            $hris_schema_patched = true;
+            $dbName = $pdo->query('SELECT DATABASE()')->fetchColumn();
+
+            // ── users.last_activity ───────────────────────────────────────
+            $hasLastActivity = (bool)$pdo->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = " . $pdo->quote((string)$dbName) . "
+                   AND TABLE_NAME   = 'users'
+                   AND COLUMN_NAME  = 'last_activity'"
+            )->fetchColumn();
+            if (!$hasLastActivity) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN last_activity DATETIME DEFAULT NULL");
+                $pdo->exec("ALTER TABLE users ADD INDEX idx_users_last_activity (last_activity)");
+            }
+
+            // ── RBAC seed: roles, modules, permissions ────────────────────
+            // The role_permissions INSERTs in 01-hris.sql use SELECT … FROM
+            // roles/modules/permissions — if those tables are empty the whole
+            // permission matrix is empty and everyone gets a 403 except admin.
+            $rolesEmpty = (int)$pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn() === 0;
+            if ($rolesEmpty) {
+                $pdo->exec("INSERT IGNORE INTO roles (role_key, role_name, is_protected) VALUES
+                    ('admin',    'Administrator', 1),
+                    ('hr',       'HR Staff',      1),
+                    ('employee', 'Employee',      0)");
+            }
+
+            $modulesEmpty = (int)$pdo->query('SELECT COUNT(*) FROM modules')->fetchColumn() === 0;
+            if ($modulesEmpty) {
+                $pdo->exec("INSERT IGNORE INTO modules (module_key, module_name, is_active, sort_order) VALUES
+                    ('dashboard',            'Dashboard',            1,  1),
+                    ('employee_records',     'Employee Records',     1,  2),
+                    ('employee_onboarding',  'Employee Onboarding',  1,  3),
+                    ('recruitment',          'Recruitment',          1,  4),
+                    ('attendance',           'Attendance',           1,  5),
+                    ('leave_requests',       'Leave Requests',       1,  6),
+                    ('payroll',              'Payroll',              1,  7),
+                    ('payslips',             'Payslips',             1,  8),
+                    ('promotion_management', 'Promotion Management', 1,  9),
+                    ('user_management',      'User Management',      1, 10),
+                    ('audit_logs',           'Audit Logs',           1, 11),
+                    ('reports',              'Reports',              1, 12),
+                    ('system_settings',      'System Settings',      1, 13),
+                    ('backup_management',    'Backup Management',    1, 14)");
+            }
+
+            $permsEmpty = (int)$pdo->query('SELECT COUNT(*) FROM permissions')->fetchColumn() === 0;
+            if ($permsEmpty) {
+                $pdo->exec("INSERT IGNORE INTO permissions (permission_key, permission_name) VALUES
+                    ('view',    'View'),
+                    ('create',  'Create'),
+                    ('edit',    'Edit'),
+                    ('delete',  'Delete'),
+                    ('approve', 'Approve'),
+                    ('submit',  'Submit')");
+            }
+
+            // ── role_permissions: seed if empty after roles/modules/perms exist ──
+            if ((int)$pdo->query('SELECT COUNT(*) FROM role_permissions')->fetchColumn() === 0) {
+                // Admin: full access to everything
+                $pdo->exec("INSERT IGNORE INTO role_permissions (role_id, module_id, permission_id, data_scope)
+                    SELECT r.id, m.id, p.id, 'all'
+                    FROM roles r CROSS JOIN modules m CROSS JOIN permissions p
+                    WHERE r.role_key = 'admin'");
+
+                // HR: organisation-wide HR access
+                $pdo->exec("INSERT IGNORE INTO role_permissions (role_id, module_id, permission_id, data_scope)
+                    SELECT r.id, m.id, p.id, 'all'
+                    FROM roles r JOIN modules m JOIN permissions p
+                    WHERE r.role_key = 'hr'
+                      AND ((m.module_key = 'dashboard'           AND p.permission_key = 'view')
+                        OR (m.module_key = 'employee_records'    AND p.permission_key IN ('view','create','edit','delete'))
+                        OR (m.module_key = 'employee_onboarding' AND p.permission_key IN ('view','create','edit','delete','approve'))
+                        OR (m.module_key = 'recruitment'         AND p.permission_key IN ('view','create','edit','delete','approve'))
+                        OR (m.module_key = 'attendance'          AND p.permission_key IN ('view','create','edit'))
+                        OR (m.module_key = 'leave_requests'      AND p.permission_key IN ('view','create','edit','approve'))
+                        OR (m.module_key = 'payroll'             AND p.permission_key IN ('view','create','edit','approve'))
+                        OR (m.module_key = 'payslips'            AND p.permission_key IN ('view','create','edit'))
+                        OR (m.module_key = 'promotion_management' AND p.permission_key IN ('view','create','edit','approve'))
+                        OR (m.module_key = 'user_management'     AND p.permission_key IN ('view','create','edit'))
+                        OR (m.module_key = 'audit_logs'          AND p.permission_key = 'view')
+                        OR (m.module_key = 'reports'             AND p.permission_key = 'view')
+                        OR (m.module_key = 'system_settings'     AND p.permission_key = 'view'))");
+
+                // Employee: own-data access
+                $pdo->exec("INSERT IGNORE INTO role_permissions (role_id, module_id, permission_id, data_scope)
+                    SELECT r.id, m.id, p.id, 'own'
+                    FROM roles r JOIN modules m JOIN permissions p
+                    WHERE r.role_key = 'employee'
+                      AND ((m.module_key = 'dashboard'            AND p.permission_key = 'view')
+                        OR (m.module_key = 'employee_records'     AND p.permission_key = 'view')
+                        OR (m.module_key = 'attendance'           AND p.permission_key IN ('view','submit','edit'))
+                        OR (m.module_key = 'leave_requests'       AND p.permission_key IN ('view','submit'))
+                        OR (m.module_key = 'payslips'             AND p.permission_key = 'view')
+                        OR (m.module_key = 'promotion_management' AND p.permission_key IN ('view','submit')))");
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('HRIS schema patch failed: ' . $e->getMessage());
+    }
+}

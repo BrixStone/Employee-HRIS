@@ -1,4 +1,4 @@
-  </section>
+</section>
 </main>
 
 <?php if (!empty($embedded)): ?>
