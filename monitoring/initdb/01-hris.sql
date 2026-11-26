@@ -496,6 +496,40 @@ CREATE TABLE
 -- 11. DEDUCTION RATES
 -- ============================================================
 CREATE TABLE
+    IF NOT EXISTS backup_settings (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        enabled TINYINT (1) NOT NULL DEFAULT 1,
+        frequency ENUM ('hourly', 'daily', 'weekly') NOT NULL DEFAULT 'daily',
+        backup_minute TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        backup_time TIME NOT NULL DEFAULT '02:00:00',
+        backup_day TINYINT UNSIGNED NOT NULL DEFAULT 1,
+        retention_days SMALLINT UNSIGNED NOT NULL DEFAULT 30,
+        timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Manila',
+        last_run_at DATETIME NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT chk_backup_minute CHECK (backup_minute IN (0, 15, 30, 45)),
+        CONSTRAINT chk_backup_day CHECK (backup_day BETWEEN 1 AND 7),
+        CONSTRAINT chk_backup_retention CHECK (retention_days IN (7, 14, 30, 60, 90))
+    );
+
+INSERT INTO
+    backup_settings (
+        is_enabled,
+        frequency,
+        backup_minute,
+        backup_time,
+        backup_day,
+        retention_days,
+        timezone
+    )
+VALUES
+    (1, 'daily', 0, '02:00:00', 1, 30, 'Asia/Manila');
+
+--     INSERT INTO backup_settings (id)
+-- VALUES (1)
+-- ON DUPLICATE KEY UPDATE id = id;
+
+CREATE TABLE
     IF NOT EXISTS deduction_rates (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT,
         name VARCHAR(100) NOT NULL,
