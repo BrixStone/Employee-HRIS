@@ -544,6 +544,16 @@ foreach ($activityDates as $activity) {
                             </select>
                         </div>
 
+                        <div class="backup-sort">
+                            <label for="backupDateFilter">Filter by period</label>
+                            <select id="backupDateFilter">
+                                <option value="all">All time</option>
+                                <option value="today">Today</option>
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                            </select>
+                        </div>
+
                     </div>
 
                     <div class="backup-table-wrapper">
@@ -804,6 +814,31 @@ foreach ($activityDates as $activity) {
 
                 <?php else: ?>
 
+
+                    <!-- Safety Backup Sorting and Date Filter -->
+                    <div class="backup-table-controls">
+
+                        <div class="backup-sort">
+                            <label for="safetyBackupSort">Sort by</label>
+                            <select id="safetyBackupSort">
+                                <option value="newest">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                            </select>
+                        </div>
+
+                        <div class="backup-sort">
+                            <label for="safetyBackupDateFilter">Filter by period</label>
+                            <select id="safetyBackupDateFilter">
+                                <option value="all">All time</option>
+                                <option value="today">Today</option>
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                            </select>
+                        </div>
+
+                    </div>
+
+
                     <div class="backup-table-wrapper">
 
                         <table class="backup-table">
@@ -822,7 +857,14 @@ foreach ($activityDates as $activity) {
 
                                 <?php foreach ($safetyBackups as $backup): ?>
 
-                                    <tr>
+                                    <tr
+                                        class="safety-backup-row"
+                                        data-filename="<?= htmlspecialchars(
+                                                            strtolower($backup['filename']),
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        ) ?>"
+                                        data-date="<?= (int) $backup['created_at'] ?>">
 
                                         <td>
                                             <?= htmlspecialchars(
@@ -1466,6 +1508,7 @@ foreach ($activityDates as $activity) {
 
         const searchInput = document.getElementById('backupSearch');
         const sortSelect = document.getElementById('backupSort');
+        const dateFilter = document.getElementById('backupDateFilter');
 
         const previousButton = document.getElementById('backupPrevious');
         const nextButton = document.getElementById('backupNext');
@@ -1589,10 +1632,44 @@ foreach ($activityDates as $activity) {
             }
 
             const searchTerm = searchInput.value.trim().toLowerCase();
+            const selectedPeriod = dateFilter.value;
+
+            const now = Date.now();
+
+            // 1. FILTER BY FILENAME AND CREATION DATE
 
             filteredRows = rows.filter(function(row) {
-                return row.dataset.filename.includes(searchTerm);
+
+                // Filename search
+                const matchesSearch = row.dataset.filename.includes(searchTerm);
+
+                // Convert PHP timestamp (seconds) to JavaScript milliseconds
+                const createdAt = Number(row.dataset.date) * 1000;
+
+                let matchesDate = true;
+
+                if (selectedPeriod === 'today') {
+
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    matchesDate = createdAt >= today.getTime();
+
+                } else if (selectedPeriod === '7' || selectedPeriod === '30') {
+
+                    const days = Number(selectedPeriod);
+
+                    const cutoffDate = now - (
+                        days * 24 * 60 * 60 * 1000
+                    );
+
+                    matchesDate = createdAt >= cutoffDate;
+                }
+
+                return matchesSearch && matchesDate;
             });
+
+            // 2. SORT BY CREATION DATE
 
             filteredRows.sort(function(a, b) {
 
@@ -1604,16 +1681,14 @@ foreach ($activityDates as $activity) {
                     dateB - dateA;
             });
 
+            // 3. PAGINATION
+
             const totalPages = Math.max(
                 1,
                 Math.ceil(filteredRows.length / pageSize)
             );
 
             currentPage = Math.min(currentPage, totalPages);
-
-            rows.forEach(function(row) {
-                row.style.display = 'none';
-            });
 
             const startIndex = (currentPage - 1) * pageSize;
 
@@ -1622,15 +1697,19 @@ foreach ($activityDates as $activity) {
                 startIndex + pageSize
             );
 
+            rows.forEach(function(row) {
+                row.style.display = 'none';
+            });
+
             pageRows.forEach(function(row) {
 
                 row.style.display = '';
 
-                document.getElementById(
-                    'backupTableBody'
-                ).appendChild(row);
+                document.getElementById('backupTableBody').appendChild(row);
 
             });
+
+            // 4. UPDATE DISPLAY
 
             noResults.hidden = filteredRows.length !== 0;
 
@@ -1651,16 +1730,15 @@ foreach ($activityDates as $activity) {
 
             renderPageNumbers(totalPages);
 
-            document.getElementById(
-                'backupTotal'
-            ).textContent = `${filteredRows.length} backup(s)`;
+            document.getElementById('backupTotal').textContent =
+                `${filteredRows.length} backup(s)`;
         }
 
         function renderPageNumbers(totalPages) {
 
             pageNumbers.innerHTML = '';
 
-            for (let page = 1; page <= totalPages; page++) {
+            function addPage(page) {
 
                 const button = document.createElement('button');
 
@@ -1679,6 +1757,44 @@ foreach ($activityDates as $activity) {
 
                 pageNumbers.appendChild(button);
             }
+
+            function addEllipsis() {
+
+                const span = document.createElement('span');
+
+                span.textContent = '...';
+                span.className = 'backup-page-ellipsis';
+
+                pageNumbers.appendChild(span);
+            }
+
+            if (totalPages <= 7) {
+
+                for (let page = 1; page <= totalPages; page++) {
+                    addPage(page);
+                }
+
+                return;
+            }
+
+            addPage(1);
+
+            if (currentPage > 4) {
+                addEllipsis();
+            }
+
+            const start = Math.max(2, currentPage - 1);
+            const end = Math.min(totalPages - 1, currentPage + 1);
+
+            for (let page = start; page <= end; page++) {
+                addPage(page);
+            }
+
+            if (currentPage < totalPages - 3) {
+                addEllipsis();
+            }
+
+            addPage(totalPages);
         }
 
         // ==========================================
@@ -1693,6 +1809,11 @@ foreach ($activityDates as $activity) {
             });
 
             sortSelect.addEventListener('change', function() {
+                currentPage = 1;
+                getVisibleBackups();
+            });
+
+            dateFilter.addEventListener('change', function() {
                 currentPage = 1;
                 getVisibleBackups();
             });
@@ -1758,15 +1879,19 @@ foreach ($activityDates as $activity) {
         }
 
 
+
         // ==========================================
-        // SAFETY BACKUP PAGINATION
+        // SAFETY BACKUP FILTERING, SORTING, PAGINATION
         // ==========================================
 
         const safetyRows = Array.from(
             document.querySelectorAll(
-                '#safetyBackups table tbody tr'
+                '#safetyBackups .safety-backup-row'
             )
         );
+
+        const safetySort = document.getElementById('safetyBackupSort');
+        const safetyDateFilter = document.getElementById('safetyBackupDateFilter');
 
         const safetyPrevious = document.getElementById('safetyPrevious');
         const safetyNext = document.getElementById('safetyNext');
@@ -1776,36 +1901,109 @@ foreach ($activityDates as $activity) {
         let safetyCurrentPage = 1;
         const safetyPageSize = 5;
 
-        function renderSafetyBackups() {
+        let filteredSafetyRows = [...safetyRows];
 
-            if (!safetyRows.length || !safetyPrevious || !safetyNext) {
-                return;
-            }
+        function getFilteredSafetyBackups() {
 
-            const totalPages = Math.ceil(
-                safetyRows.length / safetyPageSize
+            // 1. FILTER BY CREATION PERIOD
+
+            const selectedPeriod = safetyDateFilter.value;
+            const now = Date.now();
+
+            filteredSafetyRows = safetyRows.filter(function(row) {
+
+                const createdAt = Number(row.dataset.date) * 1000;
+
+                if (selectedPeriod === 'all') {
+                    return true;
+                }
+
+                if (selectedPeriod === 'today') {
+
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    return createdAt >= today.getTime();
+                }
+
+                const days = Number(selectedPeriod);
+
+                if (!Number.isFinite(days)) {
+                    return true;
+                }
+
+                const cutoffDate = now - (days * 24 * 60 * 60 * 1000);
+
+                return createdAt >= cutoffDate;
+            });
+
+            // 2. SORT BY CREATION DATE
+
+            filteredSafetyRows.sort(function(a, b) {
+
+                const dateA = Number(a.dataset.date);
+                const dateB = Number(b.dataset.date);
+
+                return safetySort.value === 'oldest' ?
+                    dateA - dateB :
+                    dateB - dateA;
+            });
+
+            // 3. PAGINATION
+
+            const totalPages = Math.max(
+                1,
+                Math.ceil(filteredSafetyRows.length / safetyPageSize)
+            );
+
+            safetyCurrentPage = Math.min(
+                safetyCurrentPage,
+                totalPages
             );
 
             const startIndex = (safetyCurrentPage - 1) * safetyPageSize;
-            const endIndex = Math.min(
-                startIndex + safetyPageSize,
-                safetyRows.length
+
+            const pageRows = filteredSafetyRows.slice(
+                startIndex,
+                startIndex + safetyPageSize
             );
 
-            safetyRows.forEach(function(row, index) {
-                row.style.display =
-                    index >= startIndex && index < endIndex ? '' : 'none';
+            // Hide every row first.
+            safetyRows.forEach(function(row) {
+                row.style.display = 'none';
             });
 
+            // Display only the rows belonging to the current page.
+            pageRows.forEach(function(row) {
+
+                row.style.display = '';
+
+                // Reorder the table rows according to the selected sorting.
+                row.parentElement.appendChild(row);
+            });
+
+            // 4. UPDATE PAGINATION INFORMATION
+
+            const total = filteredSafetyRows.length;
+
+            const start = total === 0 ? 0 : startIndex + 1;
+
+            const end = Math.min(
+                startIndex + safetyPageSize,
+                total
+            );
+
             safetyPaginationInfo.textContent =
-                `Showing ${startIndex + 1}–${endIndex} of ${safetyRows.length} safety backups`;
+                `Showing ${start}–${end} of ${total} safety backups`;
 
             safetyPrevious.disabled = safetyCurrentPage <= 1;
             safetyNext.disabled = safetyCurrentPage >= totalPages;
 
+            // 5. GENERATE COMPACT PAGE NUMBERS
+
             safetyPageNumbers.innerHTML = '';
 
-            for (let page = 1; page <= totalPages; page++) {
+            function addSafetyPage(page) {
 
                 const button = document.createElement('button');
 
@@ -1818,36 +2016,104 @@ foreach ($activityDates as $activity) {
                 }
 
                 button.addEventListener('click', function() {
+
                     safetyCurrentPage = page;
-                    renderSafetyBackups();
+                    getFilteredSafetyBackups();
+
                 });
 
                 safetyPageNumbers.appendChild(button);
             }
+
+            function addSafetyEllipsis() {
+
+                const span = document.createElement('span');
+
+                span.textContent = '...';
+                span.className = 'backup-page-ellipsis';
+
+                safetyPageNumbers.appendChild(span);
+            }
+
+            if (totalPages <= 7) {
+
+                for (let page = 1; page <= totalPages; page++) {
+                    addSafetyPage(page);
+                }
+
+            } else {
+
+                addSafetyPage(1);
+
+                if (safetyCurrentPage > 4) {
+                    addSafetyEllipsis();
+                }
+
+                const start = Math.max(2, safetyCurrentPage - 1);
+                const end = Math.min(totalPages - 1, safetyCurrentPage + 1);
+
+                for (let page = start; page <= end; page++) {
+                    addSafetyPage(page);
+                }
+
+                if (safetyCurrentPage < totalPages - 3) {
+                    addSafetyEllipsis();
+                }
+
+                addSafetyPage(totalPages);
+            }
         }
+
+        // ==========================================
+        // SAFETY BACKUP CONTROL EVENTS
+        // ==========================================
 
         if (safetyRows.length > 0) {
 
+            safetySort.addEventListener('change', function() {
+
+                safetyCurrentPage = 1;
+                getFilteredSafetyBackups();
+
+            });
+
+            safetyDateFilter.addEventListener('change', function() {
+
+                safetyCurrentPage = 1;
+                getFilteredSafetyBackups();
+
+            });
+
             safetyPrevious.addEventListener('click', function() {
+
                 if (safetyCurrentPage > 1) {
+
                     safetyCurrentPage--;
-                    renderSafetyBackups();
+                    getFilteredSafetyBackups();
+
                 }
+
             });
 
             safetyNext.addEventListener('click', function() {
+
                 const totalPages = Math.ceil(
-                    safetyRows.length / safetyPageSize
+                    filteredSafetyRows.length / safetyPageSize
                 );
 
                 if (safetyCurrentPage < totalPages) {
+
                     safetyCurrentPage++;
-                    renderSafetyBackups();
+                    getFilteredSafetyBackups();
+
                 }
+
             });
 
-            renderSafetyBackups();
+            // Initial display
+            getFilteredSafetyBackups();
         }
+
         // ==========================================
         // SAFETY BACKUP SELECTION
         // ==========================================
