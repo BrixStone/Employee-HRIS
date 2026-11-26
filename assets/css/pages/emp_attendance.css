@@ -44,3 +44,17 @@
 .col-break { color: #f6c667; }
 .col-out { color: #fb7185; }
 .col-hours { color: var(--teal); }
+
+/* Shift status pills (same colours already used on this page) */
+.pill-open {
+  color: var(--teal);
+  background: rgba(118, 245, 232, .12);
+  border-color: rgba(118, 245, 232, .32);
+}
+
+.pill-pending {
+  margin-left: 6px;
+  color: #ffe6b0;
+  background: rgba(245, 158, 11, .14);
+  border-color: rgba(245, 158, 11, .4);
+}

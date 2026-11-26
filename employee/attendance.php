@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../classes/AttendanceService.php';
 
 date_default_timezone_set('Asia/Manila');
 
@@ -113,48 +114,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   if (!empty($orientationGate['locked']) && in_array($action, ['time_in', 'break_time', 'time_out'], true)) {
     $error = (string)$orientationGate['message'];
   } else {
-    // Check if employee already completed a shift today
-    $todayCheckStmt = $pdo->prepare("
-          SELECT id FROM attendance
-          WHERE email = :email
-          AND time_out IS NOT NULL
-          AND DATE(time_in) = CURRENT_DATE
-      ");
-    $todayCheckStmt->execute(['email' => $email]);
-    $alreadyWorkedToday = $todayCheckStmt->fetch();
+    // Shift lifecycle (stale shifts, MISSING_OUT, overtime) lives in AttendanceService.
+    $nowObj      = AttendanceService::now();
+    $currentTime = $nowObj->format('Y-m-d H:i:s');
+
+    $flaggedNote = static function (array $dates): string {
+      return $dates
+        ? ' Your previous shift on ' . implode(', ', $dates) . ' had no Time Out and was flagged as Missing Time Out for attendance correction.'
+        : '';
+    };
 
     if ($action === 'time_in') {
-      if ($alreadyWorkedToday) {
-        $error = "You have already completed your shift for today and cannot time in again.";
+      $result = AttendanceService::punchIn($pdo, (int)$employeeId, (string)$email, $nowObj);
+
+      if ($result['ok']) {
+        publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
+          'type'        => 'attendance.time_in',
+          'employee_id' => (int)$employeeId,
+          'employee'    => $employeeData['name'],
+          'time_in'     => $result['time_in'],
+        ]);
+
+        $message = "Successfully Timed In at " . $nowObj->format('h:i:s A') . "!" . $flaggedNote($result['flagged_dates']);
       } else {
-        $checkStmt = $pdo->prepare("SELECT id FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1");
-        $checkStmt->execute(['email' => $email]);
-
-        if ($checkStmt->fetch()) {
-          $error = "You already have an active shift or break. Please check your status.";
-        } else {
-          $insertStmt = $pdo->prepare("INSERT INTO attendance (employee_id, email, time_in) VALUES (:eid, :email, :time_in)");
-          $insertStmt->execute([
-            ':eid'     => $employeeId,
-            ':email'   => $email,
-            ':time_in' => $currentTime,
-          ]);
-
-          publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
-            'type'        => 'attendance.time_in',
-            'employee_id' => (int)$employeeId,
-            'employee'    => $employeeData['name'],
-            'time_in'     => $currentTime,
-          ]);
-
-          $message = "Successfully Timed In at " . date('h:i:s A') . "!";
-        }
+        $error = $result['message'] . $flaggedNote($result['flagged_dates']);
       }
     } elseif ($action === 'break_time') {
-      // MySQL quotes identifiers with backticks; "Break_Time" would be a string literal
-      $findStmt = $pdo->prepare('SELECT id, time_in, `Break_Time` FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
-      $findStmt->execute(['email' => $email]);
-      $activeShift = $findStmt->fetch();
+      $activeShift = AttendanceService::findActiveShift($pdo, (int)$employeeId, (string)$email, $nowObj);
 
       if (!$activeShift) {
         $error = "You must Time In first before taking a break.";
@@ -166,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($currentDecimalTime < 12.0 || $currentDecimalTime > 13.0) {
           $error = "Break time is only allowed between 12:00 PM and 1:00 PM. Current time is " . date('h:i A') . ".";
         } else {
+          // MySQL quotes identifiers with backticks; "Break_Time" would be a string literal
           $updateBreak = $pdo->prepare('UPDATE attendance SET `Break_Time` = :break_time WHERE id = :id');
           $updateBreak->execute(['break_time' => $currentTime, 'id' => $activeShift['id']]);
 
@@ -176,45 +163,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             'break_time'  => $currentTime,
           ]);
 
-          $message = "Break Time recorded successfully at " . date('h:i:s A') . ".";
+          $message = "Break Time recorded successfully at " . $nowObj->format('h:i:s A') . ".";
         }
       }
     } elseif ($action === 'time_out') {
-      $findStmt = $pdo->prepare('SELECT id, time_in, `Break_Time` FROM attendance WHERE email = :email AND time_out IS NULL ORDER BY time_in DESC LIMIT 1');
-      $findStmt->execute(['email' => $email]);
-      $activeShift = $findStmt->fetch();
+      $result = AttendanceService::punchOut($pdo, (int)$employeeId, (string)$email, $nowObj);
 
-      if (!$activeShift) {
-        $error = "No active shift found to Time Out.";
+      if (!$result['ok']) {
+        $error = $result['message'];
       } else {
-        $timeInObj = new DateTime($activeShift['time_in']);
-        $timeOutObj = new DateTime($currentTime);
-        $diffSeconds = $timeOutObj->getTimestamp() - $timeInObj->getTimestamp();
-        $hours = $diffSeconds / 3600;
-
-        // Subtract 1-hour break if break was recorded
-        if (!empty($activeShift['Break_Time'])) {
-          $hours -= 1.0;
-        }
-
-        $workhours = round(max(0, $hours), 2);
-
-        $updateStmt = $pdo->prepare("UPDATE attendance SET time_out = :time_out, workhours = :workhours WHERE id = :id");
-        $updateStmt->execute([
-          'time_out'  => $currentTime,
-          'workhours' => $workhours,
-          'id'        => $activeShift['id'],
-        ]);
+        $metrics   = $result['metrics'];
+        $workhours = $metrics['workhours'];
 
         publishRealtimeEvent(['hr', "employee:{$employeeId}"], [
-          'type'        => 'attendance.time_out',
-          'employee_id' => (int)$employeeId,
-          'employee'    => $employeeData['name'],
-          'time_out'    => $currentTime,
-          'workhours'   => $workhours,
+          'type'             => 'attendance.time_out',
+          'employee_id'      => (int)$employeeId,
+          'employee'         => $employeeData['name'],
+          'time_out'         => $currentTime,
+          'workhours'        => $workhours,
+          'overtime_minutes' => $metrics['overtime_minutes'],
+          'overtime_status'  => $metrics['overtime_status'],
         ]);
 
         $message = "Successfully Timed Out! Total Work Hours (excluding break): {$workhours} hrs.";
+        if ($metrics['overtime_minutes'] > 0) {
+          $message .= " Overtime of " . number_format($metrics['overtime_hours'], 2) . " hrs is pending approval.";
+        }
+        $message .= $flaggedNote($result['flagged_dates']);
       }
     }
   }
@@ -285,8 +260,12 @@ if (!$validPair) {
 }
 
 // ── Fetch attendance — always locked to this employee, filtered by cut-off
+// Flag any forgotten Time Out (MISSING_OUT) so the history below is current.
+AttendanceService::findActiveShift($pdo, (int)$employeeId, (string)$email);
+
 $historyStmt = $pdo->prepare('
-    SELECT id, created_at, email, time_in, `Break_Time`, time_out, workhours
+    SELECT id, created_at, email, time_in, `Break_Time`, time_out, workhours,
+           status, regular_hours, overtime_hours, overtime_status
     FROM attendance
     WHERE employee_id = :eid
       AND DATE(time_in) BETWEEN :start AND :end
@@ -392,17 +371,26 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
         <th>Break Time</th>
         <th>Time Out</th>
         <th>Work Hours</th>
+        <th>Regular</th>
+        <th>Overtime</th>
+        <th>Status</th>
       </tr>
     </thead>
     <tbody>
       <?php if (empty($attendanceLogs)): ?>
         <tr>
-          <td colspan="5">
+          <td colspan="8">
             <div class="empty-state"><span class="es-ico">◷</span>No attendance logs found yet.</div>
           </td>
         </tr>
       <?php else: ?>
         <?php foreach ($attendanceLogs as $log): ?>
+          <?php
+          $logStatus = AttendanceService::effectiveStatus($log);
+          $logHours  = AttendanceService::rowHours($log);
+          $statusPill = ['COMPLETED' => 'pill-active', 'OPEN' => 'pill-open', 'MISSING_OUT' => 'pill-inactive'][$logStatus];
+          $otLabel = str_replace('_', ' ', (string)($log['overtime_status'] ?? ''));
+          ?>
           <tr>
             <td><strong><?= date('M d, Y', strtotime($log['time_in'])) ?></strong></td>
             <td class="col-in"><?= date('h:i:s A', strtotime($log['time_in'])) ?></td>
@@ -410,9 +398,25 @@ require __DIR__ . '/../templates/employeeTemplates/header.php';
               <?= !empty($log['Break_Time']) ? date('h:i:s A', strtotime($log['Break_Time'])) : '<span class="muted">None</span>' ?>
             </td>
             <td class="col-out">
-              <?= !empty($log['time_out']) ? date('h:i:s A', strtotime($log['time_out'])) : '<span class="pill pill-neutral">Active…</span>' ?>
+              <?php if (!empty($log['time_out'])): ?>
+                <?= date('h:i:s A', strtotime($log['time_out'])) ?>
+              <?php elseif ($logStatus === 'MISSING_OUT'): ?>
+                <span class="pill pill-inactive">Missing</span>
+              <?php else: ?>
+                <span class="pill pill-neutral">Active…</span>
+              <?php endif; ?>
             </td>
             <td><strong class="col-hours"><?= $log['workhours'] !== null ? number_format($log['workhours'], 2) . ' hrs' : '—' ?></strong></td>
+            <td><?= $logStatus === 'COMPLETED' ? number_format($logHours['regular'], 2) . ' hrs' : '—' ?></td>
+            <td>
+              <?php if ($logHours['overtime'] > 0): ?>
+                <?= number_format($logHours['overtime'], 2) ?> hrs
+                <?php if ($otLabel !== ''): ?><span class="pill <?= ($log['overtime_status'] ?? '') === 'APPROVED' ? 'pill-active' : (($log['overtime_status'] ?? '') === 'REJECTED' ? 'pill-inactive' : 'pill-pending') ?>"><?= htmlspecialchars($otLabel) ?></span><?php endif; ?>
+              <?php else: ?>
+                <span class="muted">—</span>
+              <?php endif; ?>
+            </td>
+            <td><span class="pill <?= $statusPill ?>"><?= $logStatus ?></span></td>
           </tr>
         <?php endforeach; ?>
       <?php endif; ?>
