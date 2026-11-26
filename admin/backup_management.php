@@ -1008,6 +1008,11 @@ foreach ($activityDates as $activity) {
         <p id="restoreStatusDescription">
             Preparing database restoration...
         </p>
+        <div
+            id="restoreDelayNotice"
+            class="backup-restore-delay-notice"
+            hidden>
+        </div>
 
         <div class="backup-selected-file">
             <strong id="statusFilename"></strong>
@@ -1067,6 +1072,37 @@ foreach ($activityDates as $activity) {
 
     </div>
 
+</div>
+
+<!-- RESTORE RESULT MODAL -->
+<div class="backup-modal" id="restoreResultModal" aria-hidden="true">
+    <div class="backup-modal-overlay"></div>
+
+    <div
+        class="backup-modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restoreResultTitle">
+
+        <div class="backup-modal-icon success" id="restoreResultIcon">
+            <span id="restoreResultIconText">✓</span>
+        </div>
+
+        <h2 id="restoreResultTitle">Restore Completed</h2>
+
+        <p id="restoreResultMessage">
+            Database restoration completed and live database validation passed
+        </p>
+
+        <div class="backup-modal-actions">
+            <button
+                type="button"
+                class="backup-modal-cancel"
+                id="closeRestoreResult">
+                Close
+            </button>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1376,6 +1412,9 @@ foreach ($activityDates as $activity) {
         const statusDescription = document.getElementById(
             'restoreStatusDescription'
         );
+        const restoreDelayNotice = document.getElementById(
+            'restoreDelayNotice'
+        );
 
         const statusTitle = document.getElementById(
             'restoreStatusTitle'
@@ -1670,6 +1709,9 @@ foreach ($activityDates as $activity) {
 
         function resetRestoreStatus() {
 
+            restoreDelayNotice.hidden = true;
+            restoreDelayNotice.textContent = '';
+
             restoreFinished = false;
 
             statusTitle.textContent = 'Database Restore';
@@ -1829,28 +1871,24 @@ foreach ($activityDates as $activity) {
         // ==========================================
 
         function finishRestore(status, message) {
-
             restoreFinished = true;
 
-            closeStatusButton.disabled = false;
+            const resultModal = document.getElementById('restoreResultModal');
+            const resultIcon = document.getElementById('restoreResultIcon');
+            const resultIconText = document.getElementById('restoreResultIconText');
+            const resultTitle = document.getElementById('restoreResultTitle');
+            const resultMessage = document.getElementById('restoreResultMessage');
 
-            statusDescription.textContent = message;
-            finalResult.textContent = message;
-            finalResult.hidden = false;
+            const isSuccess = status === 'success';
 
-            if (status === 'success') {
+            const finalMessage = isSuccess ?
+                'Database restoration completed and live database validation passed' :
+                (message || 'Database restoration failed for an unknown reason.');
 
-                statusTitle.textContent = 'Restore Completed';
-
-                statusIcon.className = 'backup-modal-icon success';
-                statusIconText.textContent = '✓';
-
+            // Update progress stages before closing the progress modal.
+            if (isSuccess) {
                 stageItems.forEach(function(item) {
-
-                    if (item.dataset.stage !== 'rollback') {
-                        markStage(item, 'completed', 'Completed');
-                    }
-
+                    markStage(item, 'completed', 'Completed');
                 });
 
                 const rollbackItem = document.querySelector(
@@ -1858,29 +1896,13 @@ foreach ($activityDates as $activity) {
                 );
 
                 if (rollbackItem) {
-
-                    const label = rollbackItem.querySelector(
-                        '.restore-stage-label'
-                    );
+                    const label = rollbackItem.querySelector('.restore-stage-label');
 
                     if (label) {
                         label.textContent = 'Safety backup secured';
                     }
-
-                    markStage(
-                        rollbackItem,
-                        'completed',
-                        'Completed'
-                    );
                 }
-
             } else {
-
-                statusTitle.textContent = 'Restore Failed';
-
-                statusIcon.className = 'backup-modal-icon warning';
-                statusIconText.textContent = '!';
-
                 const activeStage = stageItems.find(function(item) {
                     return item.classList.contains('active');
                 });
@@ -1888,8 +1910,25 @@ foreach ($activityDates as $activity) {
                 if (activeStage) {
                     markStage(activeStage, 'failed', 'Failed');
                 }
-
             }
+
+            // Configure the separate result modal.
+            resultTitle.textContent = isSuccess ?
+                'Restore Completed' :
+                'Restore Failed';
+
+            resultMessage.textContent = finalMessage;
+
+            resultIcon.className = isSuccess ?
+                'backup-modal-icon success' :
+                'backup-modal-icon warning';
+
+            resultIconText.textContent = isSuccess ? '✓' : '!';
+
+            // Remove the progress modal and show the result modal.
+            closeModal(statusModal);
+
+            openModal(resultModal);
         }
 
         // ==========================================
@@ -1980,6 +2019,13 @@ foreach ($activityDates as $activity) {
 
             polling = true;
 
+            // The worker should update this timestamp through its heartbeat.
+            let lastProgressAt = Date.now();
+
+            // Prevent the same warning from being repeatedly displayed.
+            let slowWarningShown = false;
+            let stalledWarningShown = false;
+
             try {
 
                 while (!restoreFinished) {
@@ -2014,6 +2060,27 @@ foreach ($activityDates as $activity) {
                             data.message
                         );
 
+                        // Use the worker's timestamp to detect actual progress updates.
+                        if (data.updated_at) {
+
+                            const workerUpdatedAt = new Date(
+                                data.updated_at.replace(' ', 'T')
+                            ).getTime();
+
+                            if (
+                                !Number.isNaN(workerUpdatedAt) &&
+                                workerUpdatedAt > lastProgressAt
+                            ) {
+                                lastProgressAt = workerUpdatedAt;
+                                slowWarningShown = false;
+                                stalledWarningShown = false;
+
+                                restoreDelayNotice.hidden = true;
+                                restoreDelayNotice.textContent = '';
+                            }
+                        }
+
+                        // A terminal result always takes priority over warnings.
                         if (
                             data.status === 'success' ||
                             data.status === 'failed'
@@ -2035,8 +2102,40 @@ foreach ($activityDates as $activity) {
                         );
 
                         statusDescription.textContent =
-                            'Unable to retrieve the latest status. Retrying...';
+                            'Unable to retrieve the latest restore status. Retrying...';
 
+                        restoreDelayNotice.hidden = false;
+                        restoreDelayNotice.textContent =
+                            'The status server could not be reached. The restore may still be running. Please keep this page open while we retry.';
+
+                    }
+
+                    // Check how long it has been since the worker last updated progress.
+                    const secondsSinceUpdate =
+                        (Date.now() - lastProgressAt) / 1000;
+
+                    if (
+                        secondsSinceUpdate >= 30 &&
+                        !slowWarningShown
+                    ) {
+
+                        slowWarningShown = true;
+
+                        restoreDelayNotice.hidden = false;
+                        restoreDelayNotice.textContent =
+                            'This restoration is taking longer than expected. The database operation may still be running. Please wait while we continue checking its status.';
+                    }
+
+                    if (
+                        secondsSinceUpdate >= 60 &&
+                        !stalledWarningShown
+                    ) {
+
+                        stalledWarningShown = true;
+
+                        restoreDelayNotice.hidden = false;
+                        restoreDelayNotice.textContent =
+                            'No worker update has been received for over a minute. The restore may be delayed or the worker may have stopped. Do not start another restore yet. You can close this window and check the restore status again later.';
                     }
 
                     await wait(1500);
@@ -2053,15 +2152,24 @@ foreach ($activityDates as $activity) {
         // CLOSE STATUS MODAL
         // ==========================================
 
-        closeStatusButton.addEventListener('click', function() {
+        const restoreResultModal = document.getElementById(
+            'restoreResultModal'
+        );
 
-            if (!restoreFinished) {
-                return;
-            }
+        const closeRestoreResultButton = document.getElementById(
+            'closeRestoreResult'
+        );
 
-            closeModal(statusModal);
+        const restoreResultTitle = document.getElementById(
+            'restoreResultTitle'
+        );
 
-            if (statusTitle.textContent === 'Restore Completed') {
+        closeRestoreResultButton.addEventListener('click', function() {
+
+            closeModal(restoreResultModal);
+
+            // Reload only when the restoration was successful.
+            if (restoreResultTitle.textContent === 'Restore Completed') {
                 window.location.reload();
             }
 
