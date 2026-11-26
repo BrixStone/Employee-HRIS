@@ -1398,3 +1398,63 @@ body.modal-open {
         margin-bottom: 16px !important;
     }
 }
+/* ==========================================
+   BACKUP MODAL STACKING ORDER
+========================================== */
+
+.backup-modal.backup-list-modal-wrapper {
+    z-index: 10000;
+}
+
+#restoreConfirmationModal,
+#restoreStatusModal {
+    z-index: 11000;
+}
+
+#backupResultModal {
+    z-index: 12000;
+}
+.backup-restore-delay-notice {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(214, 164, 93, 0.35);
+    border-radius: 8px;
+    background: rgba(214, 164, 93, 0.10);
+    color: #D6A45D;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.backup-restore-delay-notice[hidden] {
+    display: none;
+}
+/* ==========================================
+   HIDE BACKUP TABLE SCROLLBARS
+========================================== */
+
+#backupHistory .backup-table-wrapper,
+#safetyBackups .backup-table-wrapper {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#backupHistory .backup-table-wrapper::-webkit-scrollbar,
+#safetyBackups .backup-table-wrapper::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+/* Hide modal content scrollbar while preserving scrolling */
+#backupHistoryModal .backup-list-modal,
+#safetyBackupsModal .backup-list-modal {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#backupHistoryModal .backup-list-modal::-webkit-scrollbar,
+#safetyBackupsModal .backup-list-modal::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
