@@ -85,6 +85,7 @@ EMPLOYEE TEAM LEADER SIDE AND MANAGER SIDE           ---------- Dapat imo rank n
             Pay History
                 {
                     awa ang status sa naka pending dapat paid nana siya or unsa man ganii
+                    (Changes: made it so that the status changes depending on the status of the payslip "Paid")
                 }
         }
 
@@ -93,11 +94,13 @@ EMPLOYEE TEAM LEADER SIDE AND MANAGER SIDE           ---------- Dapat imo rank n
             Pending Leave Request
                 {
                     ang approve niya nay error fix nya
+                    (Changes: Fixed the error)
                 }
         }
 
     ADD      ## enter nasad ni sa tanan 
         employee rank, naa tay rank sa employee {employee, team leader, manager} add lang sag na mu indicate na kani siya kay team leader or manager or employee
+        (Changes: Added Succesfully)
 
 }
 
@@ -108,6 +111,7 @@ HR SIDE
                 Leave Management
                     {
                         sa leave balances dapat naka search na siya dili naka dropdown and either EMP-### sa employee ang e search or ilahang name para ma check ilahang balance
+                        (Changes: Chenged into a search bar instead of a drop box and your now able to search names of employees)
                     }
 
             }

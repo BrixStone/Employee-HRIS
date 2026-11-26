@@ -387,8 +387,8 @@ body.is-leaving .main {
 .topbar {
     position: sticky;
     top: 0;
-    height: 80px;
-    padding: 0 34px;
+    min-height: 88px;
+    padding: 14px 34px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -403,11 +403,16 @@ body.is-leaving .main {
 .topbar-title {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
 }
 
 .topbar-title strong {
     font-size: 18px;
+    line-height: 1.3;
+}
+
+.topbar-title .muted {
+    line-height: 1.4;
 }
 
 .eyebrow {
@@ -420,7 +425,8 @@ body.is-leaving .main {
 
 .topbar .eyebrow {
     margin: 0;
-    font-size: 9px;
+    font-size: 10px;
+    line-height: 1.3;
 }
 
 .topbar-actions {

@@ -15,6 +15,7 @@
    5. SECTION: HOLIDAY LIST         the upcoming-holidays list
    6. SECTION: QUICK ACTIONS + PAYSLIP
    7. SECTION: RESPONSIVE           changes for small screens / phones
+   8-14. BANNER BADGES, KPI STRIP, CHARTS, RECENT TABLE, CALENDAR, UPDATES, RESPONSIVE (widgets)
    ===================================================================== */
 
 @import url("../hris-base.css");
@@ -343,5 +344,339 @@
 
   .hero-banner {
     padding: 24px 20px;
+  }
+}
+
+/* =====================================================================
+   8. SECTION: BANNER BADGES
+   Alert / live badges inside the welcome banner.
+   ===================================================================== */
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hero-badge-live {
+  color: var(--teal);
+  background: rgba(118, 245, 232, .12);
+  border-color: rgba(118, 245, 232, .32);
+}
+
+.hero-badge-alert {
+  color: #ffb4b4;
+  background: rgba(239, 68, 68, .14);
+  border-color: rgba(239, 68, 68, .35);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 0 rgba(118, 245, 232, .6);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  70%  { box-shadow: 0 0 0 8px rgba(118, 245, 232, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(118, 245, 232, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+
+
+/* =====================================================================
+   9. SECTION: KPI STRIP
+   Four summary cards that fit the main column.
+   ===================================================================== */
+
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.kpi-strip .metric-number {
+  font-size: 28px;
+}
+
+
+/* =====================================================================
+   10. SECTION: CHARTS
+   Daily hours bar chart and attendance breakdown doughnut.
+   ===================================================================== */
+
+.chart-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.chart-box {
+  margin: 0;
+  padding: 14px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+}
+
+.chart-box figcaption {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-canvas {
+  position: relative;
+  height: 260px;
+}
+
+
+/* =====================================================================
+   11. SECTION: RECENT ATTENDANCE TABLE + STATUS PILLS
+   ===================================================================== */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.col-in { color: var(--green); }
+.col-out { color: var(--danger); }
+
+.pill-open {
+  color: var(--teal);
+  background: rgba(118, 245, 232, .12);
+  border-color: rgba(118, 245, 232, .32);
+}
+
+.pill-pending {
+  margin-left: 6px;
+  color: #ffe6b0;
+  background: rgba(245, 158, 11, .14);
+  border-color: rgba(245, 158, 11, .4);
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+
+/* =====================================================================
+   12. SECTION: CALENDAR WIDGET
+   Month grid with date selection and a detail line for the chosen day.
+   ===================================================================== */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cal-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.cal-head .cal-nav {
+  min-height: 32px;
+  width: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cal-dow span {
+  padding: 4px 0 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cal-grid .cal-day {
+  position: relative;
+  min-height: 40px;
+  padding: 4px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cal-grid .cal-day:hover {
+  filter: none;
+  background: rgba(118, 245, 232, .08);
+}
+
+.cal-grid .cal-day.is-today {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.cal-grid .cal-day.is-selected {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #07122b;
+}
+
+.cal-day:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.cal-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+
+.cal-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot-present { background: var(--green); }
+.dot-missing { background: var(--danger); }
+.dot-holiday { background: #f6c667; }
+.dot-leave   { background: var(--violet); }
+
+.cal-day.is-selected .cal-dot {
+  box-shadow: 0 0 0 1px #07122b;
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cal-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-detail {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+  font-size: 13px;
+}
+
+.cal-detail-date {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.cal-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+
+/* =====================================================================
+   13. SECTION: UPDATES LIST
+   ===================================================================== */
+
+.update-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.update-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(10, 14, 32, .4);
+}
+
+.update-ico {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--line);
+}
+
+.update-item strong {
+  display: block;
+  font-size: 13px;
+}
+
+.update-item small {
+  display: block;
+  margin-top: 2px;
+}
+
+
+/* =====================================================================
+   14. SECTION: RESPONSIVE (new widgets)
+   ===================================================================== */
+
+@media (max-width: 1100px) {
+  .chart-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .split-row {
+    grid-template-columns: 1fr;
   }
 }

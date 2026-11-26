@@ -1,6 +1,7 @@
 <?php
 // classes/Payroll.php
 require_once __DIR__ . '/../classes/AuditLogger.php';
+require_once __DIR__ . '/AttendanceService.php';
 
 
 class Payroll
@@ -395,10 +396,20 @@ class Payroll
         string $startDate,
         string $endDate
     ): array {
+        AttendanceService::ensureSchema($this->pdo);
+
+        // Overtime: only APPROVED overtime is paid. Rows recorded before overtime
+        // tracking (overtime_status IS NULL) keep the old rule, hours over the standard.
         $stmt = $this->pdo->prepare("
             SELECT
                 COUNT(DISTINCT DATE(time_in))                                    AS days_worked,
-                COALESCE(SUM(GREATEST(workhours - :std1, 0)), 0)                 AS ot_hours,
+                COALESCE(SUM(
+                    CASE
+                        WHEN overtime_status = 'APPROVED' THEN COALESCE(overtime_hours, 0)
+                        WHEN overtime_status IS NULL      THEN GREATEST(COALESCE(workhours, 0) - :std1, 0)
+                        ELSE 0
+                    END
+                ), 0)                                                            AS ot_hours,
                 COALESCE(SUM(
                     CASE
                         WHEN TIME(time_in) > :cutoff

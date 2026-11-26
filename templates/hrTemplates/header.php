@@ -486,7 +486,7 @@ $navHome = function_exists('role_home')
             display: flex;
             flex-direction: column;
             min-width: 0;
-            gap: 2px;
+            gap: 6px;
         }
 
         .title-row {

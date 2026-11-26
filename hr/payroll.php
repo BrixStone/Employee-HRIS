@@ -131,6 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           ? (float)$rates['withholding tax']['rate'] / 100
           : 0.00;
 
+        // Overtime columns must exist before the attendance queries below.
+        AttendanceService::ensureSchema($pdo);
+
         $salaryRows = $payroll->getAllSalaries();
 
         $generated = 0;
@@ -222,7 +225,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $overtimeStatement = $pdo->prepare(
               "SELECT
                   COALESCE(
-                    SUM(GREATEST(workhours - 8, 0)),
+                    SUM(
+                      CASE
+                        WHEN overtime_status = 'APPROVED' THEN COALESCE(overtime_hours, 0)
+                        WHEN overtime_status IS NULL THEN GREATEST(COALESCE(workhours, 0) - 8, 0)
+                        ELSE 0
+                      END
+                    ),
                     0
                   ) AS overtime_hours
                FROM attendance
