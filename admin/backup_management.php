@@ -381,28 +381,66 @@ foreach ($activityDates as $activity) {
 
     <?php if ($backupFlash): ?>
 
-        <div class="backup-message <?= htmlspecialchars(
-                                        $backupFlash['type'] ?? 'info',
-                                        ENT_QUOTES,
-                                        'UTF-8'
-                                    ) ?>">
+        <?php
+        $flashType = $backupFlash['type'] ?? 'info';
+        $flashSuccess = $flashType === 'success';
+        ?>
 
-            <?= htmlspecialchars(
-                $backupFlash['message'] ?? '',
-                ENT_QUOTES,
-                'UTF-8'
-            ) ?>
+        <div
+            class="backup-modal"
+            id="backupCreationResultModal"
+            aria-hidden="true">
 
-            <?php if (!empty($backupFlash['filename'])): ?>
+            <div class="backup-modal-overlay"></div>
+
+            <div
+                class="backup-modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="backupCreationResultTitle">
+
+                <div class="backup-modal-icon <?= $flashSuccess ? 'success' : 'warning' ?>">
+                    <?php if ($flashSuccess): ?>
+                        <i class="fas fa-check"></i>
+                    <?php else: ?>
+                        <i class="fas fa-exclamation-triangle"></i>
+                    <?php endif; ?>
+                </div>
+
+                <h2 id="backupCreationResultTitle">
+                    <?= $flashSuccess ? 'Backup Created Successfully' : 'Backup Creation Failed' ?>
+                </h2>
+
                 <p>
-                    File:
                     <?= htmlspecialchars(
-                        $backupFlash['filename'],
+                        $backupFlash['message'] ?? '',
                         ENT_QUOTES,
                         'UTF-8'
                     ) ?>
                 </p>
-            <?php endif; ?>
+
+                <?php if (!empty($backupFlash['filename'])): ?>
+                    <div class="backup-selected-file">
+                        <strong>
+                            <?= htmlspecialchars(
+                                $backupFlash['filename'],
+                                ENT_QUOTES,
+                                'UTF-8'
+                            ) ?>
+                        </strong>
+                    </div>
+                <?php endif; ?>
+
+                <div class="backup-modal-actions">
+                    <button
+                        type="button"
+                        class="backup-modal-confirm"
+                        id="closeBackupCreationResult">
+                        Close
+                    </button>
+                </div>
+
+            </div>
 
         </div>
 
@@ -853,6 +891,36 @@ foreach ($activityDates as $activity) {
                         </table>
 
                     </div>
+                    <!-- Safety Backup Pagination -->
+                    <div class="backup-table-footer">
+
+                        <div class="backup-pagination-info">
+                            <span id="safetyPaginationInfo">
+                                Showing 0–0 of 0 safety backups
+                            </span>
+                        </div>
+
+                        <div class="backup-pagination">
+
+                            <button
+                                type="button"
+                                id="safetyPrevious"
+                                class="backup-page-button">
+                                Previous
+                            </button>
+
+                            <span id="safetyPageNumbers"></span>
+
+                            <button
+                                type="button"
+                                id="safetyNext"
+                                class="backup-page-button">
+                                Next
+                            </button>
+
+                        </div>
+
+                    </div>
 
                 <?php endif; ?>
 
@@ -1230,6 +1298,29 @@ foreach ($activityDates as $activity) {
 
             modal.classList.remove('show');
             modal.setAttribute('aria-hidden', 'true');
+        }
+        // ==========================================
+        // BACKUP CREATION RESULT MODAL
+        // ==========================================
+
+        const backupCreationResultModal = document.getElementById(
+            'backupCreationResultModal'
+        );
+
+        const closeBackupCreationResult = document.getElementById(
+            'closeBackupCreationResult'
+        );
+
+        // Automatically show the result after page reload.
+        if (backupCreationResultModal) {
+            openModal(backupCreationResultModal);
+        }
+
+        // Close the backup creation result.
+        if (closeBackupCreationResult) {
+            closeBackupCreationResult.addEventListener('click', function() {
+                closeModal(backupCreationResultModal);
+            });
         }
 
         // ==========================================
@@ -1666,6 +1757,97 @@ foreach ($activityDates as $activity) {
             getVisibleBackups();
         }
 
+
+        // ==========================================
+        // SAFETY BACKUP PAGINATION
+        // ==========================================
+
+        const safetyRows = Array.from(
+            document.querySelectorAll(
+                '#safetyBackups table tbody tr'
+            )
+        );
+
+        const safetyPrevious = document.getElementById('safetyPrevious');
+        const safetyNext = document.getElementById('safetyNext');
+        const safetyPageNumbers = document.getElementById('safetyPageNumbers');
+        const safetyPaginationInfo = document.getElementById('safetyPaginationInfo');
+
+        let safetyCurrentPage = 1;
+        const safetyPageSize = 5;
+
+        function renderSafetyBackups() {
+
+            if (!safetyRows.length || !safetyPrevious || !safetyNext) {
+                return;
+            }
+
+            const totalPages = Math.ceil(
+                safetyRows.length / safetyPageSize
+            );
+
+            const startIndex = (safetyCurrentPage - 1) * safetyPageSize;
+            const endIndex = Math.min(
+                startIndex + safetyPageSize,
+                safetyRows.length
+            );
+
+            safetyRows.forEach(function(row, index) {
+                row.style.display =
+                    index >= startIndex && index < endIndex ? '' : 'none';
+            });
+
+            safetyPaginationInfo.textContent =
+                `Showing ${startIndex + 1}–${endIndex} of ${safetyRows.length} safety backups`;
+
+            safetyPrevious.disabled = safetyCurrentPage <= 1;
+            safetyNext.disabled = safetyCurrentPage >= totalPages;
+
+            safetyPageNumbers.innerHTML = '';
+
+            for (let page = 1; page <= totalPages; page++) {
+
+                const button = document.createElement('button');
+
+                button.type = 'button';
+                button.textContent = page;
+                button.className = 'backup-page-button';
+
+                if (page === safetyCurrentPage) {
+                    button.classList.add('active');
+                }
+
+                button.addEventListener('click', function() {
+                    safetyCurrentPage = page;
+                    renderSafetyBackups();
+                });
+
+                safetyPageNumbers.appendChild(button);
+            }
+        }
+
+        if (safetyRows.length > 0) {
+
+            safetyPrevious.addEventListener('click', function() {
+                if (safetyCurrentPage > 1) {
+                    safetyCurrentPage--;
+                    renderSafetyBackups();
+                }
+            });
+
+            safetyNext.addEventListener('click', function() {
+                const totalPages = Math.ceil(
+                    safetyRows.length / safetyPageSize
+                );
+
+                if (safetyCurrentPage < totalPages) {
+                    safetyCurrentPage++;
+                    renderSafetyBackups();
+                }
+            });
+
+            renderSafetyBackups();
+        }
         // ==========================================
         // SAFETY BACKUP SELECTION
         // ==========================================
@@ -1926,8 +2108,19 @@ foreach ($activityDates as $activity) {
             resultIconText.textContent = isSuccess ? '✓' : '!';
 
             // Remove the progress modal and show the result modal.
+            // Close the backup list modals first.
+            closeModal(
+                document.getElementById('backupHistoryModal')
+            );
+
+            closeModal(
+                document.getElementById('safetyBackupsModal')
+            );
+
+            // Close the restore progress modal.
             closeModal(statusModal);
 
+            // Show the success or failure result modal.
             openModal(resultModal);
         }
 
