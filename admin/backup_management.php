@@ -12,9 +12,54 @@ if (!Rbac::canManageBackups($account['role'] ?? '')) {
     );
 }
 
+
 $cssPage = 'backup_management';
 
+require_once __DIR__ . '/../config/database.php';
+
+$backupSettings = [
+    'enabled' => 1,
+    'frequency' => 'daily',
+    'backup_minute' => 0,
+    'backup_time' => '02:00',
+    'backup_day' => 1,
+    'retention_days' => 30,
+];
+
+try {
+    $stmt = $pdo->query("
+        SELECT
+            enabled,
+            frequency,
+            backup_minute,
+            backup_time,
+            backup_day,
+            retention_days
+        FROM backup_settings
+        WHERE id = 1
+        LIMIT 1
+    ");
+
+    $savedSettings = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($savedSettings) {
+        $backupSettings = array_merge(
+            $backupSettings,
+            $savedSettings
+        );
+
+        $backupSettings['backup_time'] = substr(
+            $backupSettings['backup_time'],
+            0,
+            5
+        );
+    }
+} catch (PDOException $e) {
+    error_log('Unable to load backup settings: ' . $e->getMessage());
+}
+
 require __DIR__ . '/../templates/adminTemplates/header.php';
+
 
 // Flash message
 $backupFlash = $_SESSION['backup_flash'] ?? null;
@@ -318,6 +363,28 @@ foreach ($activityDates as $activity) {
 
                     <span>
                         View History
+                        <i class="fas fa-arrow-right"></i>
+                    </span>
+                </div>
+
+            </button>
+
+            <!-- OPEN AUTOMATIC BACKUP PLAN MODAL -->
+            <button
+                type="button"
+                class="backup-navigation-card"
+                data-open-modal="automaticBackupPlanModal">
+
+                <div class="backup-navigation-icon history-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+
+                <div class="backup-navigation-content">
+                    <h3>Manage Automatic Backup Plan</h3>
+                    <p>Configure automatic backup schedules and retention settings.</p>
+
+                    <span>
+                        Manage Schedule
                         <i class="fas fa-arrow-right"></i>
                     </span>
                 </div>
@@ -972,6 +1039,214 @@ foreach ($activityDates as $activity) {
 
     </div>
 
+    <!-- ======================================
+     MANAGE AUTOMATIC BACKUP PLAN MODAL
+======================================= -->
+
+    <div
+        class="backup-modal"
+        id="automaticBackupPlanModal"
+        aria-hidden="true">
+
+        <div class="backup-modal-overlay" data-close-modal></div>
+
+        <div
+            class="backup-modal-content backup-plan-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="automaticBackupPlanTitle">
+
+            <div class="backup-list-modal-header">
+                <div>
+                    <h2 id="automaticBackupPlanTitle">
+                        Manage Automatic Backup Plan
+                    </h2>
+                    <p>Configure when your HRIS database backups run automatically.</p>
+                </div>
+
+                <button
+                    type="button"
+                    data-close-modal
+                    class="backup-list-close"
+                    aria-label="Close automatic backup plan">
+
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+
+            <form
+                id="automaticBackupPlanForm"
+                action="/admin/backup/save_settings.php"
+                method="POST">
+
+                <?= csrf_field() ?>
+
+                <div class="backup-plan-content">
+
+                    <!-- ENABLE / DISABLE -->
+                    <div class="backup-plan-enable">
+                        <div>
+                            <strong>Automatic Backups</strong>
+                            <p>Enable or disable scheduled database backups.</p>
+                        </div>
+
+                        <label class="backup-plan-switch">
+                            <input type="hidden" name="enabled" value="0">
+
+                            <input
+                                type="checkbox"
+                                id="automaticBackupEnabled"
+                                name="enabled"
+                                value="1"
+                                <?= (int) $backupSettings['enabled'] === 1 ? 'checked' : '' ?>>
+
+                            <span class="backup-plan-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- FREQUENCY -->
+                    <div class="backup-plan-field">
+                        <label for="backupFrequency">Backup Frequency</label>
+
+                        <select id="backupFrequency" name="frequency">
+                            <option
+                                value="hourly"
+                                <?= $backupSettings['frequency'] === 'hourly' ? 'selected' : '' ?>>
+                                Hourly
+                            </option>
+
+                            <option
+                                value="daily"
+                                <?= $backupSettings['frequency'] === 'daily' ? 'selected' : '' ?>>
+                                Daily
+                            </option>
+
+                            <option
+                                value="weekly"
+                                <?= $backupSettings['frequency'] === 'weekly' ? 'selected' : '' ?>>
+                                Weekly
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- HOURLY SETTINGS -->
+                    <div
+                        class="backup-plan-field"
+                        id="hourlySettings"
+                        hidden>
+
+                        <label for="backupMinute">Minute of the Hour</label>
+
+                        <select id="backupMinute" name="backup_minute">
+                            <?php foreach ([0, 15, 30, 45] as $minute): ?>
+                                <option
+                                    value="<?= $minute ?>"
+                                    <?= (int) $backupSettings['backup_minute'] === $minute ? 'selected' : '' ?>>
+                                    At minute <?= str_pad((string) $minute, 2, '0', STR_PAD_LEFT) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <small>
+                            Example: Selecting 30 runs backups at 1:30, 2:30, 3:30, and so on.
+                        </small>
+                    </div>
+
+                    <!-- DAILY / WEEKLY TIME -->
+                    <div
+                        class="backup-plan-field"
+                        id="backupTimeSettings">
+
+                        <label for="backupTime">Backup Time</label>
+
+                        <input
+                            type="time"
+                            id="backupTime"
+                            name="backup_time"
+                            value="<?= htmlspecialchars($backupSettings['backup_time'], ENT_QUOTES, 'UTF-8') ?>">
+                    </div>
+
+                    <!-- WEEKLY SETTINGS -->
+                    <div
+                        class="backup-plan-field"
+                        id="weeklySettings"
+                        hidden>
+
+                        <label for="backupDay">Backup Day</label>
+
+                        <select id="backupDay" name="backup_day">
+                            <?php
+                            $days = [
+                                1 => 'Monday',
+                                2 => 'Tuesday',
+                                3 => 'Wednesday',
+                                4 => 'Thursday',
+                                5 => 'Friday',
+                                6 => 'Saturday',
+                                7 => 'Sunday',
+                            ];
+
+                            foreach ($days as $dayNumber => $dayName):
+                            ?>
+                                <option
+                                    value="<?= $dayNumber ?>"
+                                    <?= (int) $backupSettings['backup_day'] === $dayNumber ? 'selected' : '' ?>>
+                                    <?= $dayName ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- RETENTION -->
+                    <div class="backup-plan-field">
+                        <label for="backupRetention">Retention Period</label>
+
+                        <select id="backupRetention" name="retention_days">
+                            <?php foreach ([7, 14, 30, 60, 90] as $days): ?>
+                                <option
+                                    value="<?= $days ?>"
+                                    <?= (int) $backupSettings['retention_days'] === $days ? 'selected' : '' ?>>
+                                    <?= $days ?> days
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <small>
+                            Normal automatic backups older than this period will be deleted.
+                        </small>
+                    </div>
+
+                    <div class="backup-plan-timezone">
+                        <i class="fas fa-globe"></i>
+                        <span>Schedule timezone: Asia/Manila (Philippines)</span>
+                    </div>
+
+                </div>
+
+                <div class="backup-modal-actions">
+                    <button
+                        type="button"
+                        class="backup-modal-cancel"
+                        data-close-modal>
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="backup-modal-confirm"
+                        id="saveBackupPlanButton">
+                        <i class="fas fa-save"></i>
+                        Save Changes
+                    </button>
+                </div>
+
+            </form>
+
+
+        </div>
+    </div>
+
 </div>
 
 <!-- ======================================
@@ -1341,6 +1616,45 @@ foreach ($activityDates as $activity) {
             modal.classList.remove('show');
             modal.setAttribute('aria-hidden', 'true');
         }
+
+
+        // ==========================================
+        // AUTOMATIC BACKUP PLAN MODAL
+        // ==========================================
+
+        const backupFrequency = document.getElementById('backupFrequency');
+
+        const hourlySettings = document.getElementById('hourlySettings');
+        const backupTimeSettings = document.getElementById('backupTimeSettings');
+        const weeklySettings = document.getElementById('weeklySettings');
+
+        const automaticBackupEnabled = document.getElementById(
+            'automaticBackupEnabled'
+        );
+
+        const automaticBackupPlanForm = document.getElementById(
+            'automaticBackupPlanForm'
+        );
+
+        function updateBackupFrequencyFields() {
+
+            const frequency = backupFrequency.value;
+
+            hourlySettings.hidden = frequency !== 'hourly';
+
+            backupTimeSettings.hidden = frequency === 'hourly';
+
+            weeklySettings.hidden = frequency !== 'weekly';
+        }
+
+        backupFrequency.addEventListener(
+            'change',
+            updateBackupFrequencyFields
+        );
+
+        // Display the correct fields when the modal/page loads.
+        updateBackupFrequencyFields();
+
         // ==========================================
         // BACKUP CREATION RESULT MODAL
         // ==========================================
