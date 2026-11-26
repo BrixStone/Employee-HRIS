@@ -1414,3 +1414,17 @@ body.modal-open {
 #backupResultModal {
     z-index: 12000;
 }
+.backup-restore-delay-notice {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(214, 164, 93, 0.35);
+    border-radius: 8px;
+    background: rgba(214, 164, 93, 0.10);
+    color: #D6A45D;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.backup-restore-delay-notice[hidden] {
+    display: none;
+}
