@@ -14,6 +14,7 @@ POLL_INTERVAL=2
 BACKUP_RESULT_FILENAME=""
 SAFETY_BACKUP_FILENAME=""
 CURRENT_RESTORE_REQUEST_ID=""
+RESTORE_HEARTBEAT_PID=""
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
@@ -413,6 +414,48 @@ write_request_progress() {
 
     mv "$temp_file" "$progress_file"
 }
+start_restore_heartbeat() {
+    local request_id="$1"
+    local progress_file="${REQUEST_DIR}/${request_id}.progress"
+
+    (
+        while true; do
+            sleep 10
+
+            [[ -f "$progress_file" ]] || continue
+
+            local status
+            local stage
+            local message
+            local temp_file
+
+            status=$(sed -n 's/^status=//p' "$progress_file" | head -n 1)
+            stage=$(sed -n 's/^stage=//p' "$progress_file" | head -n 1)
+            message=$(sed -n 's/^message=//p' "$progress_file" | head -n 1)
+
+            temp_file="${progress_file}.heartbeat.$$"
+
+            {
+                printf 'status=%s\n' "$status"
+                printf 'stage=%s\n' "$stage"
+                printf 'message=%s\n' "$message"
+                printf 'updated_at=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+            } > "$temp_file"
+
+            mv "$temp_file" "$progress_file"
+        done
+    ) &
+
+    RESTORE_HEARTBEAT_PID=$!
+}
+
+stop_restore_heartbeat() {
+    if [[ -n "$RESTORE_HEARTBEAT_PID" ]]; then
+        kill "$RESTORE_HEARTBEAT_PID" 2>/dev/null || true
+        wait "$RESTORE_HEARTBEAT_PID" 2>/dev/null || true
+        RESTORE_HEARTBEAT_PID=""
+    fi
+}
 
 
 
@@ -774,11 +817,20 @@ process_live_restore_requests() {
 
         log "Live restore request received: ${request_id}"
 
-        if perform_live_restore "$request_id" "$filename"; then
-            log "Live restore request completed: ${request_id}"
-        else
-            log "Live restore request failed: ${request_id}"
-        fi
+write_request_progress \
+    "$request_id" \
+    "queued" \
+    "Restore request is being processed."
+
+start_restore_heartbeat "$request_id"
+
+if perform_live_restore "$request_id" "$filename"; then
+    stop_restore_heartbeat
+    log "Live restore request completed: ${request_id}"
+else
+    stop_restore_heartbeat
+    log "Live restore request failed: ${request_id}"
+fi
 
         rm -f "$processing_file"
     done
