@@ -183,6 +183,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- LOGIN CARD -->
             <div class="login-container">
+                <div class="login-showcase" role="region" aria-label="HRIS information carousel" aria-roledescription="carousel" tabindex="0">
+                    <div class="showcase-orbit"></div>
+                    <div class="showcase-window">
+                        <div class="showcase-window-header">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <div class="showcase-window-body">
+                            <div class="showcase-sidebar">
+                                <i></i><i></i><i></i>
+                            </div>
+                            <div class="showcase-content">
+                                <b>HR Dashboard</b>
+                                <div class="showcase-metrics">
+                                    <span></span><span></span><span></span>
+                                </div>
+                                <div class="showcase-table">
+                                    <i></i><i></i><i></i><i></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="showcase-copy">
+                        <div class="showcase-slides" aria-live="polite">
+                            <article class="showcase-slide is-active" aria-hidden="false">
+                                <span class="showcase-eyebrow">EMPLOYEE EXPERIENCE</span>
+                                <h2>Welcome to HRIS</h2>
+                                <p>Access your HR services and manage your information, all in one place.</p>
+                            </article>
+                            <article class="showcase-slide" aria-hidden="true">
+                                <span class="showcase-eyebrow">YOUR WORKDAY</span>
+                                <h2>Track Your Attendance</h2>
+                                <p>View your attendance and leave history whenever you need it.</p>
+                            </article>
+                            <article class="showcase-slide" aria-hidden="true">
+                                <span class="showcase-eyebrow">HR SERVICES</span>
+                                <h2>Everything in one place</h2>
+                                <p>Request leave, view payslips, and access the services that support your work.</p>
+                            </article>
+                            <article class="showcase-slide" aria-hidden="true">
+                                <span class="showcase-eyebrow">YOUR INFORMATION</span>
+                                <h2>Manage Your Profile</h2>
+                                <p>Keep your personal and employment information up to date.</p>
+                            </article>
+                        </div>
+                        <div class="showcase-controls">
+                            <button class="showcase-arrow showcase-previous" type="button" aria-label="Previous slide">
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="m15 18-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
+                            <div class="showcase-dots" role="group" aria-label="Choose a slide">
+                                <button class="is-active" type="button" aria-label="Show slide 1" aria-current="true"></button>
+                                <button type="button" aria-label="Show slide 2"></button>
+                                <button type="button" aria-label="Show slide 3"></button>
+                                <button type="button" aria-label="Show slide 4"></button>
+                            </div>
+                            <button class="showcase-arrow showcase-next" type="button" aria-label="Next slide">
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="right-signin-card">
 
                     <div class="signin-header">
@@ -452,6 +518,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 toggle.classList.toggle('is-visible', !showing);
                 input.focus();
             });
+        })();
+
+        (function() {
+                var carousel = document.querySelector('.login-showcase');
+                if (!carousel) {
+                    return;
+                }
+
+                var slides = Array.prototype.slice.call(carousel.querySelectorAll('.showcase-slide'));
+                var dots = Array.prototype.slice.call(carousel.querySelectorAll('.showcase-dots button'));
+                var previous = carousel.querySelector('.showcase-previous');
+                var next = carousel.querySelector('.showcase-next');
+                var activeIndex = 0;
+                var touchStartX = null;
+
+                function showSlide(index, direction) {
+                    carousel.classList.toggle('is-reversing', direction < 0);
+                    activeIndex = (index + slides.length) % slides.length;
+
+                    slides.forEach(function(slide, slideIndex) {
+                        var active = slideIndex === activeIndex;
+                        slide.classList.toggle('is-active', active);
+                        slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+                    });
+
+                    dots.forEach(function(dot, dotIndex) {
+                        var active = dotIndex === activeIndex;
+                        dot.classList.toggle('is-active', active);
+                        if (active) {
+                            dot.setAttribute('aria-current', 'true');
+                        } else {
+                            dot.removeAttribute('aria-current');
+                        }
+                    });
+                }
+
+                previous.addEventListener('click', function() {
+                        showSlide(activeIndex - 1, -1);
+                });
+
+                next.addEventListener('click', function() {
+                        showSlide(activeIndex + 1, 1);
+                });
+
+                dots.forEach(function(dot, index) {
+                    dot.addEventListener('click', function() {
+                            showSlide(index, index >= activeIndex ? 1 : -1);
+                    });
+                });
+
+                carousel.addEventListener('keydown', function(event) {
+                    if (event.key === 'ArrowLeft') {
+                        showSlide(activeIndex - 1, -1);
+                    } else if (event.key === 'ArrowRight') {
+                        showSlide(activeIndex + 1, 1);
+                    }
+                });
+
+                carousel.addEventListener('touchstart', function(event) {
+                    touchStartX = event.changedTouches[0].clientX;
+                }, { passive: true });
+
+                carousel.addEventListener('touchend', function(event) {
+                    if (touchStartX === null) {
+                        return;
+                    }
+
+                    var distance = event.changedTouches[0].clientX - touchStartX;
+                    if (Math.abs(distance) > 40) {
+                        var direction = distance < 0 ? 1 : -1;
+                        showSlide(activeIndex + direction, direction);
+                    }
+                    touchStartX = null;
+                }, { passive: true });
         })();
     </script>
 </body>
