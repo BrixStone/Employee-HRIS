@@ -1738,7 +1738,7 @@ foreach ($activityDates as $activity) {
 
             pageNumbers.innerHTML = '';
 
-            for (let page = 1; page <= totalPages; page++) {
+            function addPage(page) {
 
                 const button = document.createElement('button');
 
@@ -1757,6 +1757,44 @@ foreach ($activityDates as $activity) {
 
                 pageNumbers.appendChild(button);
             }
+
+            function addEllipsis() {
+
+                const span = document.createElement('span');
+
+                span.textContent = '...';
+                span.className = 'backup-page-ellipsis';
+
+                pageNumbers.appendChild(span);
+            }
+
+            if (totalPages <= 7) {
+
+                for (let page = 1; page <= totalPages; page++) {
+                    addPage(page);
+                }
+
+                return;
+            }
+
+            addPage(1);
+
+            if (currentPage > 4) {
+                addEllipsis();
+            }
+
+            const start = Math.max(2, currentPage - 1);
+            const end = Math.min(totalPages - 1, currentPage + 1);
+
+            for (let page = start; page <= end; page++) {
+                addPage(page);
+            }
+
+            if (currentPage < totalPages - 3) {
+                addEllipsis();
+            }
+
+            addPage(totalPages);
         }
 
         // ==========================================
@@ -1961,11 +1999,11 @@ foreach ($activityDates as $activity) {
             safetyPrevious.disabled = safetyCurrentPage <= 1;
             safetyNext.disabled = safetyCurrentPage >= totalPages;
 
-            // 5. GENERATE PAGE NUMBERS
+            // 5. GENERATE COMPACT PAGE NUMBERS
 
             safetyPageNumbers.innerHTML = '';
 
-            for (let page = 1; page <= totalPages; page++) {
+            function addSafetyPage(page) {
 
                 const button = document.createElement('button');
 
@@ -1985,6 +2023,44 @@ foreach ($activityDates as $activity) {
                 });
 
                 safetyPageNumbers.appendChild(button);
+            }
+
+            function addSafetyEllipsis() {
+
+                const span = document.createElement('span');
+
+                span.textContent = '...';
+                span.className = 'backup-page-ellipsis';
+
+                safetyPageNumbers.appendChild(span);
+            }
+
+            if (totalPages <= 7) {
+
+                for (let page = 1; page <= totalPages; page++) {
+                    addSafetyPage(page);
+                }
+
+            } else {
+
+                addSafetyPage(1);
+
+                if (safetyCurrentPage > 4) {
+                    addSafetyEllipsis();
+                }
+
+                const start = Math.max(2, safetyCurrentPage - 1);
+                const end = Math.min(totalPages - 1, safetyCurrentPage + 1);
+
+                for (let page = start; page <= end; page++) {
+                    addSafetyPage(page);
+                }
+
+                if (safetyCurrentPage < totalPages - 3) {
+                    addSafetyEllipsis();
+                }
+
+                addSafetyPage(totalPages);
             }
         }
 
