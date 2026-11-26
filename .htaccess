@@ -32,9 +32,13 @@ RewriteRule ^(docker-compose\.ya?ml|Dockerfile|apache-vhost\.conf|prometheus\.ym
 # Redirect section root URLs internally to dashboard.php
 RewriteRule ^(admin|hr|employee|manager)/?$ $1/dashboard.php [L]
 
+
 # ==================================================
 # 4. REDIRECT PHP URLS TO CLEAN URLS
 # ==================================================
+
+# Never redirect POST requests.
+RewriteCond %{REQUEST_METHOD} !POST
 
 # Example: /admin/dashboard.php -> /admin/dashboard
 RewriteCond %{THE_REQUEST} \s/+(.+?)\.php(?:[\s?]) [NC]

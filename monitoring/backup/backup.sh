@@ -14,6 +14,7 @@ POLL_INTERVAL=2
 BACKUP_RESULT_FILENAME=""
 SAFETY_BACKUP_FILENAME=""
 CURRENT_RESTORE_REQUEST_ID=""
+RESTORE_HEARTBEAT_PID=""
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
@@ -413,6 +414,48 @@ write_request_progress() {
 
     mv "$temp_file" "$progress_file"
 }
+start_restore_heartbeat() {
+    local request_id="$1"
+    local progress_file="${REQUEST_DIR}/${request_id}.progress"
+
+    (
+        while true; do
+            sleep 10
+
+            [[ -f "$progress_file" ]] || continue
+
+            local status
+            local stage
+            local message
+            local temp_file
+
+            status=$(sed -n 's/^status=//p' "$progress_file" | head -n 1)
+            stage=$(sed -n 's/^stage=//p' "$progress_file" | head -n 1)
+            message=$(sed -n 's/^message=//p' "$progress_file" | head -n 1)
+
+            temp_file="${progress_file}.heartbeat.$$"
+
+            {
+                printf 'status=%s\n' "$status"
+                printf 'stage=%s\n' "$stage"
+                printf 'message=%s\n' "$message"
+                printf 'updated_at=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+            } > "$temp_file"
+
+            mv "$temp_file" "$progress_file"
+        done
+    ) &
+
+    RESTORE_HEARTBEAT_PID=$!
+}
+
+stop_restore_heartbeat() {
+    if [[ -n "$RESTORE_HEARTBEAT_PID" ]]; then
+        kill "$RESTORE_HEARTBEAT_PID" 2>/dev/null || true
+        wait "$RESTORE_HEARTBEAT_PID" 2>/dev/null || true
+        RESTORE_HEARTBEAT_PID=""
+    fi
+}
 
 
 
@@ -774,11 +817,20 @@ process_live_restore_requests() {
 
         log "Live restore request received: ${request_id}"
 
-        if perform_live_restore "$request_id" "$filename"; then
-            log "Live restore request completed: ${request_id}"
-        else
-            log "Live restore request failed: ${request_id}"
-        fi
+write_request_progress \
+    "$request_id" \
+    "queued" \
+    "Restore request is being processed."
+
+start_restore_heartbeat "$request_id"
+
+if perform_live_restore "$request_id" "$filename"; then
+    stop_restore_heartbeat
+    log "Live restore request completed: ${request_id}"
+else
+    stop_restore_heartbeat
+    log "Live restore request failed: ${request_id}"
+fi
 
         rm -f "$processing_file"
     done
@@ -836,41 +888,213 @@ process_restore_test_requests() {
     shopt -u nullglob
 }
 
+# Read the latest automatic backup configuration from MySQL.
+load_backup_settings() {
+    local settings
+
+    export MYSQL_PWD="$DB_PASSWORD"
+
+    if ! settings=$(mysql_command "$DB_NAME" \
+        --batch \
+        --skip-column-names \
+        --raw \
+        --execute="
+            SELECT
+                enabled,
+                frequency,
+                backup_minute,
+                backup_time,
+                backup_day,
+                retention_days,
+                timezone,
+                COALESCE(DATE_FORMAT(last_run_at, '%Y-%m-%d %H:%i:%s'), '')
+            FROM backup_settings
+            WHERE id = 1;
+        "); then
+        unset MYSQL_PWD
+        log "ERROR: Could not load backup settings."
+        return 1
+    fi
+
+    unset MYSQL_PWD
+
+    if [[ -z "$settings" ]]; then
+        log "ERROR: No backup settings record found."
+        return 1
+    fi
+
+    IFS=$'\t' read -r \
+        AUTO_ENABLED \
+        AUTO_FREQUENCY \
+        AUTO_MINUTE \
+        AUTO_TIME \
+        AUTO_DAY \
+        RETENTION_DAYS \
+        AUTO_TIMEZONE \
+        AUTO_LAST_RUN <<< "$settings"
+
+    # Validate values before using them.
+    [[ "$AUTO_ENABLED" =~ ^[01]$ ]] || return 1
+    [[ "$AUTO_FREQUENCY" =~ ^(hourly|daily|weekly)$ ]] || return 1
+    [[ "$AUTO_MINUTE" =~ ^([0-9]|[1-5][0-9])$ ]] || return 1
+    [[ "$AUTO_TIME" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$ ]] || return 1
+    [[ "$AUTO_DAY" =~ ^[1-7]$ ]] || return 1
+    [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] || return 1
+
+    if ! [[ "$AUTO_TIMEZONE" =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] ||
+       ! [[ -f "/usr/share/zoneinfo/${AUTO_TIMEZONE}" ]]; then
+        log "ERROR: Invalid backup timezone: ${AUTO_TIMEZONE}"
+        return 1
+    fi
+
+    return 0
+}
+
+
+# Return the unique identifier for the scheduled occurrence.
+get_schedule_key() {
+    local timestamp="$1"
+
+    case "$AUTO_FREQUENCY" in
+        hourly)
+            TZ="$AUTO_TIMEZONE" date -d "$timestamp" '+%Y%m%d%H'
+            ;;
+        daily)
+            TZ="$AUTO_TIMEZONE" date -d "$timestamp" '+%Y%m%d'
+            ;;
+        weekly)
+            TZ="$AUTO_TIMEZONE" date -d "$timestamp" '+%G%V'
+            ;;
+    esac
+}
+
+
+# Determine whether the current minute is a configured backup time.
+is_backup_due() {
+    local current_minute="$1"
+    local current_day
+    local current_time
+    local current_hour_minute
+    local current_key
+    local last_key=""
+
+    current_day=$(TZ="$AUTO_TIMEZONE" date -d "$current_minute" '+%u')
+    current_time=$(TZ="$AUTO_TIMEZONE" date -d "$current_minute" '+%H:%M')
+    current_hour_minute=$(TZ="$AUTO_TIMEZONE" date -d "$current_minute" '+%M')
+
+    case "$AUTO_FREQUENCY" in
+        hourly)
+            [[ "$current_hour_minute" == "$(printf '%02d' "$AUTO_MINUTE")" ]] || return 1
+            ;;
+        daily)
+            [[ "$current_time" == "${AUTO_TIME:0:5}" ]] || return 1
+            ;;
+        weekly)
+            [[ "$current_day" == "$AUTO_DAY" ]] || return 1
+            [[ "$current_time" == "${AUTO_TIME:0:5}" ]] || return 1
+            ;;
+    esac
+
+    current_key=$(get_schedule_key "$current_minute")
+
+    if [[ -n "$AUTO_LAST_RUN" ]]; then
+        last_key=$(get_schedule_key "$AUTO_LAST_RUN")
+        [[ "$current_key" != "$last_key" ]] || return 1
+    fi
+
+    return 0
+}
+
+
+# Record the scheduled occurrence, whether the backup succeeds or fails.
+record_backup_attempt() {
+    local scheduled_time="$1"
+    local escaped_time
+
+    escaped_time=$(printf '%s' "$scheduled_time" | sed "s/'/''/g")
+
+    export MYSQL_PWD="$DB_PASSWORD"
+
+    if mysql_command "$DB_NAME" \
+        --execute="
+            UPDATE backup_settings
+            SET last_run_at = '${escaped_time}'
+            WHERE id = 1;
+        "; then
+        unset MYSQL_PWD
+        AUTO_LAST_RUN="$scheduled_time"
+        return 0
+    fi
+
+    unset MYSQL_PWD
+    log "ERROR: Could not update last_run_at."
+    return 1
+}
+
+
 mkdir -p "$BACKUP_DIR" "$REQUEST_DIR"
 chmod 1777 "$REQUEST_DIR"
 
 log "HRIS backup scheduler started."
-log "Backup interval: ${INTERVAL} seconds"
-log "Retention: ${RETENTION_DAYS} days"
 log "Manual request polling: every ${POLL_INTERVAL} seconds"
 log "Restore-test database: ${RESTORE_TEST_DB}"
 
-if perform_backup "automatic"; then
-    log "Initial backup completed successfully."
-else
-    log "Initial backup failed."
-fi
+# Remember the current minute so starting/restarting the container
+# does not trigger a backup during the minute it starts.
+LAST_CHECKED_MINUTE=$(TZ="Asia/Manila" date '+%Y-%m-%d %H:%M')
 
-next_auto_backup=$(( $(date +%s) + INTERVAL ))
+if load_backup_settings; then
+    log "Automatic backups: ${AUTO_ENABLED}"
+    log "Frequency: ${AUTO_FREQUENCY}"
+    log "Timezone: ${AUTO_TIMEZONE}"
+    log "Retention: ${RETENTION_DAYS} days"
+else
+    log "WARNING: Backup settings could not be loaded."
+fi
 
 while true; do
 
+    # Keep existing request-processing workflows.
     process_live_restore_requests
     process_restore_test_requests
     process_manual_requests
 
-    current_time=$(date +%s)
+    # Refresh settings from the database.
+    if load_backup_settings; then
 
-    if (( current_time >= next_auto_backup )); then
-        if perform_backup "automatic"; then
-            log "Automatic backup cycle completed successfully."
-        else
-            log "Automatic backup cycle failed."
+        if [[ "$AUTO_ENABLED" == "1" ]]; then
+
+            CURRENT_MINUTE=$(TZ="$AUTO_TIMEZONE" date '+%Y-%m-%d %H:%M')
+
+            # Evaluate only once when a new minute begins.
+            if [[ "$CURRENT_MINUTE" != "$LAST_CHECKED_MINUTE" ]]; then
+
+                LAST_CHECKED_MINUTE="$CURRENT_MINUTE"
+
+                if is_backup_due "$CURRENT_MINUTE"; then
+
+                    SCHEDULED_TIME="${CURRENT_MINUTE}:00"
+
+                    log "Configured automatic backup time reached."
+                    log "Scheduled occurrence: ${SCHEDULED_TIME}"
+
+                    if perform_backup "automatic"; then
+                        log "Automatic backup completed successfully."
+                    else
+                        log "Automatic backup failed."
+                    fi
+
+                    # Prevent repeated execution for this occurrence.
+                    if ! record_backup_attempt "$SCHEDULED_TIME"; then
+                        log "WARNING: Could not record automatic backup attempt."
+                    fi
+                fi
+            fi
         fi
-
-        next_auto_backup=$(( $(date +%s) + INTERVAL ))
-        log "Next automatic backup scheduled."
+    else
+        log "WARNING: Could not refresh backup settings."
     fi
 
     sleep "$POLL_INTERVAL"
 done
+
