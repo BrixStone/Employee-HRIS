@@ -514,7 +514,8 @@ CREATE TABLE
 
 INSERT INTO
     backup_settings (
-        is_enabled,
+        id,
+        enabled,
         frequency,
         backup_minute,
         backup_time,
@@ -523,12 +524,21 @@ INSERT INTO
         timezone
     )
 VALUES
-    (1, 'daily', 0, '02:00:00', 1, 30, 'Asia/Manila');
+    (
+        1,
+        1,
+        'daily',
+        0,
+        '02:00:00',
+        1,
+        30,
+        'Asia/Manila'
+    ) ON DUPLICATE KEY
+UPDATE id = id;
 
 --     INSERT INTO backup_settings (id)
 -- VALUES (1)
 -- ON DUPLICATE KEY UPDATE id = id;
-
 CREATE TABLE
     IF NOT EXISTS deduction_rates (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -990,6 +1000,59 @@ ADD CONSTRAINT fk_employee_manager FOREIGN KEY (manager_id) REFERENCES employees
 -- ============================================================
 SET
     FOREIGN_KEY_CHECKS = 1;
+
+-- 1. Automatic backup execution history
+CREATE TABLE
+    IF NOT EXISTS automatic_backup_logs (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        scheduled_for DATETIME NOT NULL,
+        started_at DATETIME NULL,
+        completed_at DATETIME NULL,
+        status ENUM ('running', 'success', 'failed') NOT NULL DEFAULT 'running',
+        filename VARCHAR(255) NULL,
+        file_size_bytes BIGINT UNSIGNED NULL,
+        message TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_scheduled_occurrence (scheduled_for)
+    );
+
+-- 2. Automatic backup schedule change history
+CREATE TABLE
+    IF NOT EXISTS backup_schedule_history (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        old_settings JSON NULL,
+        new_settings JSON NOT NULL,
+        changed_by VARCHAR(100) NULL,
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+-- 3. Database restore history
+CREATE TABLE
+    IF NOT EXISTS restore_history (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        request_id CHAR(36) NOT NULL,
+        selected_filename VARCHAR(255) NOT NULL,
+        safety_filename VARCHAR(255) NULL,
+        status ENUM ('running', 'success', 'failed') NOT NULL DEFAULT 'running',
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME NULL,
+        message TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_restore_request (request_id)
+    );
+
+-- 4. Safety backups created before restore operations
+CREATE TABLE
+    IF NOT EXISTS safety_backups (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        restore_history_id BIGINT UNSIGNED NULL,
+        filename VARCHAR(255) NOT NULL,
+        file_size_bytes BIGINT UNSIGNED NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_safety_filename (filename),
+        KEY idx_safety_restore_history (restore_history_id),
+        CONSTRAINT fk_safety_restore_history FOREIGN KEY (restore_history_id) REFERENCES restore_history (id) ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ============================================================
 -- END OF HRIS DATABASE INITIALIZATION
