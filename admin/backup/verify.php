@@ -1,4 +1,3 @@
-
 <?php
 // admin/backup/verify.php
 
